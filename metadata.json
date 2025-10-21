@@ -1,0 +1,5 @@
+{
+  "name": "ATS Resume Tailor",
+  "description": "An AI-powered application to parse, manage, and tailor your resume for any job description using the Gemini API, ensuring your profile is optimized for Applicant Tracking Systems (ATS).",
+  "requestFramePermissions": []
+}
