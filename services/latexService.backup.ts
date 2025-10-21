@@ -153,26 +153,6 @@ const escapeLatex = (str: string | undefined): string => {
 };
 
 /**
- * Ensures a URL has proper protocol and formats it for LaTeX hyperref.
- * @param url The input URL.
- * @returns A properly formatted URL.
- */
-const formatUrl = (url: string | undefined): string => {
-    if (!url) return '';
-    
-    // Trim whitespace
-    url = url.trim();
-    
-    // Add https:// if no protocol is present
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        url = 'https://' + url;
-    }
-    
-    // URLs in LaTeX hyperref should not be escaped, but we need to handle % specially
-    return url.replace(/%/g, '\\%');
-};
-
-/**
  * Generates the .tex file content as a string from resume data.
  * @param resumeData The user's tailored resume data.
  * @returns A string containing the full .tex file.
@@ -183,33 +163,7 @@ const generateTexString = (resumeData: ResumeData): string => {
     // Header
     const name = escapeLatex(contact.name);
     const address1 = `${escapeLatex(contact.phone)} \\\\ ${escapeLatex(contact.location)}`;
-    
-    // Build address2 with only provided fields
-    const address2Parts: string[] = [];
-    
-    // Email is always included
-    address2Parts.push(`\\href{mailto:${escapeLatex(contact.email)}}{${escapeLatex(contact.email)}}`);
-    
-    // LinkedIn - only if provided
-    if (contact.linkedin && contact.linkedin.trim()) {
-        // For long LinkedIn URLs, show just "LinkedIn" as display text
-        const linkedinDisplay = contact.linkedin.length > 30 ? 'LinkedIn' : escapeLatex(contact.linkedin);
-        address2Parts.push(`\\href{${formatUrl(contact.linkedin)}}{${linkedinDisplay}}`);
-    }
-    
-    // GitHub - only if provided
-    if (contact.github && contact.github.trim()) {
-        const githubDisplay = contact.github.length > 30 ? 'GitHub' : escapeLatex(contact.github);
-        address2Parts.push(`\\href{${formatUrl(contact.github)}}{${githubDisplay}}`);
-    }
-    
-    // Website/Portfolio - only if provided
-    if (contact.website && contact.website.trim()) {
-        const websiteDisplay = contact.website.length > 30 ? 'Portfolio' : escapeLatex(contact.website);
-        address2Parts.push(`\\href{${formatUrl(contact.website)}}{${websiteDisplay}}`);
-    }
-    
-    const address2 = address2Parts.join(' \\\\ ');
+    const address2 = `\\href{mailto:${escapeLatex(contact.email)}}{${escapeLatex(contact.email)}} \\\\ \\href{${escapeLatex(contact.linkedin)}}{linkedin.com/in/...} \\\\ \\href{${escapeLatex(contact.github)}}{GitHub} ${contact.website ? `\\\\ \\href{${escapeLatex(contact.website)}}{Portfolio}` : ''}`;
 
     // Skills
     const skillsFormatted = skills.map(s => escapeLatex(s)).join(', ');
@@ -227,8 +181,8 @@ ${escapeLatex(exp.company)} \\hfill \\textit{${escapeLatex(exp.location)}}
     // Projects
     const projectsFormatted = (projects || []).map(proj => `
 \\item \\textbf{${escapeLatex(proj.name)}} 
-${proj.url ? `\\textit{ \\href{${formatUrl(proj.url)}}{(View project)}}` : ''}
-${proj.repoUrl ? `\\textit{ \\href{${formatUrl(proj.repoUrl)}}{(Source Code)}}` : ''}
+${proj.url ? `\\textit{ \\href{${escapeLatex(proj.url)}}{(View project)}}` : ''}
+${proj.repoUrl ? `\\textit{ \\href{${escapeLatex(proj.repoUrl)}}{(Source Code)}}` : ''}
 \\begin{itemize}
     \\itemsep -5pt {} 
     ${proj.description.map(d => `\\item ${escapeLatex(d)}`).join('\n    ')}
