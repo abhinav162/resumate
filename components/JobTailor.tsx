@@ -41,6 +41,20 @@ const JobTailor: React.FC<JobTailorProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [useRaReOptimization, setUseRaReOptimization] = useState(true);
   const [enhancementConfig, setEnhancementConfig] = useState<EnhancementConfig>(defaultEnhancementConfig);
+  
+  // Section selection state
+  const [selectedSections, setSelectedSections] = useState({
+    summary: true,
+    skills: true,
+    experience: true,
+    projects: true,
+    education: true
+  });
+  
+  // Individual item selection state
+  const [selectedExperience, setSelectedExperience] = useState<Record<string, boolean>>({});
+  const [selectedProjects, setSelectedProjects] = useState<Record<string, boolean>>({});
+  const [selectedEducation, setSelectedEducation] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
       if (existingTailoredResume) {
@@ -61,6 +75,29 @@ const JobTailor: React.FC<JobTailorProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingTailoredResume, isReTailoring]);
 
+  // Initialize item selections when base resume changes
+  useEffect(() => {
+    if (baseResume) {
+      const expSelections: Record<string, boolean> = {};
+      baseResume.experience.forEach(exp => {
+        expSelections[exp.id] = true;
+      });
+      setSelectedExperience(expSelections);
+
+      const projSelections: Record<string, boolean> = {};
+      baseResume.projects?.forEach(proj => {
+        projSelections[proj.id] = true;
+      });
+      setSelectedProjects(projSelections);
+
+      const eduSelections: Record<string, boolean> = {};
+      baseResume.education.forEach(edu => {
+        eduSelections[edu.id] = true;
+      });
+      setSelectedEducation(eduSelections);
+    }
+  }, [baseResume]);
+
   const handleTailor = async () => {
     const selectedResume = resumes.find(r => r.id === selectedResumeId);
     if (!apiKey || !selectedResume || !jobDetails.description.trim()) {
@@ -70,7 +107,8 @@ const JobTailor: React.FC<JobTailorProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      const result = await tailorResumeForJob(selectedResume, jobDetails, apiKey, useRaReOptimization, enhancementConfig);
+      const filteredResume = createFilteredResume(selectedResume);
+      const result = await tailorResumeForJob(filteredResume, jobDetails, apiKey, useRaReOptimization, enhancementConfig);
       setTailoredData(result);
       if (!existingTailoredResume) {
           const newTailoredResume: TailoredResume = {
@@ -91,6 +129,39 @@ const JobTailor: React.FC<JobTailorProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setJobDetails({ ...jobDetails, [e.target.name]: e.target.value });
+  };
+
+  const toggleSection = (section: keyof typeof selectedSections) => {
+    setSelectedSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const toggleExperience = (expId: string) => {
+    setSelectedExperience(prev => ({ ...prev, [expId]: !prev[expId] }));
+  };
+
+  const toggleProject = (projId: string) => {
+    setSelectedProjects(prev => ({ ...prev, [projId]: !prev[projId] }));
+  };
+
+  const toggleEducation = (eduId: string) => {
+    setSelectedEducation(prev => ({ ...prev, [eduId]: !prev[eduId] }));
+  };
+
+  const createFilteredResume = (resume: ResumeData): ResumeData => {
+    return {
+      ...resume,
+      summary: selectedSections.summary ? resume.summary : '',
+      skills: selectedSections.skills ? resume.skills : [],
+      experience: selectedSections.experience 
+        ? resume.experience.filter(exp => selectedExperience[exp.id])
+        : [],
+      projects: selectedSections.projects 
+        ? (resume.projects?.filter(proj => selectedProjects[proj.id]) || [])
+        : [],
+      education: selectedSections.education
+        ? resume.education.filter(edu => selectedEducation[edu.id])
+        : []
+    };
   };
   
   const originalResume = resumes.find(r => r.id === (existingTailoredResume?.baseResumeId || selectedResumeId));
@@ -174,7 +245,7 @@ const JobTailor: React.FC<JobTailorProps> = ({
         </Card>
         <div className="hidden lg:block">
             <Card>
-                <h3 className="text-xl font-semibold mb-4">Preview of Base Resume</h3>
+                <h3 className="text-xl font-semibold mb-4">Select Sections to Include</h3>
                 {baseResume ? (
                     <div className="bg-gray-900 p-4 rounded-md h-[500px] overflow-y-auto text-sm">
                         <div className="text-center mb-4">
@@ -183,66 +254,165 @@ const JobTailor: React.FC<JobTailorProps> = ({
                             <p className="text-gray-400">{baseResume.contact.email} | {baseResume.contact.phone}</p>
                         </div>
                         
+                        {/* Summary Section */}
                         <div className="mb-4">
-                            <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">SUMMARY</h3>
-                            <p className="text-gray-300">{baseResume.summary}</p>
-                        </div>
-
-                        <div className="mb-4">
-                            <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">SKILLS</h3>
-                            <p className="text-gray-300">{baseResume.skills.join(', ')}</p>
-                        </div>
-
-                        <div className="mb-4">
-                            <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">EXPERIENCE</h3>
-                            {baseResume.experience.slice(0, 2).map((exp, index) => (
-                                <div key={exp.id} className="mb-3">
-                                    <div className="flex justify-between items-start">
-                                        <h4 className="text-sm font-semibold text-white">{exp.role}</h4>
-                                        <p className="text-xs text-gray-500">{exp.startDate} - {exp.endDate}</p>
-                                    </div>
-                                    <p className="text-xs text-gray-400">{exp.company}, {exp.location}</p>
-                                    <ul className="list-disc list-inside mt-1 text-xs text-gray-300">
-                                        {exp.responsibilities.slice(0, 2).map((resp, rIndex) => (
-                                            <li key={rIndex}>{resp}</li>
-                                        ))}
-                                        {exp.responsibilities.length > 2 && (
-                                            <li className="text-gray-500">... and {exp.responsibilities.length - 2} more</li>
-                                        )}
-                                    </ul>
-                                </div>
-                            ))}
-                            {baseResume.experience.length > 2 && (
-                                <p className="text-xs text-gray-500">... and {baseResume.experience.length - 2} more positions</p>
+                            <div className="flex items-center gap-2 mb-2">
+                                <input
+                                    type="checkbox"
+                                    id="summary-checkbox"
+                                    checked={selectedSections.summary}
+                                    onChange={() => toggleSection('summary')}
+                                    className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                />
+                                <h3 className={`text-sm font-bold border-b border-gray-700 pb-1 flex-1 ${selectedSections.summary ? 'text-indigo-400' : 'text-gray-500'}`}>
+                                    SUMMARY
+                                </h3>
+                            </div>
+                            {selectedSections.summary && (
+                                <p className="text-gray-300 ml-6">{baseResume.summary}</p>
                             )}
                         </div>
 
+                        {/* Skills Section */}
+                        <div className="mb-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <input
+                                    type="checkbox"
+                                    id="skills-checkbox"
+                                    checked={selectedSections.skills}
+                                    onChange={() => toggleSection('skills')}
+                                    className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                />
+                                <h3 className={`text-sm font-bold border-b border-gray-700 pb-1 flex-1 ${selectedSections.skills ? 'text-indigo-400' : 'text-gray-500'}`}>
+                                    SKILLS
+                                </h3>
+                            </div>
+                            {selectedSections.skills && (
+                                <p className="text-gray-300 ml-6">{baseResume.skills.join(', ')}</p>
+                            )}
+                        </div>
+
+                        {/* Experience Section */}
+                        <div className="mb-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <input
+                                    type="checkbox"
+                                    id="experience-checkbox"
+                                    checked={selectedSections.experience}
+                                    onChange={() => toggleSection('experience')}
+                                    className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                />
+                                <h3 className={`text-sm font-bold border-b border-gray-700 pb-1 flex-1 ${selectedSections.experience ? 'text-indigo-400' : 'text-gray-500'}`}>
+                                    EXPERIENCE
+                                </h3>
+                            </div>
+                            {selectedSections.experience && baseResume.experience.map((exp, index) => (
+                                <div key={exp.id} className="mb-3 ml-6">
+                                    <div className="flex items-start gap-2">
+                                        <input
+                                            type="checkbox"
+                                            id={`exp-${exp.id}`}
+                                            checked={selectedExperience[exp.id] || false}
+                                            onChange={() => toggleExperience(exp.id)}
+                                            className="w-3 h-3 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500 mt-1"
+                                        />
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start">
+                                                <h4 className={`text-sm font-semibold ${selectedExperience[exp.id] ? 'text-white' : 'text-gray-500'}`}>
+                                                    {exp.role}
+                                                </h4>
+                                                <p className="text-xs text-gray-500">{exp.startDate} - {exp.endDate}</p>
+                                            </div>
+                                            <p className="text-xs text-gray-400">{exp.company}, {exp.location}</p>
+                                            {index < 2 && selectedExperience[exp.id] && (
+                                                <ul className="list-disc list-inside mt-1 text-xs text-gray-300">
+                                                    {exp.responsibilities.slice(0, 1).map((resp, rIndex) => (
+                                                        <li key={rIndex}>{resp}</li>
+                                                    ))}
+                                                    {exp.responsibilities.length > 1 && (
+                                                        <li className="text-gray-500">... and {exp.responsibilities.length - 1} more</li>
+                                                    )}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Projects Section */}
                         {baseResume.projects && baseResume.projects.length > 0 && (
                             <div className="mb-4">
-                                <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">PROJECTS</h3>
-                                {baseResume.projects.slice(0, 2).map((proj, index) => (
-                                    <div key={proj.id} className="mb-2">
-                                        <h4 className="text-sm font-semibold text-white">{proj.name}</h4>
-                                        {proj.description.slice(0, 1).map((desc, dIndex) => (
-                                            <p key={dIndex} className="text-xs text-gray-300">• {desc}</p>
-                                        ))}
+                                <div className="flex items-center gap-2 mb-2">
+                                    <input
+                                        type="checkbox"
+                                        id="projects-checkbox"
+                                        checked={selectedSections.projects}
+                                        onChange={() => toggleSection('projects')}
+                                        className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                    />
+                                    <h3 className={`text-sm font-bold border-b border-gray-700 pb-1 flex-1 ${selectedSections.projects ? 'text-indigo-400' : 'text-gray-500'}`}>
+                                        PROJECTS
+                                    </h3>
+                                </div>
+                                {selectedSections.projects && baseResume.projects.map((proj, index) => (
+                                    <div key={proj.id} className="mb-2 ml-6">
+                                        <div className="flex items-start gap-2">
+                                            <input
+                                                type="checkbox"
+                                                id={`proj-${proj.id}`}
+                                                checked={selectedProjects[proj.id] || false}
+                                                onChange={() => toggleProject(proj.id)}
+                                                className="w-3 h-3 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500 mt-1"
+                                            />
+                                            <div className="flex-1">
+                                                <h4 className={`text-sm font-semibold ${selectedProjects[proj.id] ? 'text-white' : 'text-gray-500'}`}>
+                                                    {proj.name}
+                                                </h4>
+                                                {index < 2 && selectedProjects[proj.id] && proj.description.slice(0, 1).map((desc, dIndex) => (
+                                                    <p key={dIndex} className="text-xs text-gray-300">• {desc}</p>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
-                                {baseResume.projects.length > 2 && (
-                                    <p className="text-xs text-gray-500">... and {baseResume.projects.length - 2} more projects</p>
-                                )}
                             </div>
                         )}
 
+                        {/* Education Section */}
                         <div className="mb-4">
-                            <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">EDUCATION</h3>
-                            {baseResume.education.map((edu, index) => (
-                                <div key={edu.id} className="mb-2">
-                                    <div className="flex justify-between items-start">
-                                        <h4 className="text-sm font-semibold text-white">{edu.degree}</h4>
-                                        <p className="text-xs text-gray-500">{edu.graduationDate}</p>
+                            <div className="flex items-center gap-2 mb-2">
+                                <input
+                                    type="checkbox"
+                                    id="education-checkbox"
+                                    checked={selectedSections.education}
+                                    onChange={() => toggleSection('education')}
+                                    className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+                                />
+                                <h3 className={`text-sm font-bold border-b border-gray-700 pb-1 flex-1 ${selectedSections.education ? 'text-indigo-400' : 'text-gray-500'}`}>
+                                    EDUCATION
+                                </h3>
+                            </div>
+                            {selectedSections.education && baseResume.education.map((edu, index) => (
+                                <div key={edu.id} className="mb-2 ml-6">
+                                    <div className="flex items-start gap-2">
+                                        <input
+                                            type="checkbox"
+                                            id={`edu-${edu.id}`}
+                                            checked={selectedEducation[edu.id] || false}
+                                            onChange={() => toggleEducation(edu.id)}
+                                            className="w-3 h-3 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500 mt-1"
+                                        />
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start">
+                                                <h4 className={`text-sm font-semibold ${selectedEducation[edu.id] ? 'text-white' : 'text-gray-500'}`}>
+                                                    {edu.degree}
+                                                </h4>
+                                                <p className="text-xs text-gray-500">{edu.graduationDate}</p>
+                                            </div>
+                                            <p className="text-xs text-gray-400">{edu.institution}, {edu.location}</p>
+                                        </div>
                                     </div>
-                                    <p className="text-xs text-gray-400">{edu.institution}, {edu.location}</p>
                                 </div>
                             ))}
                         </div>
