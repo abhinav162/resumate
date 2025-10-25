@@ -67,10 +67,9 @@ export class SkillsGenerator {
         const sectionTitle = this.config.customLabels?.skills || 'SKILLS';
         const skillsFormatted = skills.map(s => escapeLatex(s)).join(', ');
         
-        return String.raw`
-\begin{rSection}{${sectionTitle}}
+        return `\\begin{rSection}{${sectionTitle}}
     ${skillsFormatted}
-\end{rSection}
+\\end{rSection}
 `;
     }
 }
@@ -86,10 +85,9 @@ export class SummaryGenerator {
         
         const sectionTitle = this.config.customLabels?.summary || 'SUMMARY';
         
-        return String.raw`
-\begin{rSection}{${sectionTitle}}
+        return `\\begin{rSection}{${sectionTitle}}
     ${escapeLatex(summary)}
-\end{rSection}
+\\end{rSection}
 `;
     }
 }
@@ -103,19 +101,18 @@ export class ExperienceGenerator {
     generate(experiences: Experience[]): string {
         const sectionTitle = this.config.customLabels?.experience || 'EXPERIENCE';
         
-        const experienceFormatted = experiences.map(exp => String.raw`
-\textbf{${escapeLatex(exp.role)}} \hfill ${escapeLatex(exp.startDate)} -- ${escapeLatex(exp.endDate)}
-${escapeLatex(exp.company)} \hfill \textit{${escapeLatex(exp.location)}}
- \begin{itemize}
-    \itemsep -5pt {} 
+        const experienceFormatted = experiences.map(exp => `
+\\textbf{${escapeLatex(exp.role)}} \\hfill ${escapeLatex(exp.startDate)} -- ${escapeLatex(exp.endDate)} \\\\
+${escapeLatex(exp.company)} \\hfill \\textit{${escapeLatex(exp.location)}}
+ \\begin{itemize}
+    \\itemsep -5pt {} 
     ${exp.responsibilities.map(r => `\\item ${escapeLatex(r)}`).join('\n    ')}
- \end{itemize}
+ \\end{itemize}
 `).join('\n');
         
-        return String.raw`
-\begin{rSection}{${sectionTitle}}
+        return `\\begin{rSection}{${sectionTitle}}
     ${experienceFormatted}
-\end{rSection}
+\\end{rSection}
 `;
     }
 }
@@ -144,21 +141,20 @@ export class ProjectsGenerator {
             
             const linksLine = urlLinks.length > 0 ? `\n${urlLinks.join(' ')}` : '';
             
-            return String.raw`
-\item \textbf{${escapeLatex(proj.name)}} ${linksLine}
+            return `
+\\item \\textbf{${escapeLatex(proj.name)}} ${linksLine}
 
-\begin{itemize}
-    \itemsep -5pt {} 
+\\begin{itemize}
+    \\itemsep -5pt {} 
     ${proj.description.map(d => `\\item ${escapeLatex(d)}`).join('\n    ')}
-\end{itemize}
+\\end{itemize}
 `;
         }).join('\n');
         
-        return String.raw`
-\begin{rSection}{${sectionTitle}}
+        return `\\begin{rSection}{${sectionTitle}}
 \\vspace{-1.25em}
     ${projectsFormatted}
-\end{rSection}
+\\end{rSection}
 `;
     }
 }
@@ -175,15 +171,14 @@ export class EducationGenerator {
         const educationFormatted = education.map(edu => {
             const gpaLine = edu.gpa ? `\nCGPA: ${escapeLatex(edu.gpa)}` : '';
             
-            return String.raw`
-{\bf ${escapeLatex(edu.degree)}}, ${escapeLatex(edu.institution)} \hfill {${escapeLatex(edu.graduationDate)}}\\${gpaLine}
+            return `
+{\\bf ${escapeLatex(edu.degree)}}, ${escapeLatex(edu.institution)} \\hfill {${escapeLatex(edu.graduationDate)}}\\${gpaLine}
 `;
         }).join('\n');
         
-        return String.raw`
-\begin{rSection}{${sectionTitle}}
+        return `\\begin{rSection}{${sectionTitle}}
     ${educationFormatted}
-\end{rSection}
+\\end{rSection}
 `;
     }
 }

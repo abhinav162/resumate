@@ -162,17 +162,16 @@ export const generateDocumentTemplate = (
 ): string => {
     const docClass = config?.documentClass || 'resume';
     
-    return String.raw`
-\documentclass{${docClass}}
+    return `\\documentclass{${docClass}}
 
-\name{${name}}
-\address{${address1}} 
-\address{${address2}}
+\\name{${name}}
+\\address{${address1}} 
+\\address{${address2}}
 
-\begin{document}
+\\begin{document}
 
 ${content}
 
-\end{document}
+\\end{document}
 `;
 };
