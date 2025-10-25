@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import type { ResumeData } from '../types';
+import type { ResumeData, JobDetails } from '../types';
+import { resumeEnhancer, type EnhancementConfig } from './resumeEnhancer';
 
 const resumeSchema = {
     type: Type.OBJECT,
@@ -124,27 +125,48 @@ ${resumeText}
     }
 };
 
-export const tailorResumeForJob = async (resumeData: ResumeData, jobDescription: string, apiKey: string): Promise<ResumeData> => {
+export const tailorResumeForJob = async (
+    resumeData: ResumeData, 
+    jobDetails: JobDetails, 
+    apiKey: string,
+    useRaReOptimization: boolean = true,
+    enhancementConfig?: EnhancementConfig
+): Promise<ResumeData> => {
     if (!apiKey) throw new Error("API Key is required.");
     const ai = new GoogleGenAI({ apiKey });
 
-    const prompt = `You are an expert ATS resume optimizer. Given the following resume JSON and job description, rewrite the resume to be highly tailored for the job. 
-- Rewrite the summary to align with the key requirements of the job.
-- Rephrase responsibilities under each experience and project entry to use strong action verbs and incorporate keywords from the job description.
-- Ensure the most relevant skills are highlighted.
-- Do NOT invent new experiences, projects, or skills. Only modify existing text.
-- Return the complete, updated resume as a JSON object adhering to the provided schema.
+    const prompt = `You are an expert ATS resume optimizer using the RARe framework (Readability, Applicability, Remarkability). Given the following resume JSON and job description, rewrite the resume to be highly tailored for the job.
+
+OPTIMIZATION REQUIREMENTS:
+1. READABILITY: Keep bullets under 300 characters, ensure scannable format
+2. APPLICABILITY: Align content with job requirements, prioritize relevant skills
+3. REMARKABILITY: Use XYZ framework (Accomplished X as measured by Y by doing Z), strong action verbs
+
+SPECIFIC INSTRUCTIONS:
+- Rewrite the summary to align with key job requirements (keep under 400 characters)
+- Transform each responsibility/project bullet using XYZ or RAS framework
+- Start bullets with high-impact action verbs (Architected, Engineered, Optimized, Spearheaded, etc.)
+- Include quantitative metrics where possible (%, numbers, time saved, etc.)
+- Incorporate relevant keywords from job description naturally
+- Ensure most relevant skills are prioritized first
+- Do NOT invent new experiences, projects, or skills - only enhance existing content
+- Keep each bullet under 300 characters for optimal readability
+
+TARGET JOB:
+Title: ${jobDetails.jobTitle}
+Company: ${jobDetails.company}
+
+Job Description:
+---
+${jobDetails.description}
+---
 
 Original Resume Data:
 ---
 ${JSON.stringify(resumeData, null, 2)}
 ---
 
-Job Description:
----
-${jobDescription}
----
-`;
+Return the complete, optimized resume as a JSON object following the RARe framework principles.`;
 
     try {
          const response = await ai.models.generateContent({
@@ -164,7 +186,7 @@ ${jobDescription}
         });
         
         const jsonText = response.text.trim();
-        const tailoredData = JSON.parse(jsonText);
+        let tailoredData = JSON.parse(jsonText);
 
         // Preserve original IDs
         tailoredData.id = resumeData.id;
@@ -177,6 +199,11 @@ ${jobDescription}
         }
          if(tailoredData.projects && resumeData.projects) {
             tailoredData.projects = tailoredData.projects.map((proj: any, index: number) => ({ ...proj, id: resumeData.projects[index]?.id || `proj-${Date.now()}-${index}` }));
+        }
+        
+        // Apply additional RARe framework enhancements if enabled
+        if (useRaReOptimization && enhancementConfig) {
+            tailoredData = resumeEnhancer.enhanceResume(tailoredData, jobDetails, enhancementConfig);
         }
         
         return tailoredData as ResumeData;

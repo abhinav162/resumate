@@ -149,6 +149,7 @@ const ResumeEditor: React.FC<ResumeEditorProps> = ({ resumeData, onSave, onCance
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
                     <Input label="Role" value={exp.role} onChange={e => handleExperienceChange(expIndex, 'role', e.target.value)} />
                     <Input label="Company" value={exp.company} onChange={e => handleExperienceChange(expIndex, 'company', e.target.value)} />
+                    <Input label="Location" value={exp.location} onChange={e => handleExperienceChange(expIndex, 'location', e.target.value)} />
                     <Input label="Start Date" value={exp.startDate} onChange={e => handleExperienceChange(expIndex, 'startDate', e.target.value)} />
                     <Input label="End Date" value={exp.endDate} onChange={e => handleExperienceChange(expIndex, 'endDate', e.target.value)} />
                 </div>
