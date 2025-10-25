@@ -9,9 +9,10 @@ interface DashboardProps {
   tailoredResumes: TailoredResume[];
   onTailorNew: () => void;
   onView: (resume: TailoredResume) => void;
+  onReTailor: (resume: TailoredResume) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ tailoredResumes, onTailorNew, onView }) => {
+const Dashboard: React.FC<DashboardProps> = ({ tailoredResumes, onTailorNew, onView, onReTailor }) => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -39,8 +40,14 @@ const Dashboard: React.FC<DashboardProps> = ({ tailoredResumes, onTailorNew, onV
                   Created on {new Date(resume.createdAt).toLocaleDateString()}
                 </p>
               </div>
-              <div className="mt-4 flex justify-end">
-                <Button onClick={() => onView(resume)} variant="secondary">View & Download</Button>
+              <div className="mt-4 flex gap-2 justify-end">
+                <Button onClick={() => onReTailor(resume)} variant="secondary" className="text-sm">
+                  <SparklesIcon />
+                  Re-tailor
+                </Button>
+                <Button onClick={() => onView(resume)} variant="primary" className="text-sm">
+                  View & Download
+                </Button>
               </div>
             </Card>
           ))}

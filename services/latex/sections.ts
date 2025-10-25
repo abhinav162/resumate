@@ -101,7 +101,10 @@ export class ExperienceGenerator {
     generate(experiences: Experience[]): string {
         const sectionTitle = this.config.customLabels?.experience || 'EXPERIENCE';
         
-        const experienceFormatted = experiences.map(exp => `
+        // Sort experiences by date (most recent first)
+        const sortedExperiences = this.sortExperiencesByDate(experiences);
+        
+        const experienceFormatted = sortedExperiences.map(exp => `
 \\textbf{${escapeLatex(exp.role)}} \\\\ ${escapeLatex(exp.company)}, \\textit{${escapeLatex(exp.location)}} \\hfill ${escapeLatex(exp.startDate)} -- ${escapeLatex(exp.endDate)}
  \\begin{itemize}
     \\itemsep -5pt {} 
@@ -113,6 +116,44 @@ export class ExperienceGenerator {
     ${experienceFormatted}
 \\end{rSection}
 `;
+    }
+
+    /**
+     * Sorts experiences by date (most recent first)
+     */
+    private sortExperiencesByDate(experiences: Experience[]): Experience[] {
+        return [...experiences].sort((a, b) => {
+            // Handle "Present" as current date
+            const aEndDate = a.endDate.toLowerCase() === 'present' ? new Date() : this.parseDate(a.endDate);
+            const bEndDate = b.endDate.toLowerCase() === 'present' ? new Date() : this.parseDate(b.endDate);
+            
+            // Sort by end date first (most recent first)
+            const endDateDiff = bEndDate.getTime() - aEndDate.getTime();
+            if (endDateDiff !== 0) return endDateDiff;
+            
+            // If end dates are same, sort by start date (most recent first)
+            const aStartDate = this.parseDate(a.startDate);
+            const bStartDate = this.parseDate(b.startDate);
+            return bStartDate.getTime() - aStartDate.getTime();
+        });
+    }
+
+    /**
+     * Parses date string in format "Month YYYY" to Date object
+     */
+    private parseDate(dateStr: string): Date {
+        if (!dateStr) return new Date(0); // Invalid date goes to beginning
+        
+        const [month, year] = dateStr.split(' ');
+        const monthNames = [
+            'january', 'february', 'march', 'april', 'may', 'june',
+            'july', 'august', 'september', 'october', 'november', 'december'
+        ];
+        
+        const monthIndex = monthNames.findIndex(m => m.startsWith(month.toLowerCase()));
+        if (monthIndex === -1) return new Date(0);
+        
+        return new Date(parseInt(year), monthIndex);
     }
 }
 

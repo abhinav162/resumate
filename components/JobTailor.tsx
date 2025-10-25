@@ -19,6 +19,8 @@ interface JobTailorProps {
   onBack: () => void;
   existingTailoredResume: TailoredResume | null;
   setExistingTailoredResume: (resume: TailoredResume | null) => void;
+  isReTailoring?: boolean;
+  onReTailor?: (resume: ResumeData) => void;
 }
 
 const JobTailor: React.FC<JobTailorProps> = ({ 
@@ -28,7 +30,9 @@ const JobTailor: React.FC<JobTailorProps> = ({
     addTailoredResume, 
     onBack,
     existingTailoredResume,
-    setExistingTailoredResume
+    setExistingTailoredResume,
+    isReTailoring = false,
+    onReTailor
 }) => {
   const [jobDetails, setJobDetails] = useState<JobDetails>({ jobTitle: '', company: '', description: '' });
   const [selectedResumeId, setSelectedResumeId] = useState<string | undefined>(baseResume?.id);
@@ -40,16 +44,22 @@ const JobTailor: React.FC<JobTailorProps> = ({
 
   useEffect(() => {
       if (existingTailoredResume) {
-          setJobDetails(existingTailoredResume.jobDetails);
+          if (isReTailoring) {
+              // For re-tailoring, pre-populate with previous job details
+              setJobDetails(existingTailoredResume.jobDetails);
+          } else {
+              // For viewing existing resume, load all data
+              setJobDetails(existingTailoredResume.jobDetails);
+              setTailoredData(existingTailoredResume.tailoredData);
+          }
           setSelectedResumeId(existingTailoredResume.baseResumeId);
-          setTailoredData(existingTailoredResume.tailoredData);
       }
       return () => {
         // cleanup when component unmounts
         setExistingTailoredResume(null);
       }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existingTailoredResume]);
+  }, [existingTailoredResume, isReTailoring]);
 
   const handleTailor = async () => {
     const selectedResume = resumes.find(r => r.id === selectedResumeId);
@@ -92,6 +102,7 @@ const JobTailor: React.FC<JobTailorProps> = ({
             tailoredResume={tailoredData}
             jobDetails={jobDetails}
             onBack={onBack}
+            onReTailor={onReTailor}
         />
     )
   }
@@ -101,19 +112,31 @@ const JobTailor: React.FC<JobTailorProps> = ({
       <Button onClick={onBack} variant="secondary" className="mb-4">
         &larr; Back to Dashboard
       </Button>
-      <h2 className="text-3xl font-bold mb-6">Tailor Resume for a Job</h2>
+      <h2 className="text-3xl font-bold mb-6">
+        {isReTailoring ? 'Re-tailor Resume for New Job' : 'Tailor Resume for a Job'}
+      </h2>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <Card className="space-y-4">
           <div>
-            <label htmlFor="base-resume" className="block text-sm font-medium text-gray-300 mb-1">Base Resume</label>
+            <label htmlFor="base-resume" className="block text-sm font-medium text-gray-300 mb-1">
+              {isReTailoring ? 'Source Resume (from previous tailoring)' : 'Base Resume'}
+            </label>
             <select
               id="base-resume"
               value={selectedResumeId}
               onChange={(e) => setSelectedResumeId(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-600 rounded-md shadow-sm px-3 py-2 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              disabled={isReTailoring}
+              className={`w-full border border-gray-600 rounded-md shadow-sm px-3 py-2 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+                isReTailoring ? 'bg-gray-700 cursor-not-allowed' : 'bg-gray-800'
+              }`}
             >
               {resumes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
+            {isReTailoring && (
+              <p className="text-xs text-gray-400 mt-1">
+                Using tailored resume as source for re-tailoring
+              </p>
+            )}
           </div>
           <Input label="Job Title" id="jobTitle" name="jobTitle" value={jobDetails.jobTitle} onChange={handleInputChange} />
           <Input label="Company" id="company" name="company" value={jobDetails.company} onChange={handleInputChange} />
@@ -142,7 +165,10 @@ const JobTailor: React.FC<JobTailorProps> = ({
           <div className="flex justify-end">
             <Button onClick={handleTailor} disabled={isLoading || !baseResume}>
               {isLoading ? <Spinner size="sm" /> : <SparklesIcon />}
-              {isLoading ? 'Tailoring...' : 'Generate Tailored Resume'}
+              {isLoading 
+                ? (isReTailoring ? 'Re-tailoring...' : 'Tailoring...') 
+                : (isReTailoring ? 'Re-tailor Resume' : 'Generate Tailored Resume')
+              }
             </Button>
           </div>
         </Card>

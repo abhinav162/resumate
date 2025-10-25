@@ -12,6 +12,7 @@ interface ResumePreviewProps {
   tailoredResume: ResumeData;
   jobDetails: JobDetails;
   onBack: () => void;
+  onReTailor?: (resume: ResumeData) => void;
 }
 
 const HighlightedText: React.FC<{ original: string; tailored: string }> = ({ original, tailored }) => {
@@ -22,7 +23,7 @@ const HighlightedText: React.FC<{ original: string; tailored: string }> = ({ ori
 };
 
 
-const ResumePreview: React.FC<ResumePreviewProps> = ({ originalResume, tailoredResume, jobDetails, onBack }) => {
+const ResumePreview: React.FC<ResumePreviewProps> = ({ originalResume, tailoredResume, jobDetails, onBack, onReTailor }) => {
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [pdfError, setPdfError] = useState<string | null>(null);
     const [showInsights, setShowInsights] = useState(false);
@@ -72,7 +73,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ originalResume, tailoredR
                  <p className="mt-2 text-sm text-green-400">Changes made by AI are highlighted in green.</p>
                  {pdfError && <p className="mt-2 text-sm text-red-400">PDF Generation Failed: {pdfError}</p>}
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-4 flex-wrap">
                 <Button 
                     onClick={() => setShowInsights(!showInsights)}
                     variant={showInsights ? "primary" : "secondary"}
@@ -80,6 +81,15 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ originalResume, tailoredR
                     <SparklesIcon />
                     {showInsights ? 'Hide Insights' : 'View Insights'}
                 </Button>
+                {onReTailor && (
+                    <Button 
+                        onClick={() => onReTailor(tailoredResume)}
+                        variant="secondary"
+                    >
+                        <SparklesIcon />
+                        Re-tailor for New Job
+                    </Button>
+                )}
                 <Button onClick={handleDownloadJson}>
                     <DownloadIcon/>
                     Download as JSON

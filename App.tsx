@@ -18,6 +18,7 @@ const App: React.FC = () => {
   
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [selectedTailoredResume, setSelectedTailoredResume] = useState<TailoredResume | null>(null);
+  const [resumeToReTailor, setResumeToReTailor] = useState<ResumeData | null>(null);
 
   useEffect(() => {
     if (!apiKey) {
@@ -56,6 +57,13 @@ const App: React.FC = () => {
 
   const viewTailoredResume = (resume: TailoredResume) => {
     setSelectedTailoredResume(resume);
+    setResumeToReTailor(null); // Clear re-tailor state
+    setCurrentView('tailor');
+  }
+
+  const reTailorResume = (resume: TailoredResume) => {
+    setResumeToReTailor(resume.tailoredData);
+    setSelectedTailoredResume(resume); // Pass the full tailored resume for job details
     setCurrentView('tailor');
   }
   
@@ -72,15 +80,24 @@ const App: React.FC = () => {
                   apiKey={apiKey}
                 />;
       case 'tailor':
-        const baseResume = resumes.find(r => r.id === baseResumeId) || resumes[0];
+        const baseResume = resumeToReTailor || resumes.find(r => r.id === baseResumeId) || resumes[0];
         return <JobTailor 
                   apiKey={apiKey}
                   baseResume={baseResume}
                   resumes={resumes}
                   addTailoredResume={addTailoredResume}
-                  onBack={() => setCurrentView('dashboard')}
+                  onBack={() => {
+                    setCurrentView('dashboard');
+                    setResumeToReTailor(null); // Clear re-tailor state
+                    setSelectedTailoredResume(null); // Clear selected resume
+                  }}
                   existingTailoredResume={selectedTailoredResume}
                   setExistingTailoredResume={setSelectedTailoredResume}
+                  isReTailoring={!!resumeToReTailor}
+                  onReTailor={(resume: ResumeData) => {
+                    setResumeToReTailor(resume);
+                    setSelectedTailoredResume(null);
+                  }}
                 />;
       case 'dashboard':
       default:
@@ -88,9 +105,11 @@ const App: React.FC = () => {
                   tailoredResumes={tailoredResumes} 
                   onTailorNew={() => {
                     setSelectedTailoredResume(null);
+                    setResumeToReTailor(null);
                     setCurrentView('tailor');
                   }}
                   onView={viewTailoredResume}
+                  onReTailor={reTailorResume}
                 />;
     }
   }
