@@ -16,6 +16,7 @@ interface JobTailorProps {
   baseResume: ResumeData | undefined;
   resumes: ResumeData[];
   addTailoredResume: (resume: TailoredResume) => void;
+  updateTailoredResume?: (resume: TailoredResume) => void;
   onBack: () => void;
   existingTailoredResume: TailoredResume | null;
   setExistingTailoredResume: (resume: TailoredResume | null) => void;
@@ -27,7 +28,8 @@ const JobTailor: React.FC<JobTailorProps> = ({
     apiKey, 
     baseResume, 
     resumes, 
-    addTailoredResume, 
+    addTailoredResume,
+    updateTailoredResume,
     onBack,
     existingTailoredResume,
     setExistingTailoredResume,
@@ -166,6 +168,19 @@ const JobTailor: React.FC<JobTailorProps> = ({
   
   const originalResume = resumes.find(r => r.id === (existingTailoredResume?.baseResumeId || selectedResumeId));
 
+  const handleSaveEditedResume = (editedResume: ResumeData) => {
+    setTailoredData(editedResume);
+    // If this is an existing tailored resume, update it in the parent state
+    if (existingTailoredResume && updateTailoredResume) {
+      const updatedTailoredResume = {
+        ...existingTailoredResume,
+        tailoredData: editedResume
+      };
+      updateTailoredResume(updatedTailoredResume);
+      setExistingTailoredResume(updatedTailoredResume);
+    }
+  };
+
   if (tailoredData && originalResume) {
     return (
         <ResumePreview 
@@ -174,6 +189,7 @@ const JobTailor: React.FC<JobTailorProps> = ({
             jobDetails={jobDetails}
             onBack={onBack}
             onReTailor={onReTailor}
+            onSaveEdits={handleSaveEditedResume}
         />
     )
   }

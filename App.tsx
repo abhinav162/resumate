@@ -55,6 +55,12 @@ const App: React.FC = () => {
     setCurrentView('dashboard');
   };
 
+  const updateTailoredResume = (updatedTailoredResume: TailoredResume) => {
+    setTailoredResumes(tailoredResumes.map(resume => 
+      resume.id === updatedTailoredResume.id ? updatedTailoredResume : resume
+    ));
+  };
+
   const viewTailoredResume = (resume: TailoredResume) => {
     setSelectedTailoredResume(resume);
     setResumeToReTailor(null); // Clear re-tailor state
@@ -86,6 +92,7 @@ const App: React.FC = () => {
                   baseResume={baseResume}
                   resumes={resumes}
                   addTailoredResume={addTailoredResume}
+                  updateTailoredResume={updateTailoredResume}
                   onBack={() => {
                     setCurrentView('dashboard');
                     setResumeToReTailor(null); // Clear re-tailor state

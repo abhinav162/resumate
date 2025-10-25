@@ -142,15 +142,48 @@ OPTIMIZATION REQUIREMENTS:
 2. APPLICABILITY: Align content with job requirements, prioritize relevant skills
 3. REMARKABILITY: Use XYZ framework (Accomplished X as measured by Y by doing Z), strong action verbs
 
+ATS OPTIMIZATION RULES (CRITICAL - MANDATORY):
+1. ELIMINATE VAGUE BUZZWORDS: Never use these overused terms anywhere:
+   - "proactive", "dynamic", "team player", "highly motivated", "self-starter", "passionate"
+   - "excellent communication skills", "detail-oriented", "hard worker", "results-driven"
+   - "pixel-perfect", "fast-paced environments", "collaborative", "innovative", "strategic"
+   - Replace with specific, measurable achievements
+   
+2. ACTION VERB VARIATION (STRICT ENFORCEMENT):
+   - MAXIMUM 1 use per action verb across the ENTIRE resume
+   - Must use diverse verbs: Built, Created, Delivered, Launched, Streamlined, Accelerated, Transformed, etc.
+   - BANNED from repetition: Architected, Optimized, Engineered, Designed, Developed, Implemented, Enhanced
+   - Count each verb as you write - never repeat any action verb
+   
+3. QUANTIFICATION REQUIREMENTS (CRITICAL):
+   - MINIMUM 75% of bullets must include specific numbers/metrics
+   - Include: percentages, time saved, team sizes, dollar amounts, volumes, frequencies
+   - CORRECT Examples: "40% increase", "5-person team", "$2M budget", "10K users", "3x faster"
+   - NEVER use malformed percentages like "3+0%" - use "30%" instead
+   - NEVER use plus in middle of numbers - use "1M users" not "1M+ users" unless indicating "more than"
+   - Even estimate metrics if exact numbers unavailable (use "~", "approximately", "over")
+   
+4. METRICS STANDARDIZATION (CRITICAL):
+   - Use ONLY valid percentages: "30%", "45%", "60%" - NEVER "3+0%", "4+5%", "6+0%"
+   - Format numbers correctly: "100K", "1M", "2.5M" - NOT "10+0K" or "1M+"
+   - Use "over" or "more than" for approximations: "over 100K users", not "100K+ users"
+   - Always include specific numbers with units
+   
+5. BULLET LENGTH: Maximum 280 characters per bullet point
+
 SPECIFIC INSTRUCTIONS:
-- Rewrite the summary to align with key job requirements (keep under 400 characters)
+- Rewrite the summary to align with key job requirements (keep under 400 characters, NO BUZZWORDS)
 - Transform each responsibility/project bullet using XYZ or RAS framework
-- Start bullets with high-impact action verbs (Architected, Engineered, Optimized, Spearheaded, etc.)
-- Include quantitative metrics where possible (%, numbers, time saved, etc.)
+- Start bullets with varied, high-impact action verbs (NEVER repeat any verb)
+- QUANTIFY 75%+ of bullets with specific metrics (%, numbers, time, team sizes, volumes, etc.)
+- Use XYZ framework: "Accomplished [X] as measured by [Y] by doing [Z]"
+- Include time periods, team sizes, percentages, dollar amounts wherever possible
 - Incorporate relevant keywords from job description naturally
 - Ensure most relevant skills are prioritized first
 - Do NOT invent new experiences, projects, or skills - only enhance existing content
-- Keep each bullet under 300 characters for optimal readability
+- Keep each bullet under 280 characters for optimal readability
+- Show achievements through concrete, quantified examples, not subjective claims
+- If exact metrics unknown, use reasonable estimates with qualifiers (~, approximately, over)
 
 TARGET JOB:
 Title: ${jobDetails.jobTitle}
@@ -206,9 +239,97 @@ Return the complete, optimized resume as a JSON object following the RARe framew
             tailoredData = resumeEnhancer.enhanceResume(tailoredData, jobDetails, enhancementConfig);
         }
         
+        // Final ATS optimization pass
+        tailoredData = await performATSOptimization(tailoredData, apiKey);
+        
         return tailoredData as ResumeData;
     } catch (error) {
         console.error("Error tailoring resume with Gemini:", error);
         throw new Error("Failed to tailor resume. Please check your API key and input data.");
+    }
+};
+
+/**
+ * Performs comprehensive ATS optimization using a dedicated LLM pass
+ */
+const performATSOptimization = async (resumeData: ResumeData, apiKey: string): Promise<ResumeData> => {
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const atsPrompt = `You are an ATS (Applicant Tracking System) optimization expert. Your ONLY job is to fix ATS issues in this resume while preserving all the content and meaning.
+
+CRITICAL ATS FIXES REQUIRED:
+
+1. QUANTIFICATION (TOP PRIORITY):
+   - MUST achieve 75%+ of bullets with specific numbers/metrics
+   - Add metrics to unquantified bullets: team sizes, time periods, percentages, volumes, frequencies
+   - Use reasonable estimates if exact numbers unknown (add ~, approximately, over)
+   - Examples: "led 5-person team", "reduced processing time by 50%", "managed 100+ daily requests"
+   - Transform vague statements into quantified achievements
+
+2. ACTION VERB VARIATION (MANDATORY):
+   - Scan the entire resume and count each action verb usage
+   - Replace repeated verbs to ensure MAXIMUM 1 use per verb
+   - Use these alternatives: Built, Created, Delivered, Launched, Streamlined, Accelerated, Transformed, Spearheaded, Established, Generated, Produced, Executed, Coordinated, Directed, Supervised, Facilitated, Conducted, Initiated, Pioneered, Revamped, Restructured, Modernized
+
+3. ELIMINATE ALL BUZZWORDS:
+   Remove: "pixel-perfect", "fast-paced", "collaborative", "strategic", "innovative", "proactive", "dynamic", "passionate", "results-driven", "detail-oriented", "excellent", "outstanding", "exceptional"
+
+4. FIX MALFORMED METRICS (CRITICAL):
+   - "3+0%" → "30%"
+   - "4+5%" → "45%" 
+   - "6+0%" → "60%"
+   - "10L" → "1M"
+   - "95+%" → "95%"
+   - "40+%" → "40%"
+   - "100K+" → "over 100K" or "100K"
+   - Remove all malformed plus symbols in percentages and numbers
+
+5. IMPROVE WEAK VERBS:
+   - "Integrated" → "Connected" or "Unified"
+   - "Implemented" → "Deployed" or "Executed"
+   - "Enhanced" → "Improved" or "Upgraded"
+
+RESUME TO OPTIMIZE:
+${JSON.stringify(resumeData, null, 2)}
+
+INSTRUCTIONS:
+- PRIORITY: Add quantification to 75%+ of bullets (team sizes, time periods, percentages, volumes)
+- Make MINIMAL changes - only fix ATS issues
+- Preserve all technical details, numbers, and achievements
+- Keep the same structure and formatting
+- Ensure each action verb appears only ONCE in the entire resume
+- Remove all buzzwords while maintaining meaning
+- Add reasonable metric estimates where exact numbers aren't available
+- Use XYZ framework: Accomplished [X] as measured by [Y] by doing [Z]
+- Return the optimized resume in exact same JSON format`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-pro",
+            contents: atsPrompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    ...resumeSchema,
+                    properties: {
+                        ...resumeSchema.properties,
+                        id: { type: Type.STRING },
+                        name: { type: Type.STRING },
+                    }
+                }
+            },
+        });
+        
+        const optimizedResume = JSON.parse(response.text.trim());
+        
+        // Preserve original metadata
+        optimizedResume.id = resumeData.id;
+        optimizedResume.name = resumeData.name;
+        
+        return optimizedResume as ResumeData;
+    } catch (error) {
+        console.error("Error in ATS optimization:", error);
+        // If ATS optimization fails, return the original
+        return resumeData;
     }
 };
