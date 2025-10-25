@@ -158,12 +158,15 @@ ATS OPTIMIZATION RULES (CRITICAL - MANDATORY):
 3. QUANTIFICATION REQUIREMENTS (CRITICAL):
    - MINIMUM 75% of bullets must include specific numbers/metrics
    - Include: percentages, time saved, team sizes, dollar amounts, volumes, frequencies
-   - Examples: "40% increase", "5-person team", "$2M budget", "10K+ users", "3x faster"
+   - CORRECT Examples: "40% increase", "5-person team", "$2M budget", "10K users", "3x faster"
+   - NEVER use malformed percentages like "3+0%" - use "30%" instead
+   - NEVER use plus in middle of numbers - use "1M users" not "1M+ users" unless indicating "more than"
    - Even estimate metrics if exact numbers unavailable (use "~", "approximately", "over")
    
-4. METRICS STANDARDIZATION:
-   - Use consistent format: "40%" not "40+%"
-   - Clear notation: "1M+" not "10L", "1K+" not "1000+"
+4. METRICS STANDARDIZATION (CRITICAL):
+   - Use ONLY valid percentages: "30%", "45%", "60%" - NEVER "3+0%", "4+5%", "6+0%"
+   - Format numbers correctly: "100K", "1M", "2.5M" - NOT "10+0K" or "1M+"
+   - Use "over" or "more than" for approximations: "over 100K users", not "100K+ users"
    - Always include specific numbers with units
    
 5. BULLET LENGTH: Maximum 280 characters per bullet point
@@ -271,11 +274,15 @@ CRITICAL ATS FIXES REQUIRED:
 3. ELIMINATE ALL BUZZWORDS:
    Remove: "pixel-perfect", "fast-paced", "collaborative", "strategic", "innovative", "proactive", "dynamic", "passionate", "results-driven", "detail-oriented", "excellent", "outstanding", "exceptional"
 
-4. STANDARDIZE METRICS:
-   - "10L" → "1M+"
-   - "95+%" → "95%" 
+4. FIX MALFORMED METRICS (CRITICAL):
+   - "3+0%" → "30%"
+   - "4+5%" → "45%" 
+   - "6+0%" → "60%"
+   - "10L" → "1M"
+   - "95+%" → "95%"
    - "40+%" → "40%"
-   - Ensure consistent formatting
+   - "100K+" → "over 100K" or "100K"
+   - Remove all malformed plus symbols in percentages and numbers
 
 5. IMPROVE WEAK VERBS:
    - "Integrated" → "Connected" or "Unified"

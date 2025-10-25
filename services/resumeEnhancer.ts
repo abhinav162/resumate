@@ -79,6 +79,7 @@ export class ResumeEnhancer {
             // Enhance summary for better applicability and remove buzzwords
             enhanced.summary = this.enhanceSummary(enhanced.summary, jobDetails);
             enhanced.summary = this.removeBuzzwords(enhanced.summary);
+            enhanced.summary = this.fixMalformedMetrics(enhanced.summary);
 
             // Enhance experience bullets
             enhanced.experience = enhanced.experience.map(exp => 
@@ -114,6 +115,9 @@ export class ResumeEnhancer {
 
             // Remove buzzwords first
             enhancedBullet = this.removeBuzzwords(enhancedBullet);
+            
+            // Fix malformed metrics
+            enhancedBullet = this.fixMalformedMetrics(enhancedBullet);
 
             if (config.enableStrongActionVerbs) {
                 enhancedBullet = this.enhanceActionVerbs(enhancedBullet);
@@ -154,6 +158,9 @@ export class ResumeEnhancer {
 
             // Remove buzzwords first
             enhancedBullet = this.removeBuzzwords(enhancedBullet);
+            
+            // Fix malformed metrics
+            enhancedBullet = this.fixMalformedMetrics(enhancedBullet);
 
             if (config.enableStrongActionVerbs) {
                 enhancedBullet = this.enhanceActionVerbs(enhancedBullet);
@@ -240,6 +247,34 @@ export class ResumeEnhancer {
         cleaned = cleaned.replace(/\s*,\s*\./g, '.');
         
         return cleaned;
+    }
+
+    /**
+     * Fixes malformed metrics that AI sometimes generates
+     */
+    private fixMalformedMetrics(text: string): string {
+        let fixed = text;
+        
+        // Fix malformed percentages like "3+0%" → "30%"
+        fixed = fixed.replace(/(\d)\+(\d)%/g, '$1$2%');
+        
+        // Fix malformed numbers like "10+0K" → "100K" 
+        fixed = fixed.replace(/(\d)\+(\d)(K|M|B)/g, '$1$2$3');
+        
+        // Fix standalone malformed percentages like "4+5%" → "45%"
+        fixed = fixed.replace(/(\d)\+(\d+)%/g, '$1$2%');
+        
+        // Fix standalone malformed numbers like "1M+" → "over 1M" when used inappropriately
+        fixed = fixed.replace(/(\d+)(K|M|B)\+(?!\s)/g, 'over $1$2');
+        
+        // Fix common malformed patterns
+        fixed = fixed.replace(/3\+0%/g, '30%');
+        fixed = fixed.replace(/4\+5%/g, '45%');
+        fixed = fixed.replace(/6\+0%/g, '60%');
+        fixed = fixed.replace(/2\+5%/g, '25%');
+        fixed = fixed.replace(/5\+0%/g, '50%');
+        
+        return fixed;
     }
 
     /**
