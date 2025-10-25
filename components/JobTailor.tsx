@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import type { JobDetails, ResumeData, TailoredResume } from '../types';
 import { tailorResumeForJob } from '../services/geminiService';
+import { defaultEnhancementConfig, type EnhancementConfig } from '../services/resumeEnhancer';
 import Button from './common/Button';
 import Input from './common/Input';
 import TextArea from './common/TextArea';
@@ -34,6 +35,8 @@ const JobTailor: React.FC<JobTailorProps> = ({
   const [tailoredData, setTailoredData] = useState<ResumeData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [useRaReOptimization, setUseRaReOptimization] = useState(true);
+  const [enhancementConfig, setEnhancementConfig] = useState<EnhancementConfig>(defaultEnhancementConfig);
 
   useEffect(() => {
       if (existingTailoredResume) {
@@ -57,7 +60,7 @@ const JobTailor: React.FC<JobTailorProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      const result = await tailorResumeForJob(selectedResume, jobDetails.description, apiKey);
+      const result = await tailorResumeForJob(selectedResume, jobDetails, apiKey, useRaReOptimization, enhancementConfig);
       setTailoredData(result);
       if (!existingTailoredResume) {
           const newTailoredResume: TailoredResume = {
@@ -115,6 +118,26 @@ const JobTailor: React.FC<JobTailorProps> = ({
           <Input label="Job Title" id="jobTitle" name="jobTitle" value={jobDetails.jobTitle} onChange={handleInputChange} />
           <Input label="Company" id="company" name="company" value={jobDetails.company} onChange={handleInputChange} />
           <TextArea label="Job Description" id="description" name="description" value={jobDetails.description} onChange={handleInputChange} rows={10} />
+          
+          {/* RARe Optimization Toggle */}
+          <div className="border border-gray-600 rounded-lg p-4 bg-gray-800">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-white font-medium flex items-center gap-2">
+                <SparklesIcon />
+                RARe Framework Optimization
+              </label>
+              <input
+                type="checkbox"
+                checked={useRaReOptimization}
+                onChange={(e) => setUseRaReOptimization(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500"
+              />
+            </div>
+            <p className="text-sm text-gray-400">
+              Automatically optimizes resume using Readability, Applicability, and Remarkability principles with XYZ framework and strong action verbs
+            </p>
+          </div>
+          
           {error && <p className="text-red-400 mt-2 text-sm">{error}</p>}
           <div className="flex justify-end">
             <Button onClick={handleTailor} disabled={isLoading || !baseResume}>
