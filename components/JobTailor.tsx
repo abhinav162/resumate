@@ -177,11 +177,75 @@ const JobTailor: React.FC<JobTailorProps> = ({
                 <h3 className="text-xl font-semibold mb-4">Preview of Base Resume</h3>
                 {baseResume ? (
                     <div className="bg-gray-900 p-4 rounded-md h-[500px] overflow-y-auto text-sm">
-                        <h2 className="text-2xl font-bold">{baseResume.contact.name}</h2>
-                        <p className="text-gray-400">{baseResume.contact.email} | {baseResume.contact.phone}</p>
-                        <hr className="my-2 border-gray-600"/>
-                        <p>{baseResume.summary}</p>
-                        {/* A minimal preview */}
+                        <div className="text-center mb-4">
+                            <h2 className="text-xl font-bold text-white">{baseResume.contact.name}</h2>
+                            <p className="text-gray-400">{baseResume.contact.location}</p>
+                            <p className="text-gray-400">{baseResume.contact.email} | {baseResume.contact.phone}</p>
+                        </div>
+                        
+                        <div className="mb-4">
+                            <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">SUMMARY</h3>
+                            <p className="text-gray-300">{baseResume.summary}</p>
+                        </div>
+
+                        <div className="mb-4">
+                            <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">SKILLS</h3>
+                            <p className="text-gray-300">{baseResume.skills.join(', ')}</p>
+                        </div>
+
+                        <div className="mb-4">
+                            <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">EXPERIENCE</h3>
+                            {baseResume.experience.slice(0, 2).map((exp, index) => (
+                                <div key={exp.id} className="mb-3">
+                                    <div className="flex justify-between items-start">
+                                        <h4 className="text-sm font-semibold text-white">{exp.role}</h4>
+                                        <p className="text-xs text-gray-500">{exp.startDate} - {exp.endDate}</p>
+                                    </div>
+                                    <p className="text-xs text-gray-400">{exp.company}, {exp.location}</p>
+                                    <ul className="list-disc list-inside mt-1 text-xs text-gray-300">
+                                        {exp.responsibilities.slice(0, 2).map((resp, rIndex) => (
+                                            <li key={rIndex}>{resp}</li>
+                                        ))}
+                                        {exp.responsibilities.length > 2 && (
+                                            <li className="text-gray-500">... and {exp.responsibilities.length - 2} more</li>
+                                        )}
+                                    </ul>
+                                </div>
+                            ))}
+                            {baseResume.experience.length > 2 && (
+                                <p className="text-xs text-gray-500">... and {baseResume.experience.length - 2} more positions</p>
+                            )}
+                        </div>
+
+                        {baseResume.projects && baseResume.projects.length > 0 && (
+                            <div className="mb-4">
+                                <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">PROJECTS</h3>
+                                {baseResume.projects.slice(0, 2).map((proj, index) => (
+                                    <div key={proj.id} className="mb-2">
+                                        <h4 className="text-sm font-semibold text-white">{proj.name}</h4>
+                                        {proj.description.slice(0, 1).map((desc, dIndex) => (
+                                            <p key={dIndex} className="text-xs text-gray-300">• {desc}</p>
+                                        ))}
+                                    </div>
+                                ))}
+                                {baseResume.projects.length > 2 && (
+                                    <p className="text-xs text-gray-500">... and {baseResume.projects.length - 2} more projects</p>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="mb-4">
+                            <h3 className="text-sm font-bold text-indigo-400 border-b border-gray-700 pb-1 mb-2">EDUCATION</h3>
+                            {baseResume.education.map((edu, index) => (
+                                <div key={edu.id} className="mb-2">
+                                    <div className="flex justify-between items-start">
+                                        <h4 className="text-sm font-semibold text-white">{edu.degree}</h4>
+                                        <p className="text-xs text-gray-500">{edu.graduationDate}</p>
+                                    </div>
+                                    <p className="text-xs text-gray-400">{edu.institution}, {edu.location}</p>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 ) : <p>Please create a profile first.</p>}
             </Card>
