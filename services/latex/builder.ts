@@ -109,7 +109,7 @@ export class ResumeBuilder {
      * Orders sections according to configuration
      */
     private orderSections(sections: Record<string, string>): string[] {
-        const defaultOrder = ['skills', 'summary', 'experience', 'projects', 'education'];
+        const defaultOrder = ['summary', 'skills', 'experience', 'projects', 'education'];
         const order = this.config.sectionOrder || defaultOrder;
         
         return order

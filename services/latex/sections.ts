@@ -102,8 +102,7 @@ export class ExperienceGenerator {
         const sectionTitle = this.config.customLabels?.experience || 'EXPERIENCE';
         
         const experienceFormatted = experiences.map(exp => `
-\\textbf{${escapeLatex(exp.role)}} \\hfill ${escapeLatex(exp.startDate)} -- ${escapeLatex(exp.endDate)} \\\\
-${escapeLatex(exp.company)} \\hfill \\textit{${escapeLatex(exp.location)}}
+\\textbf{${escapeLatex(exp.role)}} \\\\ ${escapeLatex(exp.company)}, \\textit{${escapeLatex(exp.location)}} \\hfill ${escapeLatex(exp.startDate)} -- ${escapeLatex(exp.endDate)}
  \\begin{itemize}
     \\itemsep -5pt {} 
     ${exp.responsibilities.map(r => `\\item ${escapeLatex(r)}`).join('\n    ')}
