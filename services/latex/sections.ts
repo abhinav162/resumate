@@ -212,7 +212,7 @@ export class EducationGenerator {
             const gpaLine = edu.gpa ? `\nCGPA: ${escapeLatex(edu.gpa)}` : '';
             
             return `
-{\\bf ${escapeLatex(edu.degree)}}, ${escapeLatex(edu.institution)} \\hfill {${escapeLatex(edu.graduationDate)}}\\${gpaLine}
+{\\bf ${escapeLatex(edu.degree)}}, ${escapeLatex(edu.institution)} \\hfill {${escapeLatex(edu.graduationDate)}} \\\\${gpaLine}
 `;
         }).join('\n');
         
