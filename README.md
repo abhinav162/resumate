@@ -1,12 +1,20 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+<img width="1200" height="475" alt="Resumate Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# Resumate - AI-Powered Resume Tailoring
 
-This contains everything you need to run your app locally.
+Resumate is an intelligent resume optimization platform that helps you tailor your resume for specific job applications using AI. Built with React, TypeScript, and powered by Google's Gemini AI.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1ufeg5DuE2hC7ER0sdODJYV1EistUtUIV
+## Features
+
+- **AI-Powered Resume Parsing**: Upload your resume text and let AI structure it into professional format
+- **Intelligent Job Tailoring**: Automatically optimize your resume for specific job descriptions
+- **ATS Optimization**: Built-in checks for applicant tracking system compatibility
+- **Multiple Export Formats**: Download as PDF or JSON
+- **Resume Management**: Store and manage multiple resume profiles
+- **Section Customization**: Choose which sections to include for each application
+- **Real-time Editing**: Make quick edits to tailored resumes before downloading
 
 ## Run Locally
 
