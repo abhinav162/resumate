@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { JobDetails, ResumeData, TailoredResume } from '../types';
-import geminiService from '../services/geminiService';
+import { apiClient } from '../src/services/api';
 import { defaultEnhancementConfig, type EnhancementConfig } from '../services/resumeEnhancer';
 import Button from './common/Button';
 import Input from './common/Input';
@@ -15,8 +15,8 @@ interface JobTailorProps {
   apiKey: string | null;
   baseResume: ResumeData | undefined;
   resumes: ResumeData[];
-  addTailoredResume: (resume: TailoredResume) => void;
-  updateTailoredResume?: (resume: TailoredResume) => void;
+  addTailoredResume: (resume: TailoredResume) => Promise<TailoredResume>;
+  updateTailoredResume?: (resume: TailoredResume) => Promise<TailoredResume>;
   onBack: () => void;
   existingTailoredResume: TailoredResume | null;
   setExistingTailoredResume: (resume: TailoredResume | null) => void;
@@ -110,8 +110,12 @@ const JobTailor: React.FC<JobTailorProps> = ({
     setError(null);
     try {
       const filteredResume = createFilteredResume(selectedResume);
-      geminiService.setApiKey(apiKey);
-      const result = await geminiService.tailorResume(filteredResume, jobDetails, useRaReOptimization);
+      const result = await apiClient.tailorResume({
+        resumeData: filteredResume,
+        jobDetails,
+        apiKey,
+        useRaReOptimization
+      });
       setTailoredData(result);
       if (!existingTailoredResume) {
           const newTailoredResume: TailoredResume = {
@@ -121,7 +125,7 @@ const JobTailor: React.FC<JobTailorProps> = ({
               tailoredData: result,
               createdAt: new Date().toISOString()
           };
-          addTailoredResume(newTailoredResume);
+          await addTailoredResume(newTailoredResume);
       }
     } catch (err: any) {
       setError(err.message);
@@ -169,16 +173,20 @@ const JobTailor: React.FC<JobTailorProps> = ({
   
   const originalResume = resumes.find(r => r.id === (existingTailoredResume?.baseResumeId || selectedResumeId));
 
-  const handleSaveEditedResume = (editedResume: ResumeData) => {
+  const handleSaveEditedResume = async (editedResume: ResumeData) => {
     setTailoredData(editedResume);
     // If this is an existing tailored resume, update it in the parent state
     if (existingTailoredResume && updateTailoredResume) {
-      const updatedTailoredResume = {
-        ...existingTailoredResume,
-        tailoredData: editedResume
-      };
-      updateTailoredResume(updatedTailoredResume);
-      setExistingTailoredResume(updatedTailoredResume);
+      try {
+        const updatedTailoredResume = {
+          ...existingTailoredResume,
+          tailoredData: editedResume
+        };
+        const result = await updateTailoredResume(updatedTailoredResume);
+        setExistingTailoredResume(result);
+      } catch (err: any) {
+        setError(err.message || 'Failed to update tailored resume');
+      }
     }
   };
 
