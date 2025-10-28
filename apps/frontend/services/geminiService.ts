@@ -1,144 +1,105 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { ResumeData, JobDetails } from '../types';
-import { resumeEnhancer, type EnhancementConfig } from './resumeEnhancer';
 
-const resumeSchema = {
-    type: Type.OBJECT,
-    properties: {
-        contact: {
-            type: Type.OBJECT,
-            properties: {
-                name: { type: Type.STRING, description: "Full name" },
-                email: { type: Type.STRING, description: "Email address" },
-                phone: { type: Type.STRING, description: "Phone number" },
-                linkedin: { type: Type.STRING, description: "LinkedIn profile URL" },
-                github: { type: Type.STRING, description: "GitHub profile URL" },
-                website: { type: Type.STRING, description: "Personal website or portfolio URL" },
-                location: { type: Type.STRING, description: "City and State, e.g., San Francisco, CA" },
-            },
-            required: ['name', 'email', 'phone', 'location']
-        },
-        summary: {
-            type: Type.STRING,
-            description: "A professional summary of 2-4 sentences. This field is optional."
-        },
-        experience: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    role: { type: Type.STRING },
-                    company: { type: Type.STRING },
-                    location: { type: Type.STRING },
-                    startDate: { type: Type.STRING, description: "Month YYYY" },
-                    endDate: { type: Type.STRING, description: "Month YYYY or Present" },
-                    responsibilities: {
-                        type: Type.ARRAY,
-                        items: { type: Type.STRING, description: "A bullet point describing a responsibility or achievement." }
-                    },
-                },
-                required: ['role', 'company', 'startDate', 'endDate', 'responsibilities']
-            }
-        },
-        education: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    degree: { type: Type.STRING },
-                    institution: { type: Type.STRING },
-                    location: { type: Type.STRING },
-                    graduationDate: { type: Type.STRING, description: "Month YYYY" },
-                    gpa: { type: Type.STRING, description: "GPA, e.g., 3.8/4.0. Optional." },
-                },
-                required: ['degree', 'institution', 'graduationDate']
-            }
-        },
-        projects: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    name: { type: Type.STRING },
-                    url: { type: Type.STRING, description: "Live project URL" },
-                    repoUrl: { type: Type.STRING, description: "Source code/repository URL" },
-                    description: {
-                        type: Type.ARRAY,
-                        items: { type: Type.STRING, description: "A bullet point describing a feature or technology used." }
-                    },
-                },
-                required: ['name', 'description']
-            }
-        },
-        skills: {
-            type: Type.ARRAY,
-            description: "A list of technical and soft skills.",
-            items: { type: Type.STRING }
-        }
-    },
-    required: ['contact', 'experience', 'education', 'skills']
-};
+class GeminiService {
+  private genAI: GoogleGenerativeAI | null = null;
 
+  setApiKey(apiKey: string) {
+    this.genAI = new GoogleGenerativeAI(apiKey);
+  }
 
-export const parseResumeText = async (resumeText: string, apiKey: string): Promise<Omit<ResumeData, 'id' | 'name'>> => {
-    if (!apiKey) throw new Error("API Key is required.");
-    const ai = new GoogleGenAI({ apiKey });
-    
-    const prompt = `Parse the following resume text into a JSON object. Adhere strictly to the provided JSON schema. If some information (like github, website, projects, or summary) is not present, use an empty string or empty array. Extract all experiences, education entries, and projects.
+  async parseResume(resumeText: string): Promise<ResumeData> {
+    if (!this.genAI) {
+      throw new Error('Gemini API key not set');
+    }
+
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const prompt = `Parse the following resume text into a structured JSON format. Extract all relevant information including contact details, experience, education, projects, and skills. If some information is missing, use appropriate defaults or empty values.
 
 Resume Text:
 ---
 ${resumeText}
----`;
+---
+
+Return ONLY a valid JSON object with the following structure:
+{
+  "contact": {
+    "name": "Full Name",
+    "email": "email@example.com",
+    "phone": "phone number",
+    "location": "City, State",
+    "linkedin": "linkedin URL",
+    "github": "github URL",
+    "website": "website URL"
+  },
+  "summary": "Professional summary",
+  "experience": [
+    {
+      "role": "Job Title",
+      "company": "Company Name",
+      "location": "City, State",
+      "startDate": "Month Year",
+      "endDate": "Month Year or Present",
+      "responsibilities": ["bullet point 1", "bullet point 2"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "Degree Name",
+      "institution": "University Name",
+      "location": "City, State",
+      "graduationDate": "Month Year",
+      "gpa": "GPA if available"
+    }
+  ],
+  "projects": [
+    {
+      "name": "Project Name",
+      "url": "project URL",
+      "repoUrl": "repository URL",
+      "description": ["description point 1", "description point 2"]
+    }
+  ],
+  "skills": ["skill1", "skill2", "skill3"]
+}`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
     
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: resumeSchema
-            },
-        });
-        
-        const jsonText = response.text.trim();
-        const parsedData = JSON.parse(jsonText);
-        
-        // Add IDs to nested objects
-        if(parsedData.experience) {
-            parsedData.experience = parsedData.experience.map((exp: any, index: number) => ({ ...exp, id: `exp-${Date.now()}-${index}` }));
-        }
-        if(parsedData.education) {
-            parsedData.education = parsedData.education.map((edu: any, index: number) => ({ ...edu, id: `edu-${Date.now()}-${index}` }));
-        }
-        if(parsedData.projects) {
-            parsedData.projects = parsedData.projects.map((proj: any, index: number) => ({ ...proj, id: `proj-${Date.now()}-${index}` }));
-        } else {
-            parsedData.projects = [];
-        }
-
-        return parsedData;
-    } catch (error) {
-        console.error("Error parsing resume with Gemini:", error);
-        throw new Error("Failed to parse resume. Please check the API key and the resume text format.");
+      // Remove any markdown code blocks if present
+      const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const parsedData = JSON.parse(cleanedText);
+      
+      // Add default ID and name
+      return {
+        id: crypto.randomUUID(),
+        name: `Resume - ${parsedData.contact?.name || 'Unnamed'}`,
+        ...parsedData
+      };
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', text);
+      throw new Error('Failed to parse resume data from AI response');
     }
-};
+  }
 
-export const tailorResumeForJob = async (
+  async tailorResume(
     resumeData: ResumeData, 
-    jobDetails: JobDetails, 
-    apiKey: string,
-    useRaReOptimization: boolean = true,
-    enhancementConfig?: EnhancementConfig
-): Promise<ResumeData> => {
-    if (!apiKey) throw new Error("API Key is required.");
-    const ai = new GoogleGenAI({ apiKey });
+    jobDetails: JobDetails,
+    useRaReOptimization: boolean = true
+  ): Promise<ResumeData> {
+    if (!this.genAI) {
+      throw new Error('Gemini API key not set');
+    }
+
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
 
     const prompt = `You are an expert ATS resume optimizer using the RARe framework (Readability, Applicability, Remarkability). Given the following resume JSON and job description, rewrite the resume to be highly tailored for the job.
 
 OPTIMIZATION REQUIREMENTS:
-1. READABILITY: Keep bullets under 300 characters, ensure scannable format
+1. READABILITY: Keep bullets under 280 characters, ensure scannable format
 2. APPLICABILITY: Align content with job requirements, prioritize relevant skills
 3. REMARKABILITY: Use XYZ framework (Accomplished X as measured by Y by doing Z), strong action verbs
 
@@ -158,7 +119,7 @@ ATS OPTIMIZATION RULES (CRITICAL - MANDATORY):
 3. QUANTIFICATION REQUIREMENTS (CRITICAL):
    - MINIMUM 75% of bullets must include specific numbers/metrics
    - Include: percentages, time saved, team sizes, dollar amounts, volumes, frequencies
-   - CORRECT Examples: "40% increase", "5-person team", "$2M budget", "10K users", "3x faster"
+   - CORRECT Examples: "40% increase", "5-person team", "10K users", "3x faster"
    - NEVER use malformed percentages like "3+0%" - use "30%" instead
    - NEVER use plus in middle of numbers - use "1M users" not "1M+ users" unless indicating "more than"
    - Even estimate metrics if exact numbers unavailable (use "~", "approximately", "over")
@@ -170,20 +131,6 @@ ATS OPTIMIZATION RULES (CRITICAL - MANDATORY):
    - Always include specific numbers with units
    
 5. BULLET LENGTH: Maximum 280 characters per bullet point
-
-SPECIFIC INSTRUCTIONS:
-- Rewrite the summary to align with key job requirements (keep under 400 characters, NO BUZZWORDS)
-- Transform each responsibility/project bullet using XYZ or RAS framework
-- Start bullets with varied, high-impact action verbs (NEVER repeat any verb)
-- QUANTIFY 75%+ of bullets with specific metrics (%, numbers, time, team sizes, volumes, etc.)
-- Use XYZ framework: "Accomplished [X] as measured by [Y] by doing [Z]"
-- Include time periods, team sizes, percentages, dollar amounts wherever possible
-- Incorporate relevant keywords from job description naturally
-- Ensure most relevant skills are prioritized first
-- Do NOT invent new experiences, projects, or skills - only enhance existing content
-- Keep each bullet under 280 characters for optimal readability
-- Show achievements through concrete, quantified examples, not subjective claims
-- If exact metrics unknown, use reasonable estimates with qualifiers (~, approximately, over)
 
 TARGET JOB:
 Title: ${jobDetails.jobTitle}
@@ -199,137 +146,68 @@ Original Resume Data:
 ${JSON.stringify(resumeData, null, 2)}
 ---
 
-Return the complete, optimized resume as a JSON object following the RARe framework principles.`;
+Return the complete, optimized resume as a JSON object following the RARe framework principles and ATS optimization rules.`;
 
-    try {
-         const response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    ...resumeSchema,
-                    properties: {
-                        ...resumeSchema.properties,
-                        id: { type: Type.STRING },
-                        name: { type: Type.STRING },
-                    }
-                }
-            },
-        });
-        
-        const jsonText = response.text.trim();
-        let tailoredData = JSON.parse(jsonText);
-
-        // Preserve original IDs
-        tailoredData.id = resumeData.id;
-        tailoredData.name = resumeData.name;
-        if(tailoredData.experience && resumeData.experience) {
-            tailoredData.experience = tailoredData.experience.map((exp: any, index: number) => ({ ...exp, id: resumeData.experience[index]?.id || `exp-${Date.now()}-${index}` }));
-        }
-        if(tailoredData.education && resumeData.education) {
-            tailoredData.education = tailoredData.education.map((edu: any, index: number) => ({ ...edu, id: resumeData.education[index]?.id || `edu-${Date.now()}-${index}` }));
-        }
-         if(tailoredData.projects && resumeData.projects) {
-            tailoredData.projects = tailoredData.projects.map((proj: any, index: number) => ({ ...proj, id: resumeData.projects[index]?.id || `proj-${Date.now()}-${index}` }));
-        }
-        
-        // Apply additional RARe framework enhancements if enabled
-        if (useRaReOptimization && enhancementConfig) {
-            tailoredData = resumeEnhancer.enhanceResume(tailoredData, jobDetails, enhancementConfig);
-        }
-        
-        // Final ATS optimization pass
-        tailoredData = await performATSOptimization(tailoredData, apiKey);
-        
-        return tailoredData as ResumeData;
-    } catch (error) {
-        console.error("Error tailoring resume with Gemini:", error);
-        throw new Error("Failed to tailor resume. Please check your API key and input data.");
-    }
-};
-
-/**
- * Performs comprehensive ATS optimization using a dedicated LLM pass
- */
-const performATSOptimization = async (resumeData: ResumeData, apiKey: string): Promise<ResumeData> => {
-    const ai = new GoogleGenAI({ apiKey });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
     
-    const atsPrompt = `You are an ATS (Applicant Tracking System) optimization expert. Your ONLY job is to fix ATS issues in this resume while preserving all the content and meaning.
+    try {
+      // Remove any markdown code blocks if present
+      const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const tailoredData = JSON.parse(cleanedText);
+      
+      // Preserve original IDs and metadata
+      return {
+        ...tailoredData,
+        id: resumeData.id,
+        name: resumeData.name
+      };
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', text);
+      throw new Error('Failed to parse tailored resume data from AI response');
+    }
+  }
 
-CRITICAL ATS FIXES REQUIRED:
+  async enhanceResume(
+    resumeData: ResumeData,
+    enhancementConfig: any
+  ): Promise<ResumeData> {
+    if (!this.genAI) {
+      throw new Error('Gemini API key not set');
+    }
 
-1. QUANTIFICATION (TOP PRIORITY):
-   - MUST achieve 75%+ of bullets with specific numbers/metrics
-   - Add metrics to unquantified bullets: team sizes, time periods, percentages, volumes, frequencies
-   - Use reasonable estimates if exact numbers unknown (add ~, approximately, over)
-   - Examples: "led 5-person team", "reduced processing time by 50%", "managed 100+ daily requests"
-   - Transform vague statements into quantified achievements
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-2. ACTION VERB VARIATION (MANDATORY):
-   - Scan the entire resume and count each action verb usage
-   - Replace repeated verbs to ensure MAXIMUM 1 use per verb
-   - Use these alternatives: Built, Created, Delivered, Launched, Streamlined, Accelerated, Transformed, Spearheaded, Established, Generated, Produced, Executed, Coordinated, Directed, Supervised, Facilitated, Conducted, Initiated, Pioneered, Revamped, Restructured, Modernized
+    const prompt = `Enhance the following resume based on the provided configuration. Improve the content while maintaining accuracy and truthfulness.
 
-3. ELIMINATE ALL BUZZWORDS:
-   Remove: "pixel-perfect", "fast-paced", "collaborative", "strategic", "innovative", "proactive", "dynamic", "passionate", "results-driven", "detail-oriented", "excellent", "outstanding", "exceptional"
+Enhancement Configuration:
+${JSON.stringify(enhancementConfig, null, 2)}
 
-4. FIX MALFORMED METRICS (CRITICAL):
-   - "3+0%" → "30%"
-   - "4+5%" → "45%" 
-   - "6+0%" → "60%"
-   - "10L" → "1M"
-   - "95+%" → "95%"
-   - "40+%" → "40%"
-   - "100K+" → "over 100K" or "100K"
-   - Remove all malformed plus symbols in percentages and numbers
-
-5. IMPROVE WEAK VERBS:
-   - "Integrated" → "Connected" or "Unified"
-   - "Implemented" → "Deployed" or "Executed"
-   - "Enhanced" → "Improved" or "Upgraded"
-
-RESUME TO OPTIMIZE:
+Resume Data:
 ${JSON.stringify(resumeData, null, 2)}
 
-INSTRUCTIONS:
-- PRIORITY: Add quantification to 75%+ of bullets (team sizes, time periods, percentages, volumes)
-- Make MINIMAL changes - only fix ATS issues
-- Preserve all technical details, numbers, and achievements
-- Keep the same structure and formatting
-- Ensure each action verb appears only ONCE in the entire resume
-- Remove all buzzwords while maintaining meaning
-- Add reasonable metric estimates where exact numbers aren't available
-- Use XYZ framework: Accomplished [X] as measured by [Y] by doing [Z]
-- Return the optimized resume in exact same JSON format`;
+Return the enhanced resume as a JSON object with the same structure.`;
 
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-pro",
-            contents: atsPrompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    ...resumeSchema,
-                    properties: {
-                        ...resumeSchema.properties,
-                        id: { type: Type.STRING },
-                        name: { type: Type.STRING },
-                    }
-                }
-            },
-        });
-        
-        const optimizedResume = JSON.parse(response.text.trim());
-        
-        // Preserve original metadata
-        optimizedResume.id = resumeData.id;
-        optimizedResume.name = resumeData.name;
-        
-        return optimizedResume as ResumeData;
-    } catch (error) {
-        console.error("Error in ATS optimization:", error);
-        // If ATS optimization fails, return the original
-        return resumeData;
+      const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const enhancedData = JSON.parse(cleanedText);
+      
+      return {
+        ...enhancedData,
+        id: resumeData.id,
+        name: resumeData.name
+      };
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', text);
+      throw new Error('Failed to parse enhanced resume data from AI response');
     }
-};
+  }
+}
+
+export const geminiService = new GeminiService();
+export default geminiService;

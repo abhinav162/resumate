@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { JobDetails, ResumeData, TailoredResume } from '../types';
-import { tailorResumeForJob } from '../services/geminiService';
+import geminiService from '../services/geminiService';
 import { defaultEnhancementConfig, type EnhancementConfig } from '../services/resumeEnhancer';
 import Button from './common/Button';
 import Input from './common/Input';
@@ -110,7 +110,8 @@ const JobTailor: React.FC<JobTailorProps> = ({
     setError(null);
     try {
       const filteredResume = createFilteredResume(selectedResume);
-      const result = await tailorResumeForJob(filteredResume, jobDetails, apiKey, useRaReOptimization, enhancementConfig);
+      geminiService.setApiKey(apiKey);
+      const result = await geminiService.tailorResume(filteredResume, jobDetails, useRaReOptimization);
       setTailoredData(result);
       if (!existingTailoredResume) {
           const newTailoredResume: TailoredResume = {

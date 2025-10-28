@@ -5,7 +5,7 @@ import Button from './common/Button';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import ResumeEditor from './ResumeEditor';
-import { parseResumeText } from '../services/geminiService';
+import geminiService from '../services/geminiService';
 import { generateLatexPdf } from '../services/latexService';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
@@ -38,7 +38,8 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
     setIsLoading(true);
     setError(null);
     try {
-      const parsedData = await parseResumeText(resumeText, apiKey);
+      geminiService.setApiKey(apiKey);
+      const parsedData = await geminiService.parseResume(resumeText);
       const newResume: ResumeData = {
         ...parsedData,
         id: `resume-${Date.now()}`,
