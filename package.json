@@ -1,0 +1,50 @@
+{
+  "name": "resumate",
+  "version": "1.0.0",
+  "description": "AI-Powered Resume Tailoring Platform - Monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "build": "npm run build --workspaces --if-present",
+    "build:frontend": "npm run build --workspace=apps/frontend",
+    "build:backend": "npm run build --workspace=apps/backend",
+    "build:shared": "npm run build --workspace=packages/shared",
+    "start": "npm run start --workspace=apps/backend",
+    "start:frontend": "npm run preview --workspace=apps/frontend",
+    "start:backend": "npm run start --workspace=apps/backend",
+    "test": "npm test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present && rm -rf node_modules",
+    "setup": "npm install && npm run build:shared",
+    "init-db": "npm run init-db --workspace=apps/backend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "resume",
+    "ai",
+    "tailoring",
+    "ats",
+    "optimization",
+    "monorepo"
+  ],
+  "author": "Resumate Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-username/resumate.git"
+  }
+}

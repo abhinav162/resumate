@@ -1,0 +1,5 @@
+{
+  "name": "Resumate",
+  "description": "An AI-powered resume optimization platform that helps you tailor your resume for specific job applications using the Gemini API, ensuring your profile is optimized for Applicant Tracking Systems (ATS).",
+  "requestFramePermissions": []
+}
