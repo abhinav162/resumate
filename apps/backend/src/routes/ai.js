@@ -26,7 +26,7 @@ router.post('/parse-resume', [
     const { resumeText, apiKey } = req.body;
     
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `Parse the following resume text into a structured JSON format. Extract all relevant information including contact details, experience, education, projects, and skills. If some information is missing, use appropriate defaults or empty values.
 
@@ -119,7 +119,7 @@ router.post('/tailor-resume', [
     const { resumeData, jobDetails, apiKey, useRaReOptimization = true } = req.body;
     
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
     const prompt = `You are an expert ATS resume optimizer using the RARe framework (Readability, Applicability, Remarkability). Given the following resume JSON and job description, rewrite the resume to be highly tailored for the job.
 
