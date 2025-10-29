@@ -61,8 +61,22 @@ fi
 
 print_success "✅ All prerequisites are available"
 
-# Create logs directory
+# Create necessary directories with proper permissions
 mkdir -p "$LOG_DIR"
+mkdir -p "$ROOT_DIR/data"
+chmod 755 "$ROOT_DIR/data"
+print_status "Created logs and data directories with proper permissions"
+
+# Initialize database if it doesn't exist
+DB_PATH="$ROOT_DIR/data/resumate.db"
+if [ ! -f "$DB_PATH" ]; then
+    print_status "Database doesn't exist. Will be created automatically by the backend..."
+    # Ensure the data directory is writable
+    chmod 755 "$ROOT_DIR/data"
+    touch "$DB_PATH"
+    chmod 644 "$DB_PATH"
+    print_status "Created empty database file with proper permissions"
+fi
 
 # Change to project root
 cd "$ROOT_DIR"
@@ -116,6 +130,9 @@ if [ ! -f "apps/backend/.env.production" ]; then
         print_warning "Creating apps/backend/.env.production from .env.example"
         print_warning "⚠️  IMPORTANT: Please review and update JWT_SECRET and other sensitive values!"
         cp apps/backend/.env.example apps/backend/.env.production
+        # Update DB_PATH to use absolute path
+        sed -i.bak "s|DB_PATH=../../data/resumate.db|DB_PATH=$ROOT_DIR/data/resumate.db|g" apps/backend/.env.production
+        rm apps/backend/.env.production.bak 2>/dev/null || true
     else
         print_error "No .env.example found in apps/backend/"
         exit 1
@@ -147,6 +164,14 @@ print_success "Backend started"
 # Wait for backend to be ready
 print_status "Waiting for backend to be ready..."
 sleep 5
+
+# Initialize database schema
+print_status "Initializing database schema..."
+if npm run init-db; then
+    print_success "Database schema initialized"
+else
+    print_warning "Database initialization may have failed - this is normal if already initialized"
+fi
 
 # Test backend health
 if curl -f -s "http://localhost:4300/api/resumes" > /dev/null; then

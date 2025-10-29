@@ -1,11 +1,15 @@
 import sqlite3 from 'sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const dbPath = join(__dirname, '../../data/resumate.db');
+// Use environment variable if set, otherwise fallback to default path
+const dbPath = process.env.DB_PATH || join(__dirname, '../../data/resumate.db');
 
 // Enable verbose mode for debugging
 sqlite3.verbose();

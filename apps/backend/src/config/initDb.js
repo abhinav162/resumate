@@ -1,7 +1,10 @@
 import database from './database.js';
 import { mkdir } from 'fs/promises';
-import { dirname } from 'path';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -9,7 +12,9 @@ const __dirname = dirname(__filename);
 async function initializeDatabase() {
   try {
     // Create data directory if it doesn't exist
-    const dataDir = dirname(database.db?.filename || '../data');
+    const dbPath = process.env.DB_PATH || join(__dirname, '../../data/resumate.db');
+    const dataDir = dirname(resolve(dbPath));
+    console.log(`Creating data directory: ${dataDir}`);
     await mkdir(dataDir, { recursive: true });
 
     // Connect to database
