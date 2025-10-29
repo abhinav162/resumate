@@ -5,7 +5,7 @@ import Button from './common/Button';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import ResumeEditor from './ResumeEditor';
-import { apiClient } from '../src/services/api';
+import { apiClient } from '../services/api';
 import { generateLatexPdf } from '../services/latexService';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';

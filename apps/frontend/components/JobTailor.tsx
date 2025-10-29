@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { JobDetails, ResumeData, TailoredResume } from '../types';
-import { apiClient } from '../src/services/api';
+import { apiClient } from '../services/api';
 import Button from './common/Button';
 import Input from './common/Input';
 import TextArea from './common/TextArea';

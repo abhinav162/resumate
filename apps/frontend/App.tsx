@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { ResumeData, TailoredResume, View } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { apiClient } from './src/services/api';
+import { apiClient } from './services/api';
 import Header from './components/Header';
 import ApiKeyModal from './components/ApiKeyModal';
 import Dashboard from './components/Dashboard';
