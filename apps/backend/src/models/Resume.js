@@ -20,12 +20,18 @@ class Resume {
     const contactDataJson = JSON.stringify(resumeData.contact);
     const skillsJson = JSON.stringify(resumeData.skills);
     
+    // Handle default-user case by getting the default user ID
+    let userId = resumeData.userId;
+    if (userId === 'default-user') {
+      userId = await Resume.getDefaultUserId();
+    }
+    
     const result = await database.run(`
       INSERT INTO base_resumes (uuid, user_id, name, contact_data, summary, skills, is_base)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [
       uuid,
-      resumeData.userId || null,
+      userId || null,
       resumeData.name,
       contactDataJson,
       resumeData.summary,
@@ -132,6 +138,19 @@ class Resume {
     `, [uuid]);
 
     return result.changes > 0;
+  }
+
+  static async getDefaultUserId() {
+    // Get the default user ID (should always exist after DB init)
+    const user = await database.get(`
+      SELECT id FROM users WHERE uuid = ?
+    `, ['default-user']);
+
+    if (!user) {
+      throw new Error('Default user not found. Database may not be properly initialized.');
+    }
+
+    return user.id;
   }
 }
 
