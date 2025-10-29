@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'resumate-backend',
       script: './apps/backend/src/server.js',
-      cwd: '/Users/apple/Desktop/den/resumate',
+      cwd: process.cwd(),
       env: {
         NODE_ENV: 'development',
         PORT: 4300
@@ -27,7 +27,7 @@ module.exports = {
       name: 'resumate-frontend',
       script: 'npx',
       args: 'serve -s dist -l 3160',
-      cwd: '/Users/apple/Desktop/den/resumate/apps/frontend',
+      cwd: './apps/frontend',
       env: {
         NODE_ENV: 'production'
       },
