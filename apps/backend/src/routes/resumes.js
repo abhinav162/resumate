@@ -20,7 +20,13 @@ const handleValidationErrors = (req, res, next) => {
 // GET /api/resumes - Get all resumes
 router.get('/', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || null;
+    let userId = req.headers['x-user-id'] || null;
+    
+    // Handle default-user case by getting the default user ID
+    if (userId === 'default-user') {
+      userId = await Resume.getDefaultUserId();
+    }
+    
     const resumes = await Resume.findByUserId(userId);
     
     res.json({

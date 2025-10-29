@@ -23,7 +23,14 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present && rm -rf node_modules",
     "setup": "npm install && npm run build:shared",
-    "init-db": "npm run init-db --workspace=apps/backend"
+    "init-db": "npm run init-db --workspace=apps/backend",
+    "deploy:prod": "./deploy-production.sh",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop resumate-backend resumate-frontend",
+    "pm2:restart": "pm2 restart resumate-backend resumate-frontend",
+    "pm2:delete": "pm2 delete resumate-backend resumate-frontend",
+    "pm2:status": "pm2 status",
+    "pm2:logs": "pm2 logs resumate-backend resumate-frontend"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

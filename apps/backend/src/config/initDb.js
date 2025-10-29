@@ -17,6 +17,9 @@ async function initializeDatabase() {
 
     // Create tables
     await createTables();
+    
+    // Create default data
+    await createDefaultData();
 
     console.log('Database initialized successfully');
   } catch (error) {
@@ -141,6 +144,22 @@ async function createTables() {
   await database.run('CREATE INDEX IF NOT EXISTS idx_tailored_resumes_base_id ON tailored_resumes(base_resume_id)');
 
   console.log('All tables created successfully');
+}
+
+async function createDefaultData() {
+  // Create default user if it doesn't exist
+  const existingUser = await database.get(`
+    SELECT id FROM users WHERE uuid = ?
+  `, ['default-user']);
+
+  if (!existingUser) {
+    await database.run(`
+      INSERT INTO users (uuid, email) VALUES (?, ?)
+    `, ['default-user', 'default@resumate.local']);
+    console.log('Default user created successfully');
+  } else {
+    console.log('Default user already exists');
+  }
 }
 
 // Run initialization if this file is executed directly

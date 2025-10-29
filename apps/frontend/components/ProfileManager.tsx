@@ -5,7 +5,7 @@ import Button from './common/Button';
 import Card from './common/Card';
 import Spinner from './common/Spinner';
 import ResumeEditor from './ResumeEditor';
-import geminiService from '../services/geminiService';
+import { apiClient } from '../services/api';
 import { generateLatexPdf } from '../services/latexService';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
@@ -13,9 +13,9 @@ import DownloadIcon from './icons/DownloadIcon';
 
 interface ProfileManagerProps {
   resumes: ResumeData[];
-  addResume: (resume: ResumeData) => void;
-  updateResume: (resume: ResumeData) => void;
-  deleteResume: (resumeId: string) => void;
+  addResume: (resume: ResumeData) => Promise<ResumeData>;
+  updateResume: (resume: ResumeData) => Promise<ResumeData>;
+  deleteResume: (resumeId: string) => Promise<void>;
   baseResumeId: string | null;
   setBaseResumeId: (id: string | null) => void;
   apiKey: string | null;
@@ -38,15 +38,13 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
     setIsLoading(true);
     setError(null);
     try {
-      geminiService.setApiKey(apiKey);
-      const parsedData = await geminiService.parseResume(resumeText);
+      const parsedData = await apiClient.parseResume(resumeText, apiKey);
       const newResume: ResumeData = {
         ...parsedData,
-        id: `resume-${Date.now()}`,
         name: `My Resume #${resumes.length + 1}`,
       };
-      addResume(newResume);
-      setEditingResume(newResume);
+      const createdResume = await addResume(newResume);
+      setEditingResume(createdResume);
       setResumeText('');
     } catch (err: any) {
       setError(err.message);
@@ -55,9 +53,23 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
     }
   };
 
-  const handleSaveAndCloseEditor = (updatedData: ResumeData) => {
-    updateResume(updatedData);
-    setEditingResume(null);
+  const handleSaveAndCloseEditor = async (updatedData: ResumeData) => {
+    try {
+      setError(null);
+      await updateResume(updatedData);
+      setEditingResume(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update resume');
+    }
+  };
+
+  const handleDeleteResume = async (resumeId: string) => {
+    try {
+      setError(null);
+      await deleteResume(resumeId);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete resume');
+    }
   };
 
   const handleDownloadJson = (resume: ResumeData) => {
@@ -259,7 +271,7 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
                     <Button variant="secondary" onClick={() => setEditingResume(resume)}>
                       ✏️ Edit
                     </Button>
-                    <Button variant="danger" onClick={() => deleteResume(resume.id)}>
+                    <Button variant="danger" onClick={() => handleDeleteResume(resume.id)}>
                       <TrashIcon/>
                     </Button>
                   </div>
