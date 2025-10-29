@@ -13,7 +13,7 @@ class GeminiService {
       throw new Error('Gemini API key not set');
     }
 
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `Parse the following resume text into a structured JSON format. Extract all relevant information including contact details, experience, education, projects, and skills. If some information is missing, use appropriate defaults or empty values.
 
@@ -94,7 +94,7 @@ Return ONLY a valid JSON object with the following structure:
       throw new Error('Gemini API key not set');
     }
 
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
     const prompt = `You are an expert ATS resume optimizer using the RARe framework (Readability, Applicability, Remarkability). Given the following resume JSON and job description, rewrite the resume to be highly tailored for the job.
 
