@@ -32,7 +32,7 @@ nano apps/backend/.env.production
 cd /Users/apple/Desktop/den/resumate
 
 # Run the deployment script
-./deploy-production.sh
+./deploy.sh
 ```
 
 This script will:
