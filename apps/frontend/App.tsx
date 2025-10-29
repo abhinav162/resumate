@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { ResumeData, TailoredResume, View } from './types';
-import { Resume, TailoredResume as TailoredResumeData } from '@resumate/shared';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { apiClient } from './src/services/api';
 import Header from './components/Header';

@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import type { JobDetails, ResumeData, TailoredResume } from '../types';
 import { apiClient } from '../src/services/api';
-import { defaultEnhancementConfig, type EnhancementConfig } from '../services/resumeEnhancer';
 import Button from './common/Button';
 import Input from './common/Input';
 import TextArea from './common/TextArea';
@@ -42,7 +41,6 @@ const JobTailor: React.FC<JobTailorProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useRaReOptimization, setUseRaReOptimization] = useState(true);
-  const [enhancementConfig, setEnhancementConfig] = useState<EnhancementConfig>(defaultEnhancementConfig);
   
   // Section selection state
   const [selectedSections, setSelectedSections] = useState({
