@@ -137,6 +137,8 @@ if [ ! -f "apps/backend/.env.production" ]; then
         print_error "No .env.example found in apps/backend/"
         exit 1
     fi
+else
+    print_success "Using existing apps/backend/.env.production"
 fi
 
 if [ ! -f "apps/frontend/.env.production" ]; then
@@ -147,6 +149,8 @@ if [ ! -f "apps/frontend/.env.production" ]; then
         print_error "No .env.example found in apps/frontend/"
         exit 1
     fi
+else
+    print_success "Using existing apps/frontend/.env.production"
 fi
 
 # Copy production environment files to .env
