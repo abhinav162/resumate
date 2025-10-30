@@ -2,6 +2,7 @@ import express from 'express';
 import TailoredResume from '../models/TailoredResume.js';
 import { Resume } from '../models/Resume.js';
 import { body, param, validationResult } from 'express-validator';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -18,16 +19,25 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// GET /api/tailored-resumes - Get all tailored resumes
-router.get('/', async (req, res) => {
+// GET /api/tailored-resumes - Get all tailored resumes for authenticated user
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { baseResumeId } = req.query;
+    const userId = req.user.userId;
     let tailoredResumes;
 
     if (baseResumeId) {
-      tailoredResumes = await TailoredResume.findByBaseResumeId(baseResumeId);
+      // Verify user owns the base resume before fetching tailored resumes
+      const ownsBaseResume = await TailoredResume.verifyBaseResumeOwnership(baseResumeId, userId);
+      if (!ownsBaseResume) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You can only view tailored resumes for your own base resumes.'
+        });
+      }
+      tailoredResumes = await TailoredResume.findByBaseResumeId(baseResumeId, userId);
     } else {
-      tailoredResumes = await TailoredResume.findAll();
+      tailoredResumes = await TailoredResume.findAll(userId);
     }
     
     res.json({
@@ -45,7 +55,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/tailored-resumes/:id - Get specific tailored resume
-router.get('/:id', [
+router.get('/:id', authenticateToken, [
   param('id').isUUID().withMessage('Invalid tailored resume ID')
 ], handleValidationErrors, async (req, res) => {
   try {
@@ -55,6 +65,14 @@ router.get('/:id', [
       return res.status(404).json({
         success: false,
         message: 'Tailored resume not found'
+      });
+    }
+
+    // Check if user owns this tailored resume (through the base resume)
+    if (tailoredResume.userId !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only view your own tailored resumes.'
       });
     }
 
@@ -73,7 +91,7 @@ router.get('/:id', [
 });
 
 // POST /api/tailored-resumes - Create new tailored resume
-router.post('/', [
+router.post('/', authenticateToken, [
   body('baseResumeId').isUUID().withMessage('Valid base resume ID is required'),
   body('jobDetails.jobTitle').trim().isLength({ min: 1 }).withMessage('Job title is required'),
   body('jobDetails.company').trim().isLength({ min: 1 }).withMessage('Company is required'),
@@ -81,7 +99,18 @@ router.post('/', [
   body('tailoredData').isObject().withMessage('Tailored data is required')
 ], handleValidationErrors, async (req, res) => {
   try {
-    // Verify base resume exists
+    const userId = req.user.userId;
+    
+    // Verify user owns the base resume
+    const ownsBaseResume = await TailoredResume.verifyBaseResumeOwnership(req.body.baseResumeId, userId);
+    if (!ownsBaseResume) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only create tailored resumes from your own base resumes.'
+      });
+    }
+
+    // Verify base resume exists (additional check)
     const baseResume = await Resume.findByUuid(req.body.baseResumeId);
     if (!baseResume) {
       return res.status(404).json({
@@ -108,7 +137,7 @@ router.post('/', [
 });
 
 // PUT /api/tailored-resumes/:id - Update tailored resume
-router.put('/:id', [
+router.put('/:id', authenticateToken, [
   param('id').isUUID().withMessage('Invalid tailored resume ID'),
   body('jobDetails.jobTitle').optional().trim().isLength({ min: 1 }).withMessage('Job title cannot be empty'),
   body('jobDetails.company').optional().trim().isLength({ min: 1 }).withMessage('Company cannot be empty'),
@@ -116,14 +145,27 @@ router.put('/:id', [
   body('tailoredData').optional().isObject().withMessage('Tailored data must be an object')
 ], handleValidationErrors, async (req, res) => {
   try {
-    const tailoredResume = await TailoredResume.update(req.params.id, req.body);
+    const userId = req.user.userId;
     
-    if (!tailoredResume) {
+    // First check if the tailored resume exists and verify ownership
+    const existingTailoredResume = await TailoredResume.findByUuid(req.params.id);
+    
+    if (!existingTailoredResume) {
       return res.status(404).json({
         success: false,
         message: 'Tailored resume not found'
       });
     }
+
+    // Check if user owns this tailored resume (through the base resume)
+    if (existingTailoredResume.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only update your own tailored resumes.'
+      });
+    }
+
+    const tailoredResume = await TailoredResume.update(req.params.id, req.body);
 
     res.json({
       success: true,
@@ -141,18 +183,31 @@ router.put('/:id', [
 });
 
 // DELETE /api/tailored-resumes/:id - Delete tailored resume
-router.delete('/:id', [
+router.delete('/:id', authenticateToken, [
   param('id').isUUID().withMessage('Invalid tailored resume ID')
 ], handleValidationErrors, async (req, res) => {
   try {
-    const deleted = await TailoredResume.delete(req.params.id);
+    const userId = req.user.userId;
     
-    if (!deleted) {
+    // First check if the tailored resume exists and verify ownership
+    const existingTailoredResume = await TailoredResume.findByUuid(req.params.id);
+    
+    if (!existingTailoredResume) {
       return res.status(404).json({
         success: false,
         message: 'Tailored resume not found'
       });
     }
+
+    // Check if user owns this tailored resume (through the base resume)
+    if (existingTailoredResume.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only delete your own tailored resumes.'
+      });
+    }
+
+    const deleted = await TailoredResume.delete(req.params.id);
 
     res.json({
       success: true,

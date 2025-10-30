@@ -3,14 +3,17 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
+import session from 'express-session';
 import dotenv from 'dotenv';
 import database from './config/database.js';
 import { initializeDatabase } from './config/initDb.js';
+import passport from './config/passport.js';
 
 // Import routes
 import resumesRouter from './routes/resumes.js';
 import tailoredResumesRouter from './routes/tailored-resumes.js';
 import aiRouter from './routes/ai.js';
+import authRouter from './routes/auth.js';
 
 // Load environment variables
 dotenv.config();
@@ -25,7 +28,7 @@ app.use(helmet({
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: process.env.FRONTEND_URL || 'http://localhost:3160',
   credentials: true
 }));
 
@@ -39,6 +42,21 @@ app.use(limiter);
 // Logging
 app.use(morgan('combined'));
 
+// Session configuration for passport (needed for OAuth flow)
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'resumate-session-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -49,6 +67,7 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
+app.use('/api/auth', authRouter);
 app.use('/api/resumes', resumesRouter);
 app.use('/api/tailored-resumes', tailoredResumesRouter);
 app.use('/api/ai', aiRouter);

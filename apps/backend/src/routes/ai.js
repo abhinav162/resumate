@@ -1,6 +1,8 @@
 import express from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { body, validationResult } from 'express-validator';
+import { authenticateToken } from '../middleware/auth.js';
+import { Resume } from '../models/Resume.js';
 
 const router = express.Router();
 
@@ -18,7 +20,7 @@ const handleValidationErrors = (req, res, next) => {
 };
 
 // POST /api/ai/parse-resume - Parse resume text using AI
-router.post('/parse-resume', [
+router.post('/parse-resume', authenticateToken, [
   body('resumeText').trim().isLength({ min: 50 }).withMessage('Resume text must be at least 50 characters'),
   body('apiKey').trim().isLength({ min: 1 }).withMessage('API key is required')
 ], handleValidationErrors, async (req, res) => {
@@ -107,8 +109,9 @@ router.post('/parse-resume', [
 });
 
 // POST /api/ai/tailor-resume - Tailor resume for specific job
-router.post('/tailor-resume', [
+router.post('/tailor-resume', authenticateToken, [
   body('resumeData').isObject().withMessage('Resume data is required'),
+  body('resumeData.id').optional().isUUID().withMessage('Resume ID must be a valid UUID if provided'),
   body('jobDetails.jobTitle').trim().isLength({ min: 1 }).withMessage('Job title is required'),
   body('jobDetails.company').trim().isLength({ min: 1 }).withMessage('Company is required'),
   body('jobDetails.description').trim().isLength({ min: 10 }).withMessage('Job description is required'),
@@ -117,6 +120,26 @@ router.post('/tailor-resume', [
 ], handleValidationErrors, async (req, res) => {
   try {
     const { resumeData, jobDetails, apiKey, useRaReOptimization = true } = req.body;
+    
+    // If resume has an ID, verify user owns this resume
+    if (resumeData.id) {
+      const existingResume = await Resume.findByUuid(resumeData.id);
+      
+      if (!existingResume) {
+        return res.status(404).json({
+          success: false,
+          message: 'Resume not found'
+        });
+      }
+      
+      // Check if user owns this resume
+      if (existingResume.userId !== req.user.userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. You can only tailor your own resumes.'
+        });
+      }
+    }
     
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });

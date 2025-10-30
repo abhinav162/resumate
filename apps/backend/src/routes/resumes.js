@@ -1,6 +1,7 @@
 import express from 'express';
 import { Resume } from '../models/Resume.js';
 import { body, param, validationResult } from 'express-validator';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -17,16 +18,10 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
-// GET /api/resumes - Get all resumes
-router.get('/', async (req, res) => {
+// GET /api/resumes - Get all resumes for authenticated user
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    let userId = req.headers['x-user-id'] || null;
-    
-    // Handle default-user case by getting the default user ID
-    if (userId === 'default-user') {
-      userId = await Resume.getDefaultUserId();
-    }
-    
+    const userId = req.user.userId;
     const resumes = await Resume.findByUserId(userId);
     
     res.json({
@@ -44,7 +39,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/resumes/:id - Get specific resume
-router.get('/:id', [
+router.get('/:id', authenticateToken, [
   param('id').isUUID().withMessage('Invalid resume ID')
 ], handleValidationErrors, async (req, res) => {
   try {
@@ -54,6 +49,14 @@ router.get('/:id', [
       return res.status(404).json({
         success: false,
         message: 'Resume not found'
+      });
+    }
+
+    // Check if user owns this resume
+    if (resume.userId !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only view your own resumes.'
       });
     }
 
@@ -72,7 +75,7 @@ router.get('/:id', [
 });
 
 // POST /api/resumes - Create new resume
-router.post('/', [
+router.post('/', authenticateToken, [
   body('name').trim().isLength({ min: 1 }).withMessage('Resume name is required'),
   body('contact.name').trim().isLength({ min: 1 }).withMessage('Contact name is required'),
   body('contact.email').isEmail().withMessage('Valid email is required'),
@@ -85,10 +88,9 @@ router.post('/', [
   body('projects').optional().isArray().withMessage('Projects must be an array')
 ], handleValidationErrors, async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'] || null;
     const resumeData = {
       ...req.body,
-      userId
+      userId: req.user.userId
     };
 
     const resume = await Resume.create(resumeData);
@@ -109,7 +111,7 @@ router.post('/', [
 });
 
 // PUT /api/resumes/:id - Update resume
-router.put('/:id', [
+router.put('/:id', authenticateToken, [
   param('id').isUUID().withMessage('Invalid resume ID'),
   body('name').optional().trim().isLength({ min: 1 }).withMessage('Resume name cannot be empty'),
   body('contact.name').optional().trim().isLength({ min: 1 }).withMessage('Contact name cannot be empty'),
@@ -121,14 +123,25 @@ router.put('/:id', [
   body('isBase').optional().isBoolean().withMessage('isBase must be a boolean')
 ], handleValidationErrors, async (req, res) => {
   try {
-    const resume = await Resume.update(req.params.id, req.body);
+    // First check if resume exists and user owns it
+    const existingResume = await Resume.findByUuid(req.params.id);
     
-    if (!resume) {
+    if (!existingResume) {
       return res.status(404).json({
         success: false,
         message: 'Resume not found'
       });
     }
+
+    // Check if user owns this resume
+    if (existingResume.userId !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only update your own resumes.'
+      });
+    }
+
+    const resume = await Resume.update(req.params.id, req.body);
 
     res.json({
       success: true,
@@ -146,18 +159,29 @@ router.put('/:id', [
 });
 
 // DELETE /api/resumes/:id - Delete resume
-router.delete('/:id', [
+router.delete('/:id', authenticateToken, [
   param('id').isUUID().withMessage('Invalid resume ID')
 ], handleValidationErrors, async (req, res) => {
   try {
-    const deleted = await Resume.delete(req.params.id);
+    // First check if resume exists and user owns it
+    const existingResume = await Resume.findByUuid(req.params.id);
     
-    if (!deleted) {
+    if (!existingResume) {
       return res.status(404).json({
         success: false,
         message: 'Resume not found'
       });
     }
+
+    // Check if user owns this resume
+    if (existingResume.userId !== req.user.userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only delete your own resumes.'
+      });
+    }
+
+    const deleted = await Resume.delete(req.params.id);
 
     res.json({
       success: true,

@@ -34,14 +34,16 @@ async function initializeDatabase() {
 }
 
 async function createTables() {
-  // Users table
+  // Users table for Google OAuth
   await database.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      uuid TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      googleId TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      profilePicture TEXT,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -152,19 +154,8 @@ async function createTables() {
 }
 
 async function createDefaultData() {
-  // Create default user if it doesn't exist
-  const existingUser = await database.get(`
-    SELECT id FROM users WHERE uuid = ?
-  `, ['default-user']);
-
-  if (!existingUser) {
-    await database.run(`
-      INSERT INTO users (uuid, email) VALUES (?, ?)
-    `, ['default-user', 'default@resumate.local']);
-    console.log('Default user created successfully');
-  } else {
-    console.log('Default user already exists');
-  }
+  // No default user needed for OAuth - users are created on first login
+  console.log('Database ready for OAuth users');
 }
 
 // Run initialization if this file is executed directly
