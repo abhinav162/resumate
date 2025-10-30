@@ -66,11 +66,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API routes
-app.use('/api/auth', authRouter);
-app.use('/api/resumes', resumesRouter);
-app.use('/api/tailored-resumes', tailoredResumesRouter);
-app.use('/api/ai', aiRouter);
+// Routes (nginx adds /api prefix)
+app.use('/auth', authRouter);
+app.use('/resumes', resumesRouter);
+app.use('/tailored-resumes', tailoredResumesRouter);
+app.use('/ai', aiRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
