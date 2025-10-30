@@ -4,9 +4,14 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import session from 'express-session';
-import dotenv from 'dotenv';
 import database from './config/database.js';
 import { initializeDatabase } from './config/initDb.js';
+import { loadEnvironment } from './config/env.js';
+
+// Load environment variables first
+loadEnvironment();
+
+// Import passport after environment is loaded
 import passport from './config/passport.js';
 
 // Import routes
@@ -14,9 +19,6 @@ import resumesRouter from './routes/resumes.js';
 import tailoredResumesRouter from './routes/tailored-resumes.js';
 import aiRouter from './routes/ai.js';
 import authRouter from './routes/auth.js';
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 4300;

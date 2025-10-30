@@ -2,9 +2,10 @@ import database from './database.js';
 import { mkdir } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
+import { loadEnvironment } from './env.js';
 
-dotenv.config();
+// Load environment variables
+loadEnvironment();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
