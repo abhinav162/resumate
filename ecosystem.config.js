@@ -41,6 +41,44 @@ module.exports = {
       error_file: './logs/resumate-frontend-error.log',
       out_file: './logs/resumate-frontend-out.log',
       time: true
-    }
+    },
+    {
+      name: 'resumate-backend-staging',
+      script: './apps/backend/src/server.js',
+      cwd: process.cwd(),
+      env: {
+        NODE_ENV: 'development',
+        PORT: 4310
+      },
+      instances: 1,
+      exec_mode: 'fork',
+      watch: false,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      log_file: './logs/resumate-backend-staging.log',
+      error_file: './logs/resumate-backend-staging-error.log',
+      out_file: './logs/resumate-backend-staging-out.log',
+      time: true
+    },
+        {
+      name: 'resumate-frontend-staging',
+      script: 'npx',
+      args: 'serve -s dist -l 3170',
+      cwd: './apps/frontend',
+      env: {
+        NODE_ENV: 'production'
+      },
+      instances: 1,
+      exec_mode: 'fork',
+      watch: false,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      log_file: './logs/resumate-frontend-staging.log',
+      error_file: './logs/resumate-frontend-staging-error.log',
+      out_file: './logs/resumate-frontend-staging-out.log',
+      time: true
+    },
   ]
 };
