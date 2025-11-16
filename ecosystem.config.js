@@ -47,7 +47,7 @@ module.exports = {
       script: './apps/backend/src/server.js',
       cwd: process.cwd(),
       env: {
-        NODE_ENV: 'development',
+        NODE_ENV: 'staging',
         PORT: 4310
       },
       instances: 1,

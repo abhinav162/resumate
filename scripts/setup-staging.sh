@@ -104,7 +104,14 @@ print_status "Setting up staging environment files..."
 
 # Backend environment
 if [ ! -f "apps/backend/.env.staging" ]; then
-    if [ -f "apps/backend/.env.example" ]; then
+    if [ -f "apps/backend/.env.staging.example" ]; then
+        print_status "Creating apps/backend/.env.staging from .env.staging.example"
+        print_warning "⚠️  IMPORTANT: Please review and update OAuth credentials and secrets!"
+        cp apps/backend/.env.staging.example apps/backend/.env.staging
+        # Update DB_PATH to use absolute path
+        sed -i.bak "s|DB_PATH=../../data/resumate.db|DB_PATH=$ROOT_DIR/data/resumate.db|g" apps/backend/.env.staging
+        rm apps/backend/.env.staging.bak 2>/dev/null || true
+    elif [ -f "apps/backend/.env.example" ]; then
         print_warning "Creating apps/backend/.env.staging from .env.example"
         print_warning "⚠️  IMPORTANT: Please review and update JWT_SECRET and other sensitive values!"
         cp apps/backend/.env.example apps/backend/.env.staging
@@ -112,7 +119,7 @@ if [ ! -f "apps/backend/.env.staging" ]; then
         sed -i.bak "s|DB_PATH=../../data/resumate.db|DB_PATH=$ROOT_DIR/data/resumate.db|g" apps/backend/.env.staging
         rm apps/backend/.env.staging.bak 2>/dev/null || true
     else
-        print_error "No .env.example found in apps/backend/"
+        print_error "No .env.staging.example or .env.example found in apps/backend/"
         exit 1
     fi
 else
@@ -121,11 +128,14 @@ fi
 
 # Frontend environment
 if [ ! -f "apps/frontend/.env.staging" ]; then
-    if [ -f "apps/frontend/.env.example" ]; then
+    if [ -f "apps/frontend/.env.staging.example" ]; then
+        print_status "Creating apps/frontend/.env.staging from .env.staging.example"
+        cp apps/frontend/.env.staging.example apps/frontend/.env.staging
+    elif [ -f "apps/frontend/.env.example" ]; then
         print_status "Creating apps/frontend/.env.staging from .env.example"
         cp apps/frontend/.env.example apps/frontend/.env.staging
     else
-        print_error "No .env.example found in apps/frontend/"
+        print_error "No .env.staging.example or .env.example found in apps/frontend/"
         exit 1
     fi
 else
@@ -138,9 +148,22 @@ print_status "📋 Next Steps:"
 echo "  1. Review and update environment files:"
 echo "     - apps/backend/.env.staging"
 echo "     - apps/frontend/.env.staging"
-echo "  2. Run frontend deployment: ./scripts/deploy-frontend.sh"
-echo "  3. Run backend deployment: ./scripts/deploy-backend.sh"
-echo "  4. Or run full deployment: ./deploy-staging.sh"
+echo ""
+echo "  2. Configure Google OAuth for staging:"
+echo "     - Go to: https://console.cloud.google.com/apis/credentials"
+echo "     - Add authorized redirect URI:"
+echo "       https://resumate.gftrilo.store/api/auth/google/callback"
+echo "     - Update GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.staging"
+echo ""
+echo "  3. Generate secure secrets (recommended):"
+echo "     - JWT_SECRET: openssl rand -base64 32"
+echo "     - SESSION_SECRET: openssl rand -base64 32"
+echo "     - Update these in apps/backend/.env.staging"
+echo ""
+echo "  4. Deploy:"
+echo "     - Run frontend: ./scripts/deploy-frontend-staging.sh"
+echo "     - Run backend: ./scripts/deploy-backend-staging.sh"
+echo "     - Or full deployment: ./deploy-staging.sh"
 echo ""
 print_status "📁 Important Files:"
 echo "  - Database: $ROOT_DIR/data/resumate.db"
