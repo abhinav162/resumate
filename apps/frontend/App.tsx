@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import type { ResumeData, TailoredResume, View } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { apiClient } from './services/api';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import AuthCallback from './components/AuthCallback';
 import Header from './components/Header';
 import ApiKeyModal from './components/ApiKeyModal';
 import Dashboard from './components/Dashboard';
 import ProfileManager from './components/ProfileManager';
 import JobTailor from './components/JobTailor';
 
-const App: React.FC = () => {
+const MainApp: React.FC = () => {
   // Keep API key in localStorage for convenience
   const [apiKey, setApiKey] = useLocalStorage<string | null>('gemini-api-key', null);
   const [isApiKeyModalOpen, setApiKeyModalOpen] = useState(false);
@@ -256,17 +259,41 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-      <Header currentView={currentView} setCurrentView={setCurrentView} onApiKeyClick={() => setApiKeyModalOpen(true)} />
-      <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-        {renderContent()}
-      </main>
-      <ApiKeyModal 
-        isOpen={isApiKeyModalOpen} 
-        onClose={() => { if (apiKey) setApiKeyModalOpen(false) }} 
-        onSetApiKey={handleSetApiKey}
-      />
-    </div>
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
+        <Header currentView={currentView} setCurrentView={setCurrentView} onApiKeyClick={() => setApiKeyModalOpen(true)} />
+        <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+          {renderContent()}
+        </main>
+        <ApiKeyModal
+          isOpen={isApiKeyModalOpen}
+          onClose={() => { if (apiKey) setApiKeyModalOpen(false) }}
+          onSetApiKey={handleSetApiKey}
+        />
+      </div>
+    </ProtectedRoute>
+  );
+};
+
+// App wrapper with routing and authentication
+const App: React.FC = () => {
+  // Simple routing based on URL pathname
+  const path = window.location.pathname;
+
+  // Handle OAuth callback route
+  if (path === '/auth/callback') {
+    return (
+      <AuthProvider>
+        <AuthCallback />
+      </AuthProvider>
+    );
+  }
+
+  // Main application (protected)
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
   );
 };
 

@@ -1,19 +1,45 @@
 import { Resume, TailoredResume, ApiResponse } from '@resumate/shared';
+import type { User } from '../types/auth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4300/api';
 
 // API client class for backend communication
 class ApiClient {
+  private token: string | null = null;
+
+  // Set authentication token
+  setToken(token: string | null) {
+    this.token = token;
+    if (token) {
+      localStorage.setItem('auth_token', token);
+    } else {
+      localStorage.removeItem('auth_token');
+    }
+  }
+
+  // Get authentication token
+  getToken(): string | null {
+    if (!this.token) {
+      this.token = localStorage.getItem('auth_token');
+    }
+    return this.token;
+  }
+
   private async request<T>(
-    endpoint: string, 
+    endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${API_BASE_URL}${endpoint}`;
-    
-    const defaultHeaders = {
+
+    const defaultHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
-      'x-user-id': 'default-user', // For now, using a default user
     };
+
+    // Add authorization header if token exists
+    const token = this.getToken();
+    if (token) {
+      defaultHeaders['Authorization'] = `Bearer ${token}`;
+    }
 
     try {
       const response = await fetch(url, {
@@ -162,6 +188,45 @@ class ApiClient {
       throw new Error('Failed to tailor resume');
     }
     return result.data;
+  }
+
+  // Authentication methods
+  async getCurrentUser(): Promise<User> {
+    const result = await this.request<User>('/auth/me');
+    if (!result.data) {
+      throw new Error('Failed to get user information');
+    }
+    return result.data;
+  }
+
+  async updateUserProfile(data: { name?: string; email?: string }): Promise<User> {
+    const result = await this.request<User>('/auth/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    if (!result.data) {
+      throw new Error('Failed to update user profile');
+    }
+    return result.data;
+  }
+
+  async logout(): Promise<void> {
+    await this.request('/auth/logout', {
+      method: 'POST',
+    });
+    this.setToken(null);
+  }
+
+  async deleteAccount(): Promise<void> {
+    await this.request('/auth/account', {
+      method: 'DELETE',
+    });
+    this.setToken(null);
+  }
+
+  // Google OAuth login URL
+  getGoogleLoginUrl(): string {
+    return `${API_BASE_URL}/auth/google`;
   }
 }
 
