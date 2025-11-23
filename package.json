@@ -25,15 +25,7 @@
     "setup": "npm install && npm run build:shared",
     "init-db": "npm run init-db --workspace=apps/backend",
     "deploy:setup": "./scripts/setup-production.sh",
-    "deploy:prod": "./deploy.sh",
-    "deploy:frontend": "./scripts/deploy-frontend.sh",
-    "deploy:backend": "./scripts/deploy-backend.sh",
-    "pm2:start": "pm2 start ecosystem.config.js --env production",
-    "pm2:stop": "pm2 stop resumate-backend resumate-frontend",
-    "pm2:restart": "pm2 restart resumate-backend resumate-frontend",
-    "pm2:delete": "pm2 delete resumate-backend resumate-frontend",
-    "pm2:status": "pm2 status",
-    "pm2:logs": "pm2 logs resumate-backend resumate-frontend"
+    "deploy:prod": "./deploy.sh"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
