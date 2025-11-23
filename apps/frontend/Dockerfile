@@ -1,5 +1,5 @@
 # Base stage
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 WORKDIR /app
 RUN npm install -g npm@latest
 
