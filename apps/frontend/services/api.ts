@@ -1,15 +1,15 @@
 import { Resume, TailoredResume, ApiResponse } from '@resumate/shared';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4300/api';
+const API_BASE_URL = window.ENV?.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:4300/api';
 
 // API client class for backend communication
 class ApiClient {
   private async request<T>(
-    endpoint: string, 
+    endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${API_BASE_URL}${endpoint}`;
-    
+
     const defaultHeaders = {
       'Content-Type': 'application/json',
       'x-user-id': 'default-user', // For now, using a default user
@@ -25,7 +25,7 @@ class ApiClient {
       });
 
       const result = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(result.message || `HTTP ${response.status}`);
       }
@@ -81,8 +81,8 @@ class ApiClient {
 
   // Tailored Resume methods
   async getTailoredResumes(baseResumeId?: string): Promise<TailoredResume[]> {
-    const endpoint = baseResumeId 
-      ? `/tailored-resumes?baseResumeId=${baseResumeId}` 
+    const endpoint = baseResumeId
+      ? `/tailored-resumes?baseResumeId=${baseResumeId}`
       : '/tailored-resumes';
     const result = await this.request<TailoredResume[]>(endpoint);
     return result.data || [];
