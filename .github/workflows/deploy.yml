@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - staging
 
 jobs:
   build-and-deploy:
@@ -26,6 +27,16 @@ jobs:
           username: ${{ secrets.GHCR_USERNAME }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Set Environment Variables
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            echo "ENV_NAME=staging" >> $GITHUB_ENV
+            echo "IMAGE_TAG=latest-staging" >> $GITHUB_ENV
+          else
+            echo "ENV_NAME=prod" >> $GITHUB_ENV
+            echo "IMAGE_TAG=latest-prod" >> $GITHUB_ENV
+          fi
+
       # Build and Push Backend
       - name: Build and push Backend
         uses: docker/build-push-action@v5
@@ -34,7 +45,7 @@ jobs:
           file: apps/backend/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/${{ secrets.GHCR_USERNAME }}/resumate-backend:latest
+          tags: ghcr.io/${{ secrets.GHCR_USERNAME }}/resumate-backend:${{ env.IMAGE_TAG }}
 
       # Build and Push Frontend
       - name: Build and push Frontend
@@ -44,7 +55,7 @@ jobs:
           file: apps/frontend/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/${{ secrets.GHCR_USERNAME }}/resumate-frontend:latest
+          tags: ghcr.io/${{ secrets.GHCR_USERNAME }}/resumate-frontend:${{ env.IMAGE_TAG }}
 
       - name: Setup SSH key
         run: |
@@ -58,30 +69,25 @@ jobs:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
+          ENV_NAME: ${{ env.ENV_NAME }}
         run: |
+          # 1. Copy files to server (docker-compose.yml and deploy.sh)
+          echo "📂 Copying configuration files to server..."
+          scp -o StrictHostKeyChecking=no -i private_key.pem docker-compose.yml deploy.sh ${VM_USER}@${VM_IP}:${PROJECT_PATH}/
+
+          # 2. Execute deployment script via SSH
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${VM_USER}@${VM_IP} << EOF
-          echo "🛠️ Pulling latest Resumate images..."
+          echo "🛠️ Pulling latest Resumate images for ${ENV_NAME}..."
           echo $GHCR_TOKEN | docker login ghcr.io -u $GHCR_USERNAME --password-stdin
           
           cd $PROJECT_PATH
           
-          # Ensure we have the latest code (for docker-compose.yml updates)
-          git pull origin main
+          # Make script executable
+          chmod +x deploy.sh
           
           # Export GHCR_USERNAME for docker-compose
           export GHCR_USERNAME=$GHCR_USERNAME
           
-          echo "⬇️ Pulling images..."
-          docker-compose pull
-
-          echo "🔁 Restarting containers..."
-          docker-compose up -d
-
-          echo "🩺 Checking service health..."
-          sleep 10
-          if curl -f http://localhost:4300/health; then
-              echo "✅ Backend is healthy!"
-          else
-              echo "⚠️ Backend health check failed (might just be slow startup)"
-          fi
+          # Run the deploy script with the environment argument
+          ./deploy.sh $ENV_NAME
           EOF
