@@ -66,7 +66,10 @@ else
 fi
 
 # 4. Build and Run
-print_status "🐳 Starting containers for $COMPOSE_PROJECT_NAME..."
+print_status "� Stopping existing containers..."
+docker-compose -p $COMPOSE_PROJECT_NAME down || true
+
+print_status "�🐳 Starting containers for $COMPOSE_PROJECT_NAME..."
 # Pull latest images first to ensure we aren't using cached ones
 docker-compose pull
 docker-compose -p $COMPOSE_PROJECT_NAME up -d
