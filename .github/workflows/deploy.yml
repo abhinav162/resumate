@@ -3,7 +3,7 @@ name: Auto Deploy via Docker
 on:
   push:
     branches:
-      - chore/architecture-upgrade
+      - main
 
 jobs:
   build-and-deploy:
