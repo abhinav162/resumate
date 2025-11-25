@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { ResumeData, TailoredResume, View } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { apiClient } from '../services/api';
-import Header from './Header';
+import Sidebar from './Sidebar';
 import ApiKeyModal from './ApiKeyModal';
 import Dashboard from './Dashboard';
 import ProfileManager from './ProfileManager';
@@ -174,11 +174,13 @@ const DashboardContainer: React.FC = () => {
         setCurrentView('tailor');
     };
 
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
     const renderContent = () => {
         // Show loading state
         if (isLoadingResumes || isLoadingTailored) {
             return (
-                <div className="flex items-center justify-center min-h-[400px]">
+                <div className="flex items-center justify-center h-full">
                     <div className="text-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
                         <p className="text-gray-400">Loading your data...</p>
@@ -190,7 +192,7 @@ const DashboardContainer: React.FC = () => {
         // Show error state
         if (error) {
             return (
-                <div className="flex items-center justify-center min-h-[400px]">
+                <div className="flex items-center justify-center h-full">
                     <div className="text-center">
                         <div className="text-red-500 text-xl mb-4">⚠️</div>
                         <p className="text-red-400 mb-4">{error}</p>
@@ -256,11 +258,35 @@ const DashboardContainer: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-            <Header currentView={currentView} setCurrentView={setCurrentView} onApiKeyClick={() => setApiKeyModalOpen(true)} />
-            <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-                {renderContent()}
-            </main>
+        <div className="flex h-screen bg-gray-900 text-gray-100 font-sans overflow-hidden">
+            <Sidebar
+                currentView={currentView}
+                setCurrentView={setCurrentView}
+                onApiKeyClick={() => setApiKeyModalOpen(true)}
+                isOpen={isSidebarOpen}
+                setIsOpen={setIsSidebarOpen}
+            />
+
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                {/* Mobile Header */}
+                <header className="md:hidden flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xl">📄</span>
+                        <span className="font-bold text-indigo-400">Resumate</span>
+                    </div>
+                    <button
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="p-2 text-gray-400 hover:text-white"
+                    >
+                        ☰
+                    </button>
+                </header>
+
+                <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+                    {renderContent()}
+                </main>
+            </div>
+
             <ApiKeyModal
                 isOpen={isApiKeyModalOpen}
                 onClose={() => { if (apiKey) setApiKeyModalOpen(false) }}
