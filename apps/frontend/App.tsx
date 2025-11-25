@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
 import type { ResumeData, TailoredResume, View } from './types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { apiClient } from './services/api';
@@ -17,12 +18,12 @@ const App: React.FC = () => {
   const [resumes, setResumes] = useState<ResumeData[]>([]);
   const [baseResumeId, setBaseResumeId] = useState<string | null>(null);
   const [tailoredResumes, setTailoredResumes] = useState<TailoredResume[]>([]);
-  
+
   // Loading and error states
   const [isLoadingResumes, setIsLoadingResumes] = useState(true);
   const [isLoadingTailored, setIsLoadingTailored] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [selectedTailoredResume, setSelectedTailoredResume] = useState<TailoredResume | null>(null);
   const [resumeToReTailor, setResumeToReTailor] = useState<ResumeData | null>(null);
@@ -45,7 +46,7 @@ const App: React.FC = () => {
       setError(null);
       const resumesData = await apiClient.getResumes();
       setResumes(resumesData);
-      
+
       // Set base resume if not set and resumes exist
       if (!baseResumeId && resumesData.length > 0) {
         const baseResume = resumesData.find(r => r.isBase) || resumesData[0];
@@ -72,22 +73,22 @@ const App: React.FC = () => {
       setIsLoadingTailored(false);
     }
   };
-  
+
   const handleSetApiKey = (key: string) => {
     setApiKey(key);
     setApiKeyModalOpen(false);
   };
-  
+
   const addResume = async (newResume: ResumeData) => {
     try {
       setError(null);
       const createdResume = await apiClient.createResume(newResume);
       setResumes(prev => [...prev, createdResume]);
-      
+
       if (!baseResumeId) {
         setBaseResumeId(createdResume.id);
       }
-      
+
       return createdResume;
     } catch (err) {
       console.error('Failed to create resume:', err);
@@ -108,13 +109,13 @@ const App: React.FC = () => {
       throw err;
     }
   };
-  
+
   const deleteResume = async (resumeId: string) => {
     try {
       setError(null);
       await apiClient.deleteResume(resumeId);
       setResumes(prev => prev.filter(r => r.id !== resumeId));
-      
+
       if (baseResumeId === resumeId) {
         const remainingResumes = resumes.filter(r => r.id !== resumeId);
         setBaseResumeId(remainingResumes.length > 0 ? remainingResumes[0].id : null);
@@ -148,10 +149,10 @@ const App: React.FC = () => {
     try {
       setError(null);
       const updated = await apiClient.updateTailoredResume(
-        updatedTailoredResume.id, 
+        updatedTailoredResume.id,
         updatedTailoredResume
       );
-      setTailoredResumes(prev => 
+      setTailoredResumes(prev =>
         prev.map(resume => resume.id === updated.id ? updated : resume)
       );
       return updated;
@@ -173,7 +174,7 @@ const App: React.FC = () => {
     setSelectedTailoredResume(resume); // Pass the full tailored resume for job details
     setCurrentView('tailor');
   };
-  
+
   const renderContent = () => {
     // Show loading state
     if (isLoadingResumes || isLoadingTailored) {
@@ -194,7 +195,7 @@ const App: React.FC = () => {
           <div className="text-center">
             <div className="text-red-500 text-xl mb-4">⚠️</div>
             <p className="text-red-400 mb-4">{error}</p>
-            <button 
+            <button
               onClick={() => {
                 loadResumes();
                 loadTailoredResumes();
@@ -208,64 +209,74 @@ const App: React.FC = () => {
       );
     }
 
-    switch(currentView) {
+    switch (currentView) {
       case 'profile':
-        return <ProfileManager 
-                  resumes={resumes} 
-                  addResume={addResume}
-                  updateResume={updateResume}
-                  deleteResume={deleteResume}
-                  baseResumeId={baseResumeId}
-                  setBaseResumeId={setBaseResumeId}
-                  apiKey={apiKey}
-                />;
+        return <ProfileManager
+          resumes={resumes}
+          addResume={addResume}
+          updateResume={updateResume}
+          deleteResume={deleteResume}
+          baseResumeId={baseResumeId}
+          setBaseResumeId={setBaseResumeId}
+          apiKey={apiKey}
+        />;
       case 'tailor':
         const baseResume = resumeToReTailor || resumes.find(r => r.id === baseResumeId) || resumes[0];
-        return <JobTailor 
-                  apiKey={apiKey}
-                  baseResume={baseResume}
-                  resumes={resumes}
-                  addTailoredResume={addTailoredResume}
-                  updateTailoredResume={updateTailoredResume}
-                  onBack={() => {
-                    setCurrentView('dashboard');
-                    setResumeToReTailor(null); // Clear re-tailor state
-                    setSelectedTailoredResume(null); // Clear selected resume
-                  }}
-                  existingTailoredResume={selectedTailoredResume}
-                  setExistingTailoredResume={setSelectedTailoredResume}
-                  isReTailoring={!!resumeToReTailor}
-                  onReTailor={(resume: ResumeData) => {
-                    setResumeToReTailor(resume);
-                    setSelectedTailoredResume(null);
-                  }}
-                />;
+        return <JobTailor
+          apiKey={apiKey}
+          baseResume={baseResume}
+          resumes={resumes}
+          addTailoredResume={addTailoredResume}
+          updateTailoredResume={updateTailoredResume}
+          onBack={() => {
+            setCurrentView('dashboard');
+            setResumeToReTailor(null); // Clear re-tailor state
+            setSelectedTailoredResume(null); // Clear selected resume
+          }}
+          existingTailoredResume={selectedTailoredResume}
+          setExistingTailoredResume={setSelectedTailoredResume}
+          isReTailoring={!!resumeToReTailor}
+          onReTailor={(resume: ResumeData) => {
+            setResumeToReTailor(resume);
+            setSelectedTailoredResume(null);
+          }}
+        />;
       case 'dashboard':
       default:
-        return <Dashboard 
-                  tailoredResumes={tailoredResumes} 
-                  onTailorNew={() => {
-                    setSelectedTailoredResume(null);
-                    setResumeToReTailor(null);
-                    setCurrentView('tailor');
-                  }}
-                  onView={viewTailoredResume}
-                  onReTailor={reTailorResume}
-                />;
+        return <Dashboard
+          tailoredResumes={tailoredResumes}
+          onTailorNew={() => {
+            setSelectedTailoredResume(null);
+            setResumeToReTailor(null);
+            setCurrentView('tailor');
+          }}
+          onView={viewTailoredResume}
+          onReTailor={reTailorResume}
+        />;
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-      <Header currentView={currentView} setCurrentView={setCurrentView} onApiKeyClick={() => setApiKeyModalOpen(true)} />
-      <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-        {renderContent()}
-      </main>
-      <ApiKeyModal 
-        isOpen={isApiKeyModalOpen} 
-        onClose={() => { if (apiKey) setApiKeyModalOpen(false) }} 
-        onSetApiKey={handleSetApiKey}
-      />
+      <SignedIn>
+        <Header currentView={currentView} setCurrentView={setCurrentView} onApiKeyClick={() => setApiKeyModalOpen(true)} />
+        <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+          {renderContent()}
+        </main>
+        <ApiKeyModal
+          isOpen={isApiKeyModalOpen}
+          onClose={() => { if (apiKey) setApiKeyModalOpen(false) }}
+          onSetApiKey={handleSetApiKey}
+        />
+      </SignedIn>
+      <SignedOut>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold mb-8">Welcome to Resumate</h1>
+            <RedirectToSignIn />
+          </div>
+        </div>
+      </SignedOut>
     </div>
   );
 };

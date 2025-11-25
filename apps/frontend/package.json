@@ -11,10 +11,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "@clerk/clerk-react": "^5.57.0",
     "@google/generative-ai": "^0.1.3",
-    "@resumate/shared": "*"
+    "@resumate/shared": "*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
