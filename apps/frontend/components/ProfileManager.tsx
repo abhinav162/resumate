@@ -10,6 +10,7 @@ import { generateLatexPdf } from '../services/latexService';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
 import DownloadIcon from './icons/DownloadIcon';
+import SparklesIcon from './icons/SparklesIcon';
 
 interface ProfileManagerProps {
   resumes: ResumeData[];
@@ -42,6 +43,9 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
       const newResume: ResumeData = {
         ...parsedData,
         name: `My Resume #${resumes.length + 1}`,
+        experience: parsedData.experience?.map(e => ({ ...e, id: e.id || crypto.randomUUID() })) || [],
+        education: parsedData.education?.map(e => ({ ...e, id: e.id || crypto.randomUUID() })) || [],
+        projects: parsedData.projects?.map(e => ({ ...e, id: e.id || crypto.randomUUID() })) || [],
       };
       const createdResume = await addResume(newResume);
       setEditingResume(createdResume);
@@ -104,11 +108,11 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
   };
 
   if (editingResume) {
-    return <ResumeEditor 
-            resumeData={editingResume} 
-            onSave={handleSaveAndCloseEditor} 
-            onCancel={() => setEditingResume(null)}
-            />;
+    return <ResumeEditor
+      resumeData={editingResume}
+      onSave={handleSaveAndCloseEditor}
+      onCancel={() => setEditingResume(null)}
+    />;
   }
 
   if (viewingResume) {
@@ -127,8 +131,8 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
               <DownloadIcon />
               Download JSON
             </Button>
-            <Button 
-              onClick={() => handleDownloadPdf(viewingResume)} 
+            <Button
+              onClick={() => handleDownloadPdf(viewingResume)}
               disabled={downloadingPdf === viewingResume.id}
             >
               {downloadingPdf === viewingResume.id ? <Spinner size="sm" /> : <DownloadIcon />}
@@ -136,9 +140,9 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
             </Button>
           </div>
         </div>
-        
+
         {pdfError && <p className="text-red-400 text-sm mb-4">PDF Error: {pdfError}</p>}
-        
+
         <Card>
           <div className="bg-gray-900 p-6 rounded-lg">
             <div className="text-center mb-6">
@@ -146,8 +150,14 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
               <p className="text-gray-300 mt-1">
                 {viewingResume.contact.location} • {viewingResume.contact.phone} • {viewingResume.contact.email}
               </p>
-              <p className="text-indigo-400 mt-1">
-                <a href={viewingResume.contact.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a> • <a href={viewingResume.contact.github} target="_blank" rel="noopener noreferrer">GitHub</a>
+              <p className="text-indigo-400 mt-1 flex justify-center gap-2">
+                {viewingResume.contact.linkedin && (
+                  <a href={viewingResume.contact.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a>
+                )}
+                {viewingResume.contact.linkedin && viewingResume.contact.github && <span>•</span>}
+                {viewingResume.contact.github && (
+                  <a href={viewingResume.contact.github} target="_blank" rel="noopener noreferrer">GitHub</a>
+                )}
               </p>
             </div>
 
@@ -218,97 +228,142 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ resumes, addResume, upd
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold text-white mb-2">Create New Profile from Resume</h2>
-        <p className="text-gray-400 mb-4">Paste your resume text below to have AI parse it into a structured profile.</p>
-        <Card>
-          <textarea
-            value={resumeText}
-            onChange={(e) => setResumeText(e.target.value)}
-            placeholder="Paste your full resume text here..."
-            className="w-full h-48 bg-gray-900 border border-gray-600 rounded-md p-3 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-            disabled={isLoading}
-          />
-          {error && <p className="text-red-400 mt-2 text-sm">{error}</p>}
-          <div className="mt-4 flex justify-end">
-            <Button onClick={handleParseResume} disabled={isLoading}>
-              {isLoading ? <Spinner size="sm" /> : <PlusIcon />}
-              {isLoading ? 'Parsing...' : 'Parse & Create Profile'}
-            </Button>
-          </div>
-        </Card>
+      <div className="flex justify-between items-end">
+        <div>
+          <h2 className="text-3xl font-bold text-white">Profile Manager</h2>
+          <p className="text-gray-400 mt-1">Manage your base resumes and profiles.</p>
+        </div>
       </div>
 
-      <div>
-        <h2 className="text-2xl font-bold text-white mb-4">Your Resume Profiles</h2>
-        {resumes.length === 0 ? (
-          <p className="text-gray-400">You haven't created any profiles yet.</p>
-        ) : (
-          <div className="space-y-4">
-            {resumes.map(resume => (
-              <Card key={resume.id}>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold">{resume.name}</h3>
-                    <p className="text-sm text-gray-400">{resume.contact.name}</p>
-                    <p className="text-xs text-gray-500">
-                      {resume.experience.length} experience{resume.experience.length !== 1 ? 's' : ''} • 
-                      {resume.projects?.length || 0} project{(resume.projects?.length || 0) !== 1 ? 's' : ''} • 
-                      {resume.skills.length} skills
-                    </p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Create New Profile Card */}
+        <div className="lg:col-span-1">
+          <Card className="h-full border-dashed border-2 border-gray-700 bg-gray-800/30 hover:border-indigo-500/50 transition-colors">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400"><PlusIcon /></span>
+              New Profile
+            </h3>
+            <p className="text-gray-400 text-sm mb-4">
+              Paste your resume text below to have AI parse it into a structured profile.
+            </p>
+            <textarea
+              value={resumeText}
+              onChange={(e) => setResumeText(e.target.value)}
+              placeholder="Paste your full resume text here..."
+              className="w-full h-48 bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm focus:ring-indigo-500 focus:border-indigo-500 mb-4 resize-none"
+              disabled={isLoading}
+            />
+            {error && <p className="text-red-400 text-xs mb-4 bg-red-900/20 p-2 rounded">{error}</p>}
+            <Button onClick={handleParseResume} disabled={isLoading} className="w-full justify-center">
+              {isLoading ? <Spinner size="sm" /> : <SparklesIcon />}
+              {isLoading ? 'Parsing...' : 'Parse & Create'}
+            </Button>
+          </Card>
+        </div>
+
+        {/* Profiles List */}
+        <div className="lg:col-span-2 space-y-4">
+          <h3 className="text-xl font-bold text-white mb-4">Your Profiles</h3>
+          {resumes.length === 0 ? (
+            <div className="text-center py-12 bg-gray-800/30 rounded-2xl">
+              <p className="text-gray-400">You haven't created any profiles yet.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {resumes.map(resume => (
+                <Card key={resume.id} className={`transition-all ${baseResumeId === resume.id ? 'border-indigo-500 ring-1 ring-indigo-500/50' : 'hover:border-gray-600'}`}>
+                  <div className="flex flex-col sm:flex-row justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-3 mb-1">
+                        <h3 className="text-lg font-bold text-white">{resume.name}</h3>
+                        {baseResumeId === resume.id && (
+                          <span className="px-2 py-0.5 text-xs font-medium bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">
+                            Default Base
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-400 font-medium">{resume.contact.name}</p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <span className="px-2 py-1 text-xs bg-gray-800 rounded text-gray-400 border border-gray-700">
+                          {resume.experience.length} Experience
+                        </span>
+                        <span className="px-2 py-1 text-xs bg-gray-800 rounded text-gray-400 border border-gray-700">
+                          {resume.projects?.length || 0} Projects
+                        </span>
+                        <span className="px-2 py-1 text-xs bg-gray-800 rounded text-gray-400 border border-gray-700">
+                          {resume.skills.length} Skills
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2 min-w-[140px]">
+                      <div className="flex gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setViewingResume(resume)}
+                          className="flex-1 justify-center"
+                          title="View Profile"
+                        >
+                          👁️
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setEditingResume(resume)}
+                          className="flex-1 justify-center"
+                          title="Edit Profile"
+                        >
+                          ✏️
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => handleDeleteResume(resume.id)}
+                          className="flex-1 justify-center"
+                          title="Delete Profile"
+                        >
+                          <TrashIcon />
+                        </Button>
+                      </div>
+
+                      <Button
+                        variant={baseResumeId === resume.id ? 'primary' : 'secondary'}
+                        size="sm"
+                        onClick={() => setBaseResumeId(resume.id)}
+                        disabled={baseResumeId === resume.id}
+                        className="justify-center"
+                      >
+                        {baseResumeId === resume.id ? 'Active Base' : 'Set as Base'}
+                      </Button>
+
+                      <div className="flex gap-2 mt-auto pt-2 border-t border-gray-700/50">
+                        <button
+                          onClick={() => handleDownloadJson(resume)}
+                          className="flex-1 text-xs text-gray-400 hover:text-white transition-colors"
+                        >
+                          JSON
+                        </button>
+                        <span className="text-gray-700">|</span>
+                        <button
+                          onClick={() => handleDownloadPdf(resume)}
+                          disabled={downloadingPdf === resume.id}
+                          className="flex-1 text-xs text-gray-400 hover:text-white transition-colors"
+                        >
+                          {downloadingPdf === resume.id ? '...' : 'PDF'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant={baseResumeId === resume.id ? 'primary' : 'secondary'}
-                      onClick={() => setBaseResumeId(resume.id)}
-                      disabled={baseResumeId === resume.id}
-                    >
-                      {baseResumeId === resume.id ? 'Base Profile' : 'Set as Base'}
-                    </Button>
-                    <Button variant="secondary" onClick={() => setViewingResume(resume)}>
-                      👁️ View
-                    </Button>
-                    <Button variant="secondary" onClick={() => setEditingResume(resume)}>
-                      ✏️ Edit
-                    </Button>
-                    <Button variant="danger" onClick={() => handleDeleteResume(resume.id)}>
-                      <TrashIcon/>
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="flex justify-between items-center pt-3 border-t border-gray-700">
-                  <div className="text-xs text-gray-500">
-                    Quick Actions:
-                  </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      size="sm" 
-                      variant="secondary" 
-                      onClick={() => handleDownloadJson(resume)}
-                    >
-                      <DownloadIcon />
-                      JSON
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="secondary" 
-                      onClick={() => handleDownloadPdf(resume)}
-                      disabled={downloadingPdf === resume.id}
-                    >
-                      {downloadingPdf === resume.id ? <Spinner size="sm" /> : <DownloadIcon />}
-                      PDF
-                    </Button>
-                  </div>
-                </div>
-                
-                {pdfError && downloadingPdf === resume.id && (
-                  <p className="text-red-400 text-xs mt-2">Error: {pdfError}</p>
-                )}
-              </Card>
-            ))}
-          </div>
-        )}
+
+                  {pdfError && downloadingPdf === resume.id && (
+                    <p className="text-red-400 text-xs mt-2 text-right">Error: {pdfError}</p>
+                  )}
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
