@@ -9,7 +9,8 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+// Read from runtime config (window.ENV) first, then fallback to build-time env
+const PUBLISHABLE_KEY = window.ENV?.VITE_CLERK_PUBLISHABLE_KEY || import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 if (!PUBLISHABLE_KEY) {
   throw new Error("Missing Publishable Key")
