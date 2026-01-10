@@ -13,6 +13,7 @@ import {
 import { RootLayout } from "./layouts/RootLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
 import Dashboard from "./pages/Dashboard";
+import TailorWorkspace from "./pages/TailorWorkspace";
 import { dark } from "@clerk/themes";
 
 // Environment check
@@ -43,17 +44,11 @@ const router = createBrowserRouter([
           </>
         ),
       },
-      // Placeholder for Tailor route
       {
         path: "/tailor",
         element: (
           <SignedIn>
-            <div className="container mx-auto px-6 py-20 text-center">
-              <h1 className="text-3xl font-serif text-mist-100">
-                Tailor Workspace
-              </h1>
-              <p className="text-mist-400 mt-4">Coming soon...</p>
-            </div>
+            <TailorWorkspace />
           </SignedIn>
         ),
       },
