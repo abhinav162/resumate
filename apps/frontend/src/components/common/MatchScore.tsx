@@ -1,278 +1,212 @@
-import React, { useState, useEffect, useCallback, useMemo, useId } from 'react';
+import React from 'react';
 
 interface MatchScoreProps {
-  /** Score value from 0-100 */
-  score: number;
-  /** Size variant of the component */
+  score: number; // 0-100
   size?: 'sm' | 'md' | 'lg';
-  /** Whether to animate the score count-up */
   animated?: boolean;
-  /** Whether to show the score label below */
   showLabel?: boolean;
-  /** Optional class name for the container */
-  className?: string;
 }
 
-interface ScoreColorConfig {
-  from: string;
-  to: string;
-  label: string;
-  glowColor: string;
-}
-
-interface SizeConfig {
-  outer: string;
-  text: string;
-  labelText: string;
-  stroke: number;
-  radius: number;
-}
-
-const SIZE_CONFIG: Record<'sm' | 'md' | 'lg', SizeConfig> = {
-  sm: { outer: 'w-16 h-16', text: 'text-lg', labelText: 'text-[10px]', stroke: 4, radius: 28 },
-  md: { outer: 'w-24 h-24', text: 'text-2xl', labelText: 'text-xs', stroke: 6, radius: 42 },
-  lg: { outer: 'w-32 h-32', text: 'text-4xl', labelText: 'text-sm', stroke: 8, radius: 56 },
-};
-
-const ANIMATION_DURATION = 1500; // 1.5 seconds
-const PARTICLE_COUNT = 6;
-
-/**
- * Determines color configuration based on score threshold
- * - < 60: Rose (Low Match)
- * - 60-79: Amber (Good Match)
- * - >= 80: Emerald (Excellent Match)
- */
-const getScoreColorConfig = (score: number): ScoreColorConfig => {
-  if (score < 60) {
-    return {
-      from: '#F43F5E', // rose-500
-      to: '#FB7185',   // rose-400
-      label: 'Low Match',
-      glowColor: 'rgba(244, 63, 94, 0.4)',
-    };
-  }
-  if (score < 80) {
-    return {
-      from: '#F59E0B', // amber-500
-      to: '#FBBF24',   // amber-400
-      label: 'Good Match',
-      glowColor: 'rgba(251, 191, 36, 0.4)',
-    };
-  }
-  return {
-    from: '#10B981', // emerald-500
-    to: '#34D399',   // emerald-400
-    label: 'Excellent Match',
-    glowColor: 'rgba(16, 185, 129, 0.4)',
-  };
-};
-
-/**
- * Easing function for smooth animation (ease-out-cubic)
- */
-const easeOutCubic = (t: number): number => {
-  return 1 - Math.pow(1 - t, 3);
-};
-
-/**
- * MatchScore - The signature element showing ATS compatibility score
- *
- * Features:
- * - Animated circular progress with smooth count-up
- * - Color-shifts based on score (rose -> amber -> emerald)
- * - Pulsing glow effect
- * - Particle celebration at 80%+ scores
- */
 export const MatchScore: React.FC<MatchScoreProps> = ({
   score,
   size = 'md',
   animated = true,
   showLabel = false,
-  className = '',
 }) => {
+  const [displayScore, setDisplayScore] = React.useState(animated ? 0 : score);
+  const [isComplete, setIsComplete] = React.useState(!animated);
+
   // Clamp score between 0-100
   const clampedScore = Math.max(0, Math.min(100, score));
 
-  const [displayScore, setDisplayScore] = useState(animated ? 0 : clampedScore);
-  const [isAnimationComplete, setIsAnimationComplete] = useState(!animated);
-
-  // Generate unique ID for SVG gradient to prevent conflicts
-  const uniqueId = useId();
-  const gradientId = `scoreGradient-${uniqueId}`;
-
-  // Smooth animation using requestAnimationFrame
-  useEffect(() => {
+  // Animate score counting up
+  React.useEffect(() => {
     if (!animated) {
       setDisplayScore(clampedScore);
-      setIsAnimationComplete(true);
+      setIsComplete(true);
       return;
     }
 
-    setIsAnimationComplete(false);
-    let startTime: number | null = null;
-    let animationFrame: number;
+    let start = 0;
+    const duration = 1500; // 1.5 seconds
+    const increment = clampedScore / (duration / 16); // 60fps
+    setIsComplete(false);
 
-    const animate = (currentTime: number) => {
-      if (!startTime) startTime = currentTime;
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / ANIMATION_DURATION, 1);
-
-      // Apply easing for smooth deceleration
-      const easedProgress = easeOutCubic(progress);
-      const currentScore = Math.round(easedProgress * clampedScore);
-
-      setDisplayScore(currentScore);
-
-      if (progress < 1) {
-        animationFrame = requestAnimationFrame(animate);
-      } else {
+    const timer = setInterval(() => {
+      start += increment;
+      if (start >= clampedScore) {
         setDisplayScore(clampedScore);
-        setIsAnimationComplete(true);
+        setIsComplete(true);
+        clearInterval(timer);
+      } else {
+        setDisplayScore(Math.floor(start));
       }
-    };
+    }, 16);
 
-    animationFrame = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationFrame) {
-        cancelAnimationFrame(animationFrame);
-      }
-    };
+    return () => clearInterval(timer);
   }, [clampedScore, animated]);
 
-  // Memoize color config based on display score
-  const scoreColorConfig = useMemo(
-    () => getScoreColorConfig(displayScore),
-    [displayScore]
-  );
+  // Get color based on score
+  const getScoreColor = (score: number) => {
+    if (score < 60) {
+      return {
+        gradient: 'from-rose-500 to-rose-400',
+        glow: 'shadow-rose-500/50',
+        text: 'text-rose-400',
+        label: 'Low Match',
+      };
+    }
+    if (score < 80) {
+      return {
+        gradient: 'from-amber-500 to-amber-400',
+        glow: 'shadow-amber-500/50',
+        text: 'text-amber-400',
+        label: 'Good Match',
+      };
+    }
+    return {
+      gradient: 'from-emerald-500 to-emerald-400',
+      glow: 'shadow-emerald-500/50',
+      text: 'text-emerald-400',
+      label: 'Excellent Match',
+    };
+  };
 
-  const sizeConfig = SIZE_CONFIG[size];
-  const circumference = 2 * Math.PI * sizeConfig.radius;
+  const colors = getScoreColor(displayScore);
+
+  // Size configurations
+  const sizes = {
+    sm: {
+      container: 'w-20 h-20',
+      circle: 'w-20 h-20',
+      text: 'text-xl',
+      stroke: '8',
+      radius: '36',
+    },
+    md: {
+      container: 'w-28 h-28',
+      circle: 'w-28 h-28',
+      text: 'text-3xl',
+      stroke: '10',
+      radius: '42',
+    },
+    lg: {
+      container: 'w-36 h-36',
+      circle: 'w-36 h-36',
+      text: 'text-5xl',
+      stroke: '12',
+      radius: '60',
+    },
+  };
+
+  const config = sizes[size];
+  const circumference = 2 * Math.PI * parseInt(config.radius);
   const offset = circumference - (displayScore / 100) * circumference;
 
-  // Determine if particles should show (80%+ and animation complete)
-  const showParticles = displayScore >= 80 && animated && isAnimationComplete;
-
-  // Generate particle positions
-  const particles = useMemo(() => {
-    return [...Array(PARTICLE_COUNT)].map((_, i) => ({
-      id: i,
-      top: `${50 + 45 * Math.cos((i * Math.PI * 2) / PARTICLE_COUNT)}%`,
-      left: `${50 + 45 * Math.sin((i * Math.PI * 2) / PARTICLE_COUNT)}%`,
-      delay: `${i * 0.15}s`,
-    }));
-  }, []);
+  // Show particles for high scores
+  const showParticles = displayScore >= 80 && isComplete;
 
   return (
-    <div
-      className={`relative flex flex-col items-center gap-2 ${className}`}
-      role="progressbar"
-      aria-valuenow={displayScore}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-label={`Match score: ${displayScore}%`}
-    >
-      {/* Main circular progress */}
-      <div className={`relative ${sizeConfig.outer}`}>
-        <svg
-          className="w-full h-full -rotate-90"
-          viewBox="0 0 100 100"
-        >
-          {/* Gradient definition */}
-          <defs>
-            <linearGradient
-              id={gradientId}
-              x1="0%"
-              y1="0%"
-              x2="100%"
-              y2="100%"
-            >
-              <stop offset="0%" stopColor={scoreColorConfig.from} />
-              <stop offset="100%" stopColor={scoreColorConfig.to} />
-            </linearGradient>
-          </defs>
-
+    <div className="flex flex-col items-center gap-3">
+      <div className={`relative ${config.container}`}>
+        {/* SVG Circle */}
+        <svg className={`${config.circle} -rotate-90`} viewBox="0 0 100 100">
           {/* Background circle */}
           <circle
             cx="50"
             cy="50"
-            r={sizeConfig.radius}
-            stroke="currentColor"
-            strokeWidth={sizeConfig.stroke}
+            r={config.radius}
             fill="none"
+            stroke="currentColor"
+            strokeWidth={config.stroke}
             className="text-bg-elevated"
           />
 
-          {/* Progress circle */}
+          {/* Progress circle with gradient */}
           <circle
             cx="50"
             cy="50"
-            r={sizeConfig.radius}
-            stroke={`url(#${gradientId})`}
-            strokeWidth={sizeConfig.stroke}
+            r={config.radius}
             fill="none"
+            stroke="url(#gradient)"
+            strokeWidth={config.stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
-            className="transition-[stroke-dashoffset] duration-100 ease-out"
+            className="transition-all duration-300"
             style={{
-              filter: `drop-shadow(0 0 12px ${scoreColorConfig.glowColor})`,
+              filter: displayScore >= 60 ? `drop-shadow(0 0 8px ${
+                displayScore < 80 ? 'rgba(251, 191, 36, 0.4)' : 'rgba(16, 185, 129, 0.4)'
+              })` : undefined
             }}
           />
+
+          {/* Gradient definition */}
+          <defs>
+            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop
+                offset="0%"
+                stopColor={
+                  displayScore < 60 ? '#F43F5E' : displayScore < 80 ? '#F59E0B' : '#10B981'
+                }
+              />
+              <stop
+                offset="100%"
+                stopColor={
+                  displayScore < 60 ? '#FB7185' : displayScore < 80 ? '#FBBF24' : '#34D399'
+                }
+              />
+            </linearGradient>
+          </defs>
         </svg>
 
-        {/* Score text - centered over the circle */}
+        {/* Score text overlay */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <span
-            className={`font-display font-bold ${sizeConfig.text} text-text-primary tabular-nums`}
-          >
-            {displayScore}
-            <span className="text-[0.6em] text-text-secondary">%</span>
-          </span>
+          <div className="text-center">
+            <span className={`font-display font-bold ${config.text} text-text-primary`}>
+              {displayScore}
+            </span>
+            <span className="text-sm text-text-secondary font-display">%</span>
+          </div>
         </div>
 
-        {/* Pulsing glow ring for high scores */}
-        {displayScore >= 80 && (
-          <div
-            className="absolute inset-0 rounded-full animate-pulse-glow pointer-events-none"
-            style={{
-              boxShadow: `0 0 30px ${scoreColorConfig.glowColor}`,
-              opacity: 0.6,
-            }}
-          />
+        {/* Particle effects for excellent scores */}
+        {showParticles && (
+          <div className="absolute inset-0 pointer-events-none">
+            {[0, 1, 2, 3, 4, 5].map((i) => {
+              const angle = (i * Math.PI * 2) / 6;
+              const x = 50 + Math.cos(angle) * 45;
+              const y = 50 + Math.sin(angle) * 45;
+              return (
+                <div
+                  key={i}
+                  className="absolute w-2 h-2 bg-emerald-400 rounded-full animate-ping"
+                  style={{
+                    left: `${x}%`,
+                    top: `${y}%`,
+                    animationDelay: `${i * 0.1}s`,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                />
+              );
+            })}
+          </div>
         )}
 
-        {/* Particle celebration effect */}
-        {showParticles && (
-          <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-            {particles.map((particle) => (
-              <div
-                key={particle.id}
-                className="absolute w-1.5 h-1.5 bg-emerald-400 rounded-full"
-                style={{
-                  top: particle.top,
-                  left: particle.left,
-                  animation: `ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite`,
-                  animationDelay: particle.delay,
-                  transform: 'translate(-50%, -50%)',
-                }}
-              />
-            ))}
-          </div>
+        {/* Pulsing glow for high scores */}
+        {displayScore >= 80 && (
+          <div
+            className={`absolute inset-0 rounded-full ${colors.glow} blur-xl opacity-50 animate-pulse`}
+          />
         )}
       </div>
 
-      {/* Score label */}
+      {/* Label */}
       {showLabel && (
-        <span
-          className={`${sizeConfig.labelText} font-display font-medium text-text-tertiary tracking-wide uppercase`}
-        >
-          {scoreColorConfig.label}
+        <span className={`text-xs font-display font-medium uppercase tracking-wider ${colors.text}`}>
+          {colors.label}
         </span>
       )}
     </div>
   );
 };
-
-export default MatchScore;
