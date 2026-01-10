@@ -132,10 +132,34 @@ const router = createBrowserRouter([
   },
 ]);
 
+import { useAuth } from "@clerk/clerk-react";
+import { useEffect } from "react";
+import { setAuthHeaders } from "./lib/api";
+
 export default function AppRouter() {
   return (
     <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
-      <RouterProvider router={router} />
+      <AuthInitializer>
+        <RouterProvider router={router} />
+      </AuthInitializer>
     </ClerkProvider>
   );
+}
+
+function AuthInitializer({ children }: { children: React.ReactNode }) {
+  const { getToken, userId } = useAuth();
+
+  useEffect(() => {
+    const syncAuth = async () => {
+      try {
+        const token = await getToken();
+        setAuthHeaders(token, userId);
+      } catch (err) {
+        console.error("Failed to sync auth token", err);
+      }
+    };
+    syncAuth();
+  }, [getToken, userId]);
+
+  return <>{children}</>;
 }

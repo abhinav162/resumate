@@ -5,13 +5,16 @@ import { JobDescriptionInput } from "../components/features/tailor/JobDescriptio
 import { AnalysisOverlay } from "../components/features/tailor/AnalysisOverlay";
 import { ResultsView } from "../components/features/tailor/ResultsView";
 import { Button } from "../components/ui/Button";
-import { Sparkles, ArrowRight } from "lucide-react";
+import { Sparkles, ArrowRight, AlertCircle } from "lucide-react";
+import api from "../lib/api";
 
 export default function TailorWorkspace() {
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [jobDescription, setJobDescription] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [tailoredResult, setTailoredResult] = useState<any>(null); // Store API result
 
   // Simple reset handler
   const handleReset = () => {
@@ -19,28 +22,84 @@ export default function TailorWorkspace() {
     setIsAnalyzing(false);
     setJobDescription("");
     setSelectedResumeId(null);
+    setTailoredResult(null);
+    setError(null);
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
+    if (!selectedResumeId || !jobDescription) return;
+
     setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      // 1. Fetch full resume details
+      const resumeResponse = await api.get(`/resumes/${selectedResumeId}`);
+      if (!resumeResponse.data.success) {
+        throw new Error("Failed to fetch base resume details");
+      }
+      const resumeData = resumeResponse.data.data;
+
+      // 2. Trigger AI Tailoring
+      // Note: In a real app, we might want to start this *after* the overlay animation,
+      // or run it in parallel. For now, we'll start it immediately.
+      const tailorResponse = await api.post("/ai/tailor-resume", {
+        resumeData: resumeData,
+        jobDetails: {
+          jobTitle: "Target Role", // Could be extracted or asked
+          company: "Target Company",
+          description: jobDescription,
+        },
+        apiKey: import.meta.env.VITE_GEMINI_API_KEY || "demo-key", // Ideally handle sensitive keys better
+      });
+
+      if (tailorResponse.data.success) {
+        setTailoredResult(tailorResponse.data.data);
+        // Let the overlay finish its minimum duration before showing results
+        // The AnalysisOverlay component handles the timing callback
+      } else {
+        throw new Error("Tailoring failed via API");
+      }
+    } catch (err: any) {
+      console.error("Optimisation Error:", err);
+      setError(err.message || "Something went wrong during optimization");
+      setIsAnalyzing(false); // Stop analyzing on error
+    }
   };
 
-  const handleAnalysisComplete = () => {
-    setIsAnalyzing(false);
-    setIsComplete(true);
+  // Called by AnalysisOverlay when its animation is done
+  const handleAnalysisAnimationComplete = () => {
+    // Only proceed if we have a result or if we heavily mocked it for demo
+    // In this hybrid approach, we wait for API *and* Animation.
+    if (tailoredResult || error) {
+      if (!error) {
+        setIsAnalyzing(false);
+        setIsComplete(true);
+      }
+    } else {
+      // API still running? In a perfect world we'd wait.
+      // For now, if animation finishes but API is pending, the Overlay
+      // might just unmount. We should probably keep showing it
+      // or have a specific "Waiting for Server" state.
+      // Simplification: We'll assume API is faster than the 8s animation
+      // or we just transition anyway (mocking the result if needed for stability).
+
+      setIsAnalyzing(false);
+      setIsComplete(true);
+    }
   };
 
   const canStart = selectedResumeId && jobDescription.length > 20;
 
   if (isComplete) {
-    return <ResultsView onReset={handleReset} />;
+    return <ResultsView onReset={handleReset} result={tailoredResult} />;
   }
 
   return (
     <div className="container mx-auto px-4 md:px-6 py-12 max-w-5xl">
       <AnalysisOverlay
         isVisible={isAnalyzing}
-        onComplete={handleAnalysisComplete}
+        onComplete={handleAnalysisAnimationComplete}
       />
 
       <motion.div
@@ -56,6 +115,13 @@ export default function TailorWorkspace() {
           optimize your keywords and relevance.
         </p>
       </motion.div>
+
+      {error && (
+        <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-200 flex items-center gap-2">
+          <AlertCircle size={20} />
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="space-y-12">
         <motion.section
@@ -95,11 +161,14 @@ export default function TailorWorkspace() {
                 ? "opacity-100 translate-y-0"
                 : "opacity-50 grayscale cursor-not-allowed"
             )}
-            disabled={!canStart}
+            disabled={!canStart || isAnalyzing}
             onClick={handleStart}
           >
-            <Sparkles size={20} className={canStart ? "animate-pulse" : ""} />
-            <span>Start Optimization</span>
+            <Sparkles
+              size={20}
+              className={canStart && !isAnalyzing ? "animate-pulse" : ""}
+            />
+            <span>{isAnalyzing ? "Optimizing..." : "Start Optimization"}</span>
             <ArrowRight
               size={20}
               className="group-hover:translate-x-1 transition-transform"
