@@ -1,11 +1,10 @@
 import { AppLayout } from "./AppLayout";
-import { Outlet, Link, useNavigate } from "react-router-dom";
+import { Outlet, Link } from "react-router-dom";
 import { useClerk, UserButton } from "@clerk/clerk-react";
 import { Button } from "../components/ui/Button";
 
 export const RootLayout = () => {
   const { user } = useClerk();
-  const navigate = useNavigate();
 
   return (
     <AppLayout>
@@ -18,31 +17,42 @@ export const RootLayout = () => {
           Resumate
         </Link>
 
-        <div className="w-px h-4 bg-white/10 mx-1" />
-
-        <Link
-          to="/dashboard"
-          className="px-4 py-2 rounded-full text-sm text-mist-400 hover:text-mist-100 transition-colors"
-        >
-          Dashboard
-        </Link>
-        <Link
-          to="/tailor"
-          className="px-4 py-2 rounded-full text-sm text-mist-400 hover:text-mist-100 transition-colors"
-        >
-          Tailor
-        </Link>
+        {user && (
+          <>
+            <div className="w-px h-4 bg-white/10 mx-1" />
+            <Link
+              to="/dashboard"
+              className="px-4 py-2 rounded-full text-sm text-mist-400 hover:text-mist-100 transition-colors"
+            >
+              Dashboard
+            </Link>
+            <Link
+              to="/tailor"
+              className="px-4 py-2 rounded-full text-sm text-mist-400 hover:text-mist-100 transition-colors"
+            >
+              Tailor
+            </Link>
+          </>
+        )}
 
         <div className="w-px h-4 bg-white/10 mx-1" />
 
         <div className="pl-2 pr-2">
-          <UserButton
-            appearance={{
-              elements: {
-                avatarBox: "w-8 h-8 rounded-full border border-white/10",
-              },
-            }}
-          />
+          {user ? (
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: "w-8 h-8 rounded-full border border-white/10",
+                },
+              }}
+            />
+          ) : (
+            <Link to="/sign-in">
+              <Button size="sm" className="h-8 text-xs px-4">
+                Sign In
+              </Button>
+            </Link>
+          )}
         </div>
       </nav>
 

@@ -2,17 +2,47 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { ResumeSelector } from "../components/features/tailor/ResumeSelector";
 import { JobDescriptionInput } from "../components/features/tailor/JobDescriptionInput";
+import { AnalysisOverlay } from "../components/features/tailor/AnalysisOverlay";
+import { ResultsView } from "../components/features/tailor/ResultsView";
 import { Button } from "../components/ui/Button";
 import { Sparkles, ArrowRight } from "lucide-react";
 
 export default function TailorWorkspace() {
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
   const [jobDescription, setJobDescription] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
+
+  // Simple reset handler
+  const handleReset = () => {
+    setIsComplete(false);
+    setIsAnalyzing(false);
+    setJobDescription("");
+    setSelectedResumeId(null);
+  };
+
+  const handleStart = () => {
+    setIsAnalyzing(true);
+  };
+
+  const handleAnalysisComplete = () => {
+    setIsAnalyzing(false);
+    setIsComplete(true);
+  };
 
   const canStart = selectedResumeId && jobDescription.length > 20;
 
+  if (isComplete) {
+    return <ResultsView onReset={handleReset} />;
+  }
+
   return (
     <div className="container mx-auto px-4 md:px-6 py-12 max-w-5xl">
+      <AnalysisOverlay
+        isVisible={isAnalyzing}
+        onComplete={handleAnalysisComplete}
+      />
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -66,6 +96,7 @@ export default function TailorWorkspace() {
                 : "opacity-50 grayscale cursor-not-allowed"
             )}
             disabled={!canStart}
+            onClick={handleStart}
           >
             <Sparkles size={20} className={canStart ? "animate-pulse" : ""} />
             <span>Start Optimization</span>
@@ -80,9 +111,6 @@ export default function TailorWorkspace() {
   );
 }
 
-// Helper to avoid clsx import error in Button scope if previously missed,
-// though standard practice is to let Button handle its own disabled state visually.
-// Added simple inline helper logic for this demo page.
 function clsx(...classes: (string | boolean | undefined)[]) {
   return classes.filter(Boolean).join(" ");
 }

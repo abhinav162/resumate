@@ -14,6 +14,7 @@ import { RootLayout } from "./layouts/RootLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
 import Dashboard from "./pages/Dashboard";
 import TailorWorkspace from "./pages/TailorWorkspace";
+import LandingPage from "./pages/LandingPage";
 import { dark } from "@clerk/themes";
 
 // Environment check
@@ -29,7 +30,7 @@ const router = createBrowserRouter([
     children: [
       {
         path: "/",
-        element: <Navigate to="/dashboard" replace />,
+        element: <LandingPage />,
       },
       {
         path: "/dashboard",
