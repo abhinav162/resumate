@@ -14,6 +14,7 @@ import { RootLayout } from "./layouts/RootLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
 import Dashboard from "./pages/Dashboard";
 import TailorWorkspace from "./pages/TailorWorkspace";
+import TestEditorsPage from "./pages/TestEditorsPage"; // Import Test Page
 import LandingPage from "./pages/LandingPage";
 import { dark } from "@clerk/themes";
 
@@ -44,6 +45,10 @@ const router = createBrowserRouter([
             </SignedOut>
           </>
         ),
+      },
+      {
+        path: "/testEditors",
+        element: <TestEditorsPage />,
       },
       {
         path: "/tailor",

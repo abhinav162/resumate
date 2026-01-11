@@ -1,12 +1,16 @@
 import { motion } from "framer-motion";
 import { Button } from "../../ui/Button";
-import { Download, ArrowLeft, RefreshCw, Star } from "lucide-react";
+import { Download, ArrowLeft, Star } from "lucide-react";
 
 interface ResultsViewProps {
   onReset: () => void;
+  result?: any; // The full tailored resume result
 }
 
-export function ResultsView({ onReset }: ResultsViewProps) {
+export function ResultsView({ onReset, result }: ResultsViewProps) {
+  // Temporary: Log result to suppress unused variable warning during dev
+  if (result) console.log("Tailoring Result:", result);
+
   return (
     <div className="container mx-auto px-4 md:px-6 py-12 max-w-5xl">
       <motion.div
