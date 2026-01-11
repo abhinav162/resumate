@@ -38,12 +38,6 @@ export function EditorLayout({
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="hidden md:flex items-center gap-1 mr-4">
-            <span className="w-2 h-2 rounded-full bg-aurora-teal shadow-[0_0_8px_rgba(20,184,166,0.5)]"></span>
-            <span className="text-[10px] text-mist-400 uppercase tracking-wider font-mono">
-              Auto-saved
-            </span>
-          </div>
           {actions}
           <div className="h-4 w-px bg-white/10 mx-2" />
           <Button

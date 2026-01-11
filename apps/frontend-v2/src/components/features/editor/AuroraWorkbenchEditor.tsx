@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { EditorLayout } from "../../../layouts/EditorLayout";
 import { Button } from "../../ui/Button";
-import { MOCK_RESUME_DATA } from "./mockData";
+import { ResumeEditorProvider, useResumeEditor } from "./ResumeEditorContext";
 import {
   User,
   Briefcase,
@@ -15,6 +15,7 @@ import {
   Plus,
   Trash2,
   GripVertical,
+  Loader2,
 } from "lucide-react";
 
 const STEPS = [
@@ -26,6 +27,15 @@ const STEPS = [
 ];
 
 export function AuroraWorkbenchEditor() {
+  return (
+    <ResumeEditorProvider>
+      <AuroraWorkbenchInner />
+    </ResumeEditorProvider>
+  );
+}
+
+function AuroraWorkbenchInner() {
+  const { resumeData, isSaving, lastSaved } = useResumeEditor();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   const currentStep = STEPS[currentStepIndex];
@@ -37,7 +47,32 @@ export function AuroraWorkbenchEditor() {
   const prevStep = () => setCurrentStepIndex(Math.max(0, currentStepIndex - 1));
 
   return (
-    <EditorLayout>
+    <EditorLayout
+      title={resumeData.title}
+      actions={
+        <div className="flex items-center gap-2 mr-4">
+          {isSaving ? (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/5 border border-white/5">
+              <Loader2 size={12} className="animate-spin text-aurora-teal" />
+              <span className="text-[10px] text-mist-400 uppercase tracking-wider font-mono">
+                Saving...
+              </span>
+            </div>
+          ) : lastSaved ? (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/5 border border-white/5">
+              <CheckCircle2 size={12} className="text-aurora-teal" />
+              <span className="text-[10px] text-mist-400 uppercase tracking-wider font-mono">
+                Saved{" "}
+                {lastSaved.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      }
+    >
       {/* 1. Left Rail: Navigation */}
       <div className="w-16 bg-void-950 border-r border-white/10 flex flex-col items-center py-4 gap-4 z-20">
         {STEPS.map((step, index) => {
@@ -124,13 +159,9 @@ export function AuroraWorkbenchEditor() {
             >
               {currentStep.id === "contact" && <ContactForm />}
               {currentStep.id === "experience" && <ExperienceForm />}
-              {currentStep.id === "education" && (
-                <PlaceholderForm name="Education" />
-              )}
-              {currentStep.id === "skills" && <PlaceholderForm name="Skills" />}
-              {currentStep.id === "summary" && (
-                <PlaceholderForm name="Summary" />
-              )}
+              {currentStep.id === "education" && <EducationForm />}
+              {currentStep.id === "skills" && <SkillsForm />}
+              {currentStep.id === "summary" && <SummaryForm />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -161,7 +192,7 @@ export function AuroraWorkbenchEditor() {
         <div className="flex-1 overflow-auto p-8 flex justify-center custom-scrollbar bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
           {/* The "Paper" */}
           <div className="w-[210mm] min-h-[297mm] bg-white text-black shadow-2xl origin-top transition-transform duration-300 transform scale-[0.85] md:scale-[0.9] lg:scale-[1]">
-            <ResumePreviewMock />
+            <ResumePreviewMock resumeData={resumeData} />
           </div>
         </div>
       </div>
@@ -171,35 +202,162 @@ export function AuroraWorkbenchEditor() {
 
 // -- Sub-Components for Forms (Dense Style) --
 
+function EducationForm() {
+  const { resumeData, updateField, addListItem, removeListItem } =
+    useResumeEditor();
+
+  const handleUpdate = (index: number, field: string, value: any) => {
+    const newEdu = [...resumeData.education];
+    newEdu[index] = { ...newEdu[index], [field]: value };
+    updateField("education", newEdu);
+  };
+
+  return (
+    <div className="space-y-6">
+      {resumeData.education.map((edu: any, i: number) => (
+        <div
+          key={i}
+          className="group relative border border-white/5 bg-white/[0.02] rounded-lg p-4 hover:border-white/10 transition-colors"
+        >
+          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
+            <button
+              onClick={() => removeListItem("education", i)}
+              className="text-mist-500 hover:text-red-400 p-1"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 mb-3">
+            <DenseInput
+              label="School / University"
+              value={edu.school}
+              onChange={(e: any) => handleUpdate(i, "school", e.target.value)}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <DenseInput
+                label="Degree"
+                value={edu.degree}
+                onChange={(e: any) => handleUpdate(i, "degree", e.target.value)}
+              />
+              <DenseInput
+                label="Year"
+                value={edu.year}
+                onChange={(e: any) => handleUpdate(i, "year", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+      <Button
+        variant="outline"
+        onClick={() =>
+          addListItem("education", { school: "", degree: "", year: "" })
+        }
+        className="w-full border-dashed border-white/20 text-mist-400 hover:text-aurora-teal hover:border-aurora-teal py-6 flex flex-col gap-1 h-auto"
+      >
+        <Plus size={20} />
+        <span className="text-xs font-bold uppercase tracking-wider">
+          Add Education
+        </span>
+      </Button>
+    </div>
+  );
+}
+
+function SkillsForm() {
+  const { resumeData, updateField } = useResumeEditor();
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
+        <label className="block text-[10px] font-mono text-mist-400 mb-3 uppercase tracking-wider">
+          Technical Skills (Comma Separated)
+        </label>
+        <textarea
+          className="w-full bg-void-900 border border-white/10 rounded px-3 py-2 text-mist-100 text-sm focus:outline-none focus:border-aurora-teal/50 focus:bg-void-950 transition-all min-h-[150px] resize-y"
+          value={resumeData.skills.join(", ")}
+          onChange={(e) =>
+            updateField(
+              "skills",
+              e.target.value.split(",").map((s) => s.trim())
+            )
+          }
+          placeholder="React, TypeScript, Node.js..."
+        />
+      </div>
+      <p className="text-[10px] text-mist-500 italic px-2">
+        Separate skills with commas. They will be formatted automatically in the
+        preview.
+      </p>
+    </div>
+  );
+}
+
+function SummaryForm() {
+  const { resumeData, updateField } = useResumeEditor();
+
+  return (
+    <div className="space-y-4">
+      <DenseInput
+        label="Professional Summary"
+        isTextArea
+        className="h-64"
+        value={resumeData.summary}
+        onChange={(e: any) => updateField("summary", e.target.value)}
+        placeholder="Write a brief overview of your professional background and key achievements..."
+      />
+    </div>
+  );
+}
+
 function ContactForm() {
+  const { resumeData, updateField } = useResumeEditor();
+  const contact = resumeData.contact;
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <DenseInput
           label="First Name"
-          defaultValue={MOCK_RESUME_DATA.contact.fullName.split(" ")[0]}
+          value={contact.fullName.split(" ")[0] || ""}
+          onChange={(e: any) =>
+            updateField(
+              "contact.fullName",
+              `${e.target.value} ${contact.fullName.split(" ")[1] || ""}`
+            )
+          }
         />
         <DenseInput
           label="Last Name"
-          defaultValue={MOCK_RESUME_DATA.contact.fullName.split(" ")[1]}
+          value={contact.fullName.split(" ")[1] || ""}
+          onChange={(e: any) =>
+            updateField(
+              "contact.fullName",
+              `${contact.fullName.split(" ")[0] || ""} ${e.target.value}`
+            )
+          }
         />
       </div>
       <DenseInput
         label="Target Role"
-        defaultValue={MOCK_RESUME_DATA.contact.role}
+        value={contact.role}
+        onChange={(e: any) => updateField("contact.role", e.target.value)}
       />
       <DenseInput
         label="Email Address"
-        defaultValue={MOCK_RESUME_DATA.contact.email}
+        value={contact.email}
+        onChange={(e: any) => updateField("contact.email", e.target.value)}
       />
       <div className="grid grid-cols-2 gap-4">
         <DenseInput
           label="Phone"
-          defaultValue={MOCK_RESUME_DATA.contact.phone}
+          value={contact.phone}
+          onChange={(e: any) => updateField("contact.phone", e.target.value)}
         />
         <DenseInput
           label="Location"
-          defaultValue={MOCK_RESUME_DATA.contact.location}
+          value={contact.location}
+          onChange={(e: any) => updateField("contact.location", e.target.value)}
         />
       </div>
       <div className="pt-4 border-t border-white/5">
@@ -217,13 +375,9 @@ function ContactForm() {
               <Trash2 size={14} />
             </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full border-dashed border-white/10 text-mist-500 h-8 text-xs hover:text-aurora-teal hover:border-aurora-teal/50"
-          >
+          <button className="w-full border-dashed border border-white/10 text-mist-500 h-8 text-xs hover:text-aurora-teal hover:border-aurora-teal/50 rounded-lg transition-all">
             + Add Link
-          </Button>
+          </button>
         </div>
       </div>
     </div>
@@ -231,9 +385,18 @@ function ContactForm() {
 }
 
 function ExperienceForm() {
+  const { resumeData, updateField, addListItem, removeListItem } =
+    useResumeEditor();
+
+  const handleUpdate = (index: number, field: string, value: any) => {
+    const newExp = [...resumeData.experience];
+    newExp[index] = { ...newExp[index], [field]: value };
+    updateField("experience", newExp);
+  };
+
   return (
     <div className="space-y-6">
-      {MOCK_RESUME_DATA.experience.map((exp, i) => (
+      {resumeData.experience.map((exp: any, i: number) => (
         <div
           key={i}
           className="group relative border border-white/5 bg-white/[0.02] rounded-lg p-4 hover:border-white/10 transition-colors"
@@ -242,28 +405,61 @@ function ExperienceForm() {
             <button className="text-mist-500 hover:text-white p-1">
               <GripVertical size={14} />
             </button>
-            <button className="text-mist-500 hover:text-red-400 p-1">
+            <button
+              onClick={() => removeListItem("experience", i)}
+              className="text-mist-500 hover:text-red-400 p-1"
+            >
               <Trash2 size={14} />
             </button>
           </div>
 
           <div className="grid grid-cols-1 gap-3 mb-3">
-            <DenseInput label="Role Title" defaultValue={exp.role} />
-            <DenseInput label="Company" defaultValue={exp.company} />
+            <DenseInput
+              label="Role Title"
+              value={exp.role}
+              onChange={(e: any) => handleUpdate(i, "role", e.target.value)}
+            />
+            <DenseInput
+              label="Company"
+              value={exp.company}
+              onChange={(e: any) => handleUpdate(i, "company", e.target.value)}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3 mb-3">
-            <DenseInput label="Start Date" defaultValue={exp.startDate} />
-            <DenseInput label="End Date" defaultValue={exp.endDate} />
+            <DenseInput
+              label="Start Date"
+              value={exp.startDate}
+              onChange={(e: any) =>
+                handleUpdate(i, "startDate", e.target.value)
+              }
+            />
+            <DenseInput
+              label="End Date"
+              value={exp.endDate}
+              onChange={(e: any) => handleUpdate(i, "endDate", e.target.value)}
+            />
           </div>
           <DenseInput
             label="Description"
             isTextArea
-            defaultValue={exp.description}
+            value={exp.description}
+            onChange={(e: any) =>
+              handleUpdate(i, "description", e.target.value)
+            }
           />
         </div>
       ))}
       <Button
         variant="outline"
+        onClick={() =>
+          addListItem("experience", {
+            company: "",
+            role: "",
+            startDate: "",
+            endDate: "",
+            description: "",
+          })
+        }
         className="w-full border-dashed border-white/20 text-mist-400 hover:text-aurora-teal hover:border-aurora-teal py-6 flex flex-col gap-1 h-auto"
       >
         <Plus size={20} />
@@ -271,16 +467,6 @@ function ExperienceForm() {
           Add Position
         </span>
       </Button>
-    </div>
-  );
-}
-
-function PlaceholderForm({ name }: { name: string }) {
-  return (
-    <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-lg bg-white/[0.01]">
-      <p className="text-mist-500 text-sm">
-        Form fields for <span className="text-mist-200 font-bold">{name}</span>
-      </p>
     </div>
   );
 }
@@ -310,17 +496,17 @@ function DenseInput({ label, isTextArea, className, ...props }: any) {
 }
 
 // -- Preview Mock --
-function ResumePreviewMock() {
+function ResumePreviewMock({ resumeData }: { resumeData: any }) {
   return (
     <div className="p-12 h-full flex flex-col text-gray-800">
       <header className="border-b-2 border-gray-900 pb-6 mb-8">
         <h1 className="text-5xl font-serif font-bold text-gray-900 mb-3 uppercase tracking-tight">
-          {MOCK_RESUME_DATA.contact.fullName}
+          {resumeData.contact.fullName || "Your Name"}
         </h1>
         <div className="flex gap-4 text-sm font-medium tracking-wide text-gray-600 uppercase">
-          <span>{MOCK_RESUME_DATA.contact.role}</span>
+          <span>{resumeData.contact.role || "Target Role"}</span>
           <span>•</span>
-          <span>{MOCK_RESUME_DATA.contact.location}</span>
+          <span>{resumeData.contact.location || "Location"}</span>
         </div>
       </header>
 
@@ -330,7 +516,8 @@ function ResumePreviewMock() {
             Professional Summary
           </h3>
           <p className="text-gray-700 leading-relaxed text-sm text-justify">
-            {MOCK_RESUME_DATA.summary}
+            {resumeData.summary ||
+              "Click editor sections to start building your resume..."}
           </p>
         </section>
 
@@ -339,20 +526,20 @@ function ResumePreviewMock() {
             Experience
           </h3>
           <div className="space-y-6">
-            {MOCK_RESUME_DATA.experience.map((exp: any, i: number) => (
+            {resumeData.experience.map((exp: any, i: number) => (
               <div key={i}>
                 <div className="flex justify-between items-baseline mb-1">
                   <h4 className="font-bold text-gray-900 text-base">
-                    {exp.role}
+                    {exp.role || "Position"}
                   </h4>
                   <span className="text-xs font-mono text-gray-500">
                     {exp.startDate} – {exp.endDate}
                   </span>
                 </div>
                 <div className="text-sm font-medium text-gray-600 mb-2">
-                  {exp.company}
+                  {exp.company || "Company"}
                 </div>
-                <p className="text-sm text-gray-700 leading-relaxed">
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                   {exp.description}
                 </p>
               </div>
@@ -364,11 +551,15 @@ function ResumePreviewMock() {
           <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
             Education
           </h3>
-          {MOCK_RESUME_DATA.education.map((edu: any, i: number) => (
+          {resumeData.education.map((edu: any, i: number) => (
             <div key={i} className="flex justify-between">
               <div>
-                <div className="font-bold text-gray-900">{edu.school}</div>
-                <div className="text-sm text-gray-600">{edu.degree}</div>
+                <div className="font-bold text-gray-900">
+                  {edu.school || "School"}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {edu.degree || "Degree"}
+                </div>
               </div>
               <div className="text-xs font-mono text-gray-500">{edu.year}</div>
             </div>
