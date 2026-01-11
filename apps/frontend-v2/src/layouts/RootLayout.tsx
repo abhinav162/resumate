@@ -6,7 +6,7 @@ import { Button } from "../components/ui/Button";
 export const RootLayout = () => {
   const { user } = useClerk();
   const location = useLocation();
-  const isEditorPage = location.pathname === "/testEditors";
+  const isEditorPage = location.pathname.includes("/editor");
 
   return (
     <AppLayout>
