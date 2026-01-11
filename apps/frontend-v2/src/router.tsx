@@ -14,7 +14,7 @@ import { RootLayout } from "./layouts/RootLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
 import Dashboard from "./pages/Dashboard";
 import TailorWorkspace from "./pages/TailorWorkspace";
-import TestEditorsPage from "./pages/TestEditorsPage"; // Import Test Page
+import { AuroraWorkbenchEditor } from "./components/features/editor/AuroraWorkbenchEditor";
 import LandingPage from "./pages/LandingPage";
 import { dark } from "@clerk/themes";
 
@@ -47,8 +47,20 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/testEditors",
-        element: <TestEditorsPage />,
+        path: "/editor",
+        element: (
+          <SignedIn>
+            <AuroraWorkbenchEditor />
+          </SignedIn>
+        ),
+      },
+      {
+        path: "/editor/:id",
+        element: (
+          <SignedIn>
+            <AuroraWorkbenchEditor />
+          </SignedIn>
+        ),
       },
       {
         path: "/tailor",

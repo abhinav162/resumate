@@ -11,7 +11,7 @@ const api = axios.create({
 
 // Helper to set auth headers dynamically
 // This is called from the App/Layout level where Clerk context is available
-export const setAuthHeaders = (token: string | null, userId: string | null) => {
+export const setAuthHeaders = (token: string | null | undefined, userId: string | null | undefined) => {
   if (token) {
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   } else {
@@ -39,14 +39,30 @@ api.interceptors.response.use(
  */
 export const resumesApi = {
   getResumes: async (): Promise<ResumeData[]> => {
-    const response = await api.get<ApiResponse<ResumeData[]>>('/resumes');
-    return response.data.data || [];
+    const response = await api.get<ApiResponse<any[]>>('/resumes');
+    const data = response.data.data || [];
+    return data.map(r => ({
+      ...r,
+      title: r.name || 'Untitled',
+      contact: {
+        ...r.contact,
+        fullName: r.contact?.name || '',
+      }
+    }));
   },
 
   getResume: async (id: string): Promise<ResumeData> => {
-    const response = await api.get<ApiResponse<ResumeData>>(`/resumes/${id}`);
-    if (!response.data.data) throw new Error('Resume not found');
-    return response.data.data;
+    const response = await api.get<ApiResponse<any>>(`/resumes/${id}`);
+    const r = response.data.data;
+    if (!r) throw new Error('Resume not found');
+    return {
+      ...r,
+      title: r.name || 'Untitled',
+      contact: {
+        ...r.contact,
+        fullName: r.contact?.name || '',
+      }
+    };
   },
 
   createResume: async (resumeData: ResumeData): Promise<ResumeData> => {

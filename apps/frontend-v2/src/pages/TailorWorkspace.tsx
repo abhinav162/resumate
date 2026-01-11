@@ -6,7 +6,7 @@ import { AnalysisOverlay } from "../components/features/tailor/AnalysisOverlay";
 import { ResultsView } from "../components/features/tailor/ResultsView";
 import { Button } from "../components/ui/Button";
 import { Sparkles, ArrowRight, AlertCircle } from "lucide-react";
-import api from "../lib/api";
+import { resumesApi, aiApi } from "../lib/api";
 
 export default function TailorWorkspace() {
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
@@ -34,36 +34,27 @@ export default function TailorWorkspace() {
 
     try {
       // 1. Fetch full resume details
-      const resumeResponse = await api.get(`/resumes/${selectedResumeId}`);
-      if (!resumeResponse.data.success) {
-        throw new Error("Failed to fetch base resume details");
-      }
-      const resumeData = resumeResponse.data.data;
+      const resumeData = await resumesApi.getResume(selectedResumeId);
 
       // 2. Trigger AI Tailoring
-      // Note: In a real app, we might want to start this *after* the overlay animation,
-      // or run it in parallel. For now, we'll start it immediately.
-      const tailorResponse = await api.post("/ai/tailor-resume", {
+      const tailoredResume = await aiApi.tailorResume({
         resumeData: resumeData,
         jobDetails: {
-          jobTitle: "Target Role", // Could be extracted or asked
+          jobTitle: "Target Role",
           company: "Target Company",
           description: jobDescription,
         },
-        apiKey: import.meta.env.VITE_GEMINI_API_KEY || "demo-key", // Ideally handle sensitive keys better
+        apiKey:
+          localStorage.getItem("gemini_api_key") ||
+          import.meta.env.VITE_GEMINI_API_KEY ||
+          "demo-key",
       });
 
-      if (tailorResponse.data.success) {
-        setTailoredResult(tailorResponse.data.data);
-        // Let the overlay finish its minimum duration before showing results
-        // The AnalysisOverlay component handles the timing callback
-      } else {
-        throw new Error("Tailoring failed via API");
-      }
+      setTailoredResult(tailoredResume);
     } catch (err: any) {
       console.error("Optimisation Error:", err);
       setError(err.message || "Something went wrong during optimization");
-      setIsAnalyzing(false); // Stop analyzing on error
+      setIsAnalyzing(false);
     }
   };
 

@@ -6,7 +6,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import api from "../../../lib/api";
+import { resumesApi } from "../../../lib/api";
 import type { ResumeData } from "../../../types";
 
 interface ResumeEditorContextType {
@@ -42,7 +42,7 @@ export const ResumeEditorProvider: React.FC<{
 }> = ({ resumeId, initialData, children }) => {
   const [resumeData, setResumeData] = useState<ResumeData>(
     initialData || {
-      title: "Untitled Resume",
+      title: "New Resume",
       contact: {
         fullName: "",
         role: "",
@@ -59,20 +59,26 @@ export const ResumeEditorProvider: React.FC<{
       skills: [],
     }
   );
-  const [isLoading, setIsLoading] = useState(!initialData && !!resumeId);
+  const [isLoading, setIsLoading] = useState(!!resumeId && !initialData);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const isDirty = useRef(false);
+  const currentResumeId = useRef<string | undefined>(resumeId);
+
+  // Sync ref with prop
+  useEffect(() => {
+    currentResumeId.current = resumeId;
+  }, [resumeId]);
 
   // Fetch initial data if ID is provided
   useEffect(() => {
     if (resumeId && !initialData) {
       const fetchResume = async () => {
+        setIsLoading(true);
         try {
-          const response = await api.get(`/resumes/${resumeId}`);
-          if (response.data.success) {
-            setResumeData(response.data.data);
-          }
+          const data = await resumesApi.getResume(resumeId);
+          setResumeData(data);
+          isDirty.current = false;
         } catch (error) {
           console.error("Failed to fetch resume:", error);
         } finally {
@@ -85,11 +91,19 @@ export const ResumeEditorProvider: React.FC<{
 
   // Save function
   const saveResume = useCallback(async () => {
-    if (!resumeId || !isDirty.current) return;
+    if (!isDirty.current) return;
 
     setIsSaving(true);
     try {
-      await api.patch(`/resumes/${resumeId}`, resumeData);
+      if (currentResumeId.current) {
+        await resumesApi.updateResume(currentResumeId.current, resumeData);
+      } else {
+        // Option A: Auto-create on first save if user started with /editor
+        const created = await resumesApi.createResume(resumeData);
+        currentResumeId.current = created.id;
+        // Should ideally update the URL here, but let's keep it in the context for now
+        // Window.history.pushState(null, '', `/editor/${created.id}`);
+      }
       setLastSaved(new Date());
       isDirty.current = false;
     } catch (error) {
@@ -97,7 +111,7 @@ export const ResumeEditorProvider: React.FC<{
     } finally {
       setIsSaving(false);
     }
-  }, [resumeId, resumeData]);
+  }, [resumeData]);
 
   // Debounced save using useEffect
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
 import { EditorLayout } from "../../../layouts/EditorLayout";
 import { Button } from "../../ui/Button";
@@ -35,8 +35,10 @@ const STEPS = [
 ];
 
 export function AuroraWorkbenchEditor() {
+  const { id } = useParams<{ id: string }>();
+
   return (
-    <ResumeEditorProvider>
+    <ResumeEditorProvider resumeId={id}>
       <AuroraWorkbenchInner />
     </ResumeEditorProvider>
   );

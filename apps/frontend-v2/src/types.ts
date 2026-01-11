@@ -25,6 +25,8 @@ export interface ResumeData {
     year: string;
   }>;
   skills: string[];
+  updatedAt?: string;
+  isBase?: boolean;
 }
 
 export interface TailoredResume {
