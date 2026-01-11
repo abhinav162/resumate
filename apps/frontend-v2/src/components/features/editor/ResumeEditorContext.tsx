@@ -7,32 +7,7 @@ import React, {
   useRef,
 } from "react";
 import api from "../../../lib/api";
-
-interface ResumeData {
-  id?: string;
-  title: string;
-  contact: {
-    fullName: string;
-    role: string;
-    email: string;
-    phone: string;
-    location: string;
-  };
-  summary: string;
-  experience: Array<{
-    company: string;
-    role: string;
-    startDate: string;
-    endDate: string;
-    description: string;
-  }>;
-  education: Array<{
-    school: string;
-    degree: string;
-    year: string;
-  }>;
-  skills: string[];
-}
+import type { ResumeData } from "../../../types";
 
 interface ResumeEditorContextType {
   resumeData: ResumeData;
@@ -67,7 +42,16 @@ export const ResumeEditorProvider: React.FC<{
   const [resumeData, setResumeData] = useState<ResumeData>(
     initialData || {
       title: "Untitled Resume",
-      contact: { fullName: "", role: "", email: "", phone: "", location: "" },
+      contact: {
+        fullName: "",
+        role: "",
+        email: "",
+        phone: "",
+        location: "",
+        linkedin: "",
+        github: "",
+        website: "",
+      },
       summary: "",
       experience: [],
       education: [],

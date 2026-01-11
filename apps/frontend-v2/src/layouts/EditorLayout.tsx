@@ -1,18 +1,22 @@
 import { type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Download, Maximize2, Share2 } from "lucide-react";
+import { ArrowLeft, Download, Maximize2, Share2, Loader2 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 
 interface EditorLayoutProps {
   children: ReactNode;
   title?: string;
   actions?: ReactNode;
+  onExport?: () => Promise<void>;
+  isExporting?: boolean;
 }
 
 export function EditorLayout({
   children,
   title = "Untitled Resume",
   actions,
+  onExport,
+  isExporting = false,
 }: EditorLayoutProps) {
   return (
     <div className="h-screen w-screen bg-void-950 flex flex-col overflow-hidden font-sans text-mist-100">
@@ -58,8 +62,19 @@ export function EditorLayout({
             variant="primary"
             size="sm"
             className="h-8 text-xs gap-2 px-3"
+            onClick={onExport}
+            disabled={isExporting}
           >
-            <Download size={12} /> Export
+            {isExporting ? (
+              <>
+                <Loader2 size={12} className="animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <Download size={12} /> Export
+              </>
+            )}
           </Button>
         </div>
       </header>

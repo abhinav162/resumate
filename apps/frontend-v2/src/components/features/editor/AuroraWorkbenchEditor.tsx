@@ -5,6 +5,8 @@ import { UserButton } from "@clerk/clerk-react";
 import { EditorLayout } from "../../../layouts/EditorLayout";
 import { Button } from "../../ui/Button";
 import { ResumeEditorProvider, useResumeEditor } from "./ResumeEditorContext";
+import { generateLatexPdf } from "../../../services/latexService";
+import type { ResumeData } from "../../../types";
 import {
   User,
   Briefcase,
@@ -39,8 +41,9 @@ export function AuroraWorkbenchEditor() {
 }
 
 function AuroraWorkbenchInner() {
-  const { resumeData, isSaving, lastSaved } = useResumeEditor();
+  const { resumeData, isSaving, lastSaved, isLoading } = useResumeEditor();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
 
   const currentStep = STEPS[currentStepIndex];
   const isFirst = currentStepIndex === 0;
@@ -50,9 +53,39 @@ function AuroraWorkbenchInner() {
     setCurrentStepIndex(Math.min(STEPS.length - 1, currentStepIndex + 1));
   const prevStep = () => setCurrentStepIndex(Math.max(0, currentStepIndex - 1));
 
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const blob = await generateLatexPdf(resumeData);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${resumeData.title || "resume"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Export failed:", error);
+      alert("Failed to export PDF. Please try again later.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-void-950">
+        <Loader2 className="w-8 h-8 text-aurora-teal animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <EditorLayout
       title={resumeData.title}
+      onExport={handleExport}
+      isExporting={isExporting}
       actions={
         <div className="flex items-center gap-2 mr-4">
           {isSaving ? (
@@ -398,25 +431,28 @@ function ContactForm() {
           onChange={(e: any) => updateField("contact.location", e.target.value)}
         />
       </div>
-      <div className="pt-4 border-t border-white/5">
-        <label className="text-[10px] font-mono text-mist-500 uppercase tracking-wider mb-2 block">
-          Social Links
-        </label>
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <DenseInput placeholder="LinkedIn URL" className="flex-1" />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="shrink-0 text-mist-500"
-            >
-              <Trash2 size={14} />
-            </Button>
-          </div>
-          <button className="w-full border-dashed border border-white/10 text-mist-500 h-8 text-xs hover:text-aurora-teal hover:border-aurora-teal/50 rounded-lg transition-all">
-            + Add Link
-          </button>
-        </div>
+
+      <div className="h-px bg-white/5 my-4" />
+
+      <div className="space-y-4">
+        <DenseInput
+          label="LinkedIn URL"
+          value={contact.linkedin || ""}
+          onChange={(e: any) => updateField("contact.linkedin", e.target.value)}
+          placeholder="linkedin.com/in/username"
+        />
+        <DenseInput
+          label="GitHub URL"
+          value={contact.github || ""}
+          onChange={(e: any) => updateField("contact.github", e.target.value)}
+          placeholder="github.com/username"
+        />
+        <DenseInput
+          label="Portfolio / Website"
+          value={contact.website || ""}
+          onChange={(e: any) => updateField("contact.website", e.target.value)}
+          placeholder="yourwebsite.com"
+        />
       </div>
     </div>
   );
