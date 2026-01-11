@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
+import { UserButton } from "@clerk/clerk-react";
 import { EditorLayout } from "../../../layouts/EditorLayout";
 import { Button } from "../../ui/Button";
 import { ResumeEditorProvider, useResumeEditor } from "./ResumeEditorContext";
@@ -16,6 +18,8 @@ import {
   Trash2,
   GripVertical,
   Loader2,
+  LayoutDashboard,
+  Wand2,
 } from "lucide-react";
 
 const STEPS = [
@@ -75,43 +79,77 @@ function AuroraWorkbenchInner() {
     >
       {/* 1. Left Rail: Navigation */}
       <div className="w-16 bg-void-950 border-r border-white/10 flex flex-col items-center py-4 gap-4 z-20">
-        {STEPS.map((step, index) => {
-          const isActive = index === currentStepIndex;
-          const isCompleted = index < currentStepIndex;
+        <div className="flex flex-col items-center gap-4 flex-1">
+          {STEPS.map((step, index) => {
+            const isActive = index === currentStepIndex;
+            const isCompleted = index < currentStepIndex;
 
-          return (
-            <button
-              key={step.id}
-              onClick={() => setCurrentStepIndex(index)}
-              className={`
-                            relative w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 group
-                            ${
-                              isActive
-                                ? "bg-aurora-teal text-void-950 shadow-[0_0_10px_rgba(20,184,166,0.3)]"
-                                : "text-mist-400 hover:text-mist-100 hover:bg-white/5"
-                            }
-                        `}
-            >
-              {step.icon}
+            return (
+              <button
+                key={step.id}
+                onClick={() => setCurrentStepIndex(index)}
+                className={`
+                              relative w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 group
+                              ${
+                                isActive
+                                  ? "bg-aurora-teal text-void-950 shadow-[0_0_10px_rgba(20,184,166,0.3)]"
+                                  : "text-mist-400 hover:text-mist-100 hover:bg-white/5"
+                              }
+                          `}
+              >
+                {step.icon}
 
-              {/* Tooltip */}
-              <div className="absolute left-14 bg-void-900 border border-white/10 px-2 py-1 rounded text-[10px] uppercase tracking-wider text-mist-100 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                {step.label}
-              </div>
-
-              {/* Status Dot */}
-              {isCompleted && !isActive && (
-                <div className="absolute -top-1 -right-1 text-aurora-teal bg-void-950 rounded-full">
-                  <CheckCircle2
-                    size={12}
-                    fill="currentColor"
-                    className="text-aurora-teal"
-                  />
+                {/* Tooltip */}
+                <div className="absolute left-14 bg-void-900 border border-white/10 px-2 py-1 rounded text-[10px] uppercase tracking-wider text-mist-100 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl">
+                  {step.label}
                 </div>
-              )}
-            </button>
-          );
-        })}
+
+                {/* Status Dot */}
+                {isCompleted && !isActive && (
+                  <div className="absolute -top-1 -right-1 text-aurora-teal bg-void-950 rounded-full">
+                    <CheckCircle2
+                      size={12}
+                      fill="currentColor"
+                      className="text-aurora-teal"
+                    />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Global Navigation (Bottom of Rail) */}
+        <div className="flex flex-col items-center gap-4 pt-4 border-t border-white/5 mt-auto">
+          <Link
+            to="/dashboard"
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-mist-400 hover:text-mist-100 hover:bg-white/5 transition-all group relative"
+          >
+            <LayoutDashboard size={18} />
+            <div className="absolute left-14 bg-void-900 border border-white/10 px-2 py-1 rounded text-[10px] uppercase tracking-wider text-mist-100 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl">
+              Dashboard
+            </div>
+          </Link>
+          <Link
+            to="/tailor"
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-mist-400 hover:text-mist-100 hover:bg-white/5 transition-all group relative"
+          >
+            <Wand2 size={18} />
+            <div className="absolute left-14 bg-void-900 border border-white/10 px-2 py-1 rounded text-[10px] uppercase tracking-wider text-mist-100 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl">
+              Tailor
+            </div>
+          </Link>
+          <div className="pt-2">
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox:
+                    "w-8 h-8 rounded-lg border border-white/10 overflow-hidden",
+                },
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* 2. Middle Panel: The Editor (Input) */}
