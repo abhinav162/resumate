@@ -2,6 +2,7 @@ import { AppLayout } from "./AppLayout";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { useClerk, UserButton } from "@clerk/clerk-react";
 import { Button } from "../components/ui/Button";
+import { dark } from "@clerk/themes";
 
 export const RootLayout = () => {
   const { user } = useClerk();
@@ -44,8 +45,31 @@ export const RootLayout = () => {
             {user ? (
               <UserButton
                 appearance={{
+                  baseTheme: dark,
+                  variables: {
+                    colorText: "#F4F4F5",
+                    colorPrimary: "#14B8A6",
+                    colorTextSecondary: "#A1A1AA",
+                    colorInputBackground: "#18181B",
+                    colorInputText: "#F4F4F5",
+                  },
                   elements: {
                     avatarBox: "w-8 h-8 rounded-full border border-white/10",
+                    rootBox: "w-full flex justify-center",
+                    card: "bg-transparent shadow-none w-full max-w-full p-0",
+                    headerTitle: "text-mist-100 font-serif text-center",
+                    headerSubtitle: "text-mist-400 text-center",
+                    socialButtonsBlockButton:
+                      "bg-void-950/50 border border-white/10 text-mist-100 hover:bg-white/5 transition-colors",
+                    dividerLine: "bg-white/10",
+                    dividerText:
+                      "text-mist-400 font-mono text-xs uppercase tracking-wider",
+                    formFieldLabel: "text-mist-400 font-medium",
+                    formFieldInput:
+                      "bg-void-950/50 border-white/10 text-mist-100 focus:border-aurora-purple rounded-xl transition-all",
+                    footerActionText: "text-mist-400",
+                    footerActionLink:
+                      "text-aurora-teal hover:text-aurora-teal/80 font-medium",
                   },
                 }}
               />
