@@ -26,3 +26,23 @@ export interface ResumeData {
   }>;
   skills: string[];
 }
+
+export interface TailoredResume {
+  id: string;
+  baseResumeId: string;
+  jobDetails: {
+    jobTitle: string;
+    company: string;
+    description: string;
+  };
+  tailoredData: ResumeData;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message?: string;
+  data?: T;
+  errors?: any[];
+}

@@ -22,6 +22,7 @@ import {
   Loader2,
   LayoutDashboard,
   Wand2,
+  Sparkles,
 } from "lucide-react";
 
 const STEPS = [
@@ -30,6 +31,7 @@ const STEPS = [
   { id: "education", label: "Education", icon: <GraduationCap size={18} /> },
   { id: "skills", label: "Skills", icon: <Code size={18} /> },
   { id: "summary", label: "Summary", icon: <FileText size={18} /> },
+  { id: "tailor", label: "AI Tailor", icon: <Wand2 size={18} /> },
 ];
 
 export function AuroraWorkbenchEditor() {
@@ -41,9 +43,19 @@ export function AuroraWorkbenchEditor() {
 }
 
 function AuroraWorkbenchInner() {
-  const { resumeData, isSaving, lastSaved, isLoading } = useResumeEditor();
+  const { resumeData, isSaving, lastSaved, isLoading, setResumeData } =
+    useResumeEditor();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
+  const [isTailoring, setIsTailoring] = useState(false);
+  const [geminiKey, setGeminiKey] = useState(
+    localStorage.getItem("gemini_api_key") || ""
+  );
+  const [jobDetails, setJobDetails] = useState({
+    jobTitle: "",
+    company: "",
+    description: "",
+  });
 
   const currentStep = STEPS[currentStepIndex];
   const isFirst = currentStepIndex === 0;
@@ -70,6 +82,41 @@ function AuroraWorkbenchInner() {
       alert("Failed to export PDF. Please try again later.");
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleTailor = async () => {
+    if (!geminiKey) {
+      alert("Please provide a Gemini API Key first.");
+      return;
+    }
+    if (
+      !jobDetails.jobTitle ||
+      !jobDetails.company ||
+      !jobDetails.description
+    ) {
+      alert("Please fill in all job details.");
+      return;
+    }
+
+    setIsTailoring(true);
+    try {
+      localStorage.setItem("gemini_api_key", geminiKey);
+
+      const { aiApi } = await import("../../../lib/api");
+      const tailoredResume = await aiApi.tailorResume({
+        resumeData,
+        jobDetails,
+        apiKey: geminiKey,
+      });
+
+      setResumeData(tailoredResume);
+      alert("Resume tailored successfully! Preview updated.");
+    } catch (error: any) {
+      console.error("Tailoring failed:", error);
+      alert(`Optimization failed: ${error.message}`);
+    } finally {
+      setIsTailoring(false);
     }
   };
 
@@ -233,15 +280,35 @@ function AuroraWorkbenchInner() {
               {currentStep.id === "education" && <EducationForm />}
               {currentStep.id === "skills" && <SkillsForm />}
               {currentStep.id === "summary" && <SummaryForm />}
+              {currentStep.id === "tailor" && (
+                <AITailorForm
+                  geminiKey={geminiKey}
+                  setGeminiKey={setGeminiKey}
+                  jobDetails={jobDetails}
+                  setJobDetails={setJobDetails}
+                  onTailor={handleTailor}
+                  isTailoring={isTailoring}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         </div>
 
         {/* Bottom Action Bar */}
         <div className="p-4 border-t border-white/10 bg-void-950">
-          <Button className="w-full bg-aurora-teal/10 text-aurora-teal border border-aurora-teal/50 hover:bg-aurora-teal hover:text-void-950 transition-all text-xs font-bold uppercase tracking-wider h-10">
-            Run AI Tailor on this Section
-          </Button>
+          {!isLast ? (
+            <Button
+              onClick={nextStep}
+              className="w-full bg-white/5 text-mist-200 border border-white/10 hover:bg-white/10 transition-all text-[10px] font-bold uppercase tracking-widest h-10 gap-2"
+            >
+              Continue to {STEPS[currentStepIndex + 1].label}
+              <ChevronRight size={14} />
+            </Button>
+          ) : (
+            <div className="flex items-center justify-center h-10 px-4 text-[10px] text-mist-500 uppercase tracking-widest font-mono">
+              Final Optimization Step
+            </div>
+          )}
         </div>
       </div>
 
@@ -639,6 +706,131 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
             </div>
           ))}
         </section>
+      </div>
+    </div>
+  );
+}
+
+function AITailorForm({
+  geminiKey,
+  setGeminiKey,
+  jobDetails,
+  setJobDetails,
+  onTailor,
+  isTailoring,
+}: any) {
+  return (
+    <div className="space-y-8 pb-32">
+      <div className="bg-aurora-teal/5 border border-aurora-teal/10 rounded-xl p-6 relative overflow-hidden group">
+        <div className="absolute -right-8 -top-8 w-32 h-32 bg-aurora-teal/5 rounded-full blur-3xl group-hover:bg-aurora-teal/10 transition-colors" />
+        <div className="relative">
+          <h3 className="text-sm font-bold text-aurora-teal uppercase tracking-widest mb-1 flex items-center gap-2">
+            <Sparkles size={14} /> AI Context
+          </h3>
+          <p className="text-xs text-mist-400 mb-6 font-mono uppercase tracking-tighter">
+            Optimization Engine Config
+          </p>
+
+          <div className="space-y-4">
+            <DenseInput
+              label="Gemini API Key"
+              type="password"
+              value={geminiKey}
+              onChange={(e: any) => setGeminiKey(e.target.value)}
+              placeholder="Paste your API key here..."
+              className="bg-void-950/50"
+            />
+            <p className="text-[10px] text-mist-500 italic">
+              Your key is stored locally and never sent to our servers. Get one
+              at{" "}
+              <a
+                href="https://aistudio.google.com/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-aurora-teal hover:underline"
+              >
+                Google AI Studio
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <h3 className="text-sm font-bold text-mist-100 uppercase tracking-widest flex items-center gap-2">
+          Target Job Details
+        </h3>
+
+        <div className="grid grid-cols-2 gap-4">
+          <DenseInput
+            label="Job Title"
+            value={jobDetails.jobTitle}
+            onChange={(e: any) =>
+              setJobDetails({ ...jobDetails, jobTitle: e.target.value })
+            }
+            placeholder="e.g. Senior Frontend Engineer"
+          />
+          <DenseInput
+            label="Company"
+            value={jobDetails.company}
+            onChange={(e: any) =>
+              setJobDetails({ ...jobDetails, company: e.target.value })
+            }
+            placeholder="e.g. Acme Corp"
+          />
+        </div>
+
+        <DenseInput
+          label="Job Description"
+          isTextArea
+          className="h-64"
+          value={jobDetails.description}
+          onChange={(e: any) =>
+            setJobDetails({ ...jobDetails, description: e.target.value })
+          }
+          placeholder="Paste the full job description here..."
+        />
+
+        <Button
+          variant="primary"
+          className="w-full h-12 text-sm gap-2 font-bold shadow-[0_0_20px_rgba(45,212,191,0.1)] py-4"
+          onClick={onTailor}
+          disabled={isTailoring}
+        >
+          {isTailoring ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              Tailoring with RARe Framework...
+            </>
+          ) : (
+            <>
+              <Wand2 size={18} />
+              Optimize for this Role
+            </>
+          )}
+        </Button>
+      </div>
+
+      <div className="p-4 bg-white/5 rounded-lg border border-white/5 space-y-3">
+        <h4 className="text-[10px] font-bold text-mist-300 uppercase tracking-widest">
+          How it works
+        </h4>
+        <ul className="space-y-2">
+          {[
+            "Readability: Bullets under 280 chars",
+            "Applicability: Keywords aligned to role",
+            "Remarkability: XYZ metric-driven achievements",
+          ].map((text, i) => (
+            <li
+              key={i}
+              className="text-[10px] text-mist-500 flex items-center gap-2"
+            >
+              <CheckCircle2 size={10} className="text-aurora-teal/50" />
+              {text}
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

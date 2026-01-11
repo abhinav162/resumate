@@ -18,6 +18,7 @@ interface ResumeEditorContextType {
   addListItem: (path: "experience" | "education", item: any) => void;
   removeListItem: (path: "experience" | "education", index: number) => void;
   saveResume: () => Promise<void>;
+  setResumeData: React.Dispatch<React.SetStateAction<ResumeData>>;
 }
 
 const ResumeEditorContext = createContext<ResumeEditorContextType | undefined>(
@@ -150,6 +151,7 @@ export const ResumeEditorProvider: React.FC<{
     addListItem,
     removeListItem,
     saveResume,
+    setResumeData,
   };
 
   return (
