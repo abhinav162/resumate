@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import { motion } from "framer-motion";
-import { Plus, FileText, MoreVertical, Clock, TrendingUp } from "lucide-react";
+import { Plus, FileText, Trash2, Clock, TrendingUp } from "lucide-react";
 import { resumesApi } from "../lib/api";
 import { AppLayout } from "../layouts/AppLayout";
 import { Button } from "../components/ui/Button";
@@ -29,6 +29,25 @@ export default function Dashboard() {
 
     fetchResumes();
   }, []);
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this resume? This action cannot be undone.",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await resumesApi.deleteResume(id);
+      setResumes((prev) => prev.filter((r) => r.id !== id));
+    } catch (error) {
+      console.error("Failed to delete resume", error);
+      alert("Failed to delete resume. Please try again.");
+    }
+  };
 
   return (
     <AppLayout>
@@ -121,10 +140,11 @@ export default function Dashboard() {
                       <FileText size={24} />
                     </div>
                     <button
-                      className="text-mist-400 hover:text-mist-100 transition-colors p-2 -mr-2"
-                      onClick={(e) => e.stopPropagation()}
+                      className="text-mist-400 hover:text-aurora-teal transition-colors p-2 -mr-2"
+                      onClick={(e) => handleDelete(resume.id!, e)}
+                      title="Delete Resume"
                     >
-                      <MoreVertical size={18} />
+                      <Trash2 size={18} />
                     </button>
                   </div>
 

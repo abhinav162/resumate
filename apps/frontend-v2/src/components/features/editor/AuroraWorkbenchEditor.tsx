@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
 import { EditorLayout } from "../../../layouts/EditorLayout";
 import { Button } from "../../ui/Button";
@@ -46,13 +46,37 @@ export function AuroraWorkbenchEditor() {
 }
 
 function AuroraWorkbenchInner() {
-  const { resumeData, isSaving, lastSaved, isLoading, setResumeData } =
-    useResumeEditor();
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const {
+    resumeData,
+    isSaving,
+    lastSaved,
+    isLoading,
+    setResumeData,
+    saveResume,
+  } = useResumeEditor();
+
+  // URL Sync: If we started without an ID but now have one (after first save), update URL
+  useEffect(() => {
+    const checkId = async () => {
+      if (!id && !isLoading && lastSaved) {
+        // If we are on /editor and we have successfully saved once
+        // (meaning an ID has been generated in the background by the provider)
+        // we should try to get that ID and update the URL.
+        const currentId = await saveResume();
+        if (currentId) {
+          navigate(`/editor/${currentId}`, { replace: true });
+        }
+      }
+    };
+    checkId();
+  }, [id, isLoading, lastSaved, navigate, saveResume]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [isTailoring, setIsTailoring] = useState(false);
   const [geminiKey, setGeminiKey] = useState(
-    localStorage.getItem("gemini_api_key") || ""
+    localStorage.getItem("gemini_api_key") || "",
   );
   const [jobDetails, setJobDetails] = useState({
     jobTitle: "",
@@ -443,7 +467,7 @@ function SkillsForm() {
           onChange={(e) =>
             updateField(
               "skills",
-              e.target.value.split(",").map((s) => s.trim())
+              e.target.value.split(",").map((s) => s.trim()),
             )
           }
           placeholder="React, TypeScript, Node.js..."
@@ -487,7 +511,7 @@ function ContactForm() {
           onChange={(e: any) =>
             updateField(
               "contact.fullName",
-              `${e.target.value} ${contact.fullName.split(" ")[1] || ""}`
+              `${e.target.value} ${contact.fullName.split(" ")[1] || ""}`,
             )
           }
         />
@@ -497,7 +521,7 @@ function ContactForm() {
           onChange={(e: any) =>
             updateField(
               "contact.fullName",
-              `${contact.fullName.split(" ")[0] || ""} ${e.target.value}`
+              `${contact.fullName.split(" ")[0] || ""} ${e.target.value}`,
             )
           }
         />

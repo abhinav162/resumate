@@ -17,19 +17,19 @@ interface ResumeEditorContextType {
   updateField: (path: string, value: any) => void;
   addListItem: (path: "experience" | "education", item: any) => void;
   removeListItem: (path: "experience" | "education", index: number) => void;
-  saveResume: () => Promise<void>;
+  saveResume: () => Promise<string | undefined>;
   setResumeData: React.Dispatch<React.SetStateAction<ResumeData>>;
 }
 
 const ResumeEditorContext = createContext<ResumeEditorContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const useResumeEditor = () => {
   const context = useContext(ResumeEditorContext);
   if (!context) {
     throw new Error(
-      "useResumeEditor must be used within a ResumeEditorProvider"
+      "useResumeEditor must be used within a ResumeEditorProvider",
     );
   }
   return context;
@@ -57,7 +57,7 @@ export const ResumeEditorProvider: React.FC<{
       experience: [],
       education: [],
       skills: [],
-    }
+    },
   );
   const [isLoading, setIsLoading] = useState(!!resumeId && !initialData);
   const [isSaving, setIsSaving] = useState(false);
@@ -91,23 +91,24 @@ export const ResumeEditorProvider: React.FC<{
 
   // Save function
   const saveResume = useCallback(async () => {
-    if (!isDirty.current) return;
+    if (!isDirty.current) return currentResumeId.current;
 
     setIsSaving(true);
     try {
+      let finalId = currentResumeId.current;
       if (currentResumeId.current) {
         await resumesApi.updateResume(currentResumeId.current, resumeData);
       } else {
-        // Option A: Auto-create on first save if user started with /editor
         const created = await resumesApi.createResume(resumeData);
         currentResumeId.current = created.id;
-        // Should ideally update the URL here, but let's keep it in the context for now
-        // Window.history.pushState(null, '', `/editor/${created.id}`);
+        finalId = created.id;
       }
       setLastSaved(new Date());
       isDirty.current = false;
+      return finalId;
     } catch (error) {
       console.error("Failed to save resume:", error);
+      return undefined;
     } finally {
       setIsSaving(false);
     }
