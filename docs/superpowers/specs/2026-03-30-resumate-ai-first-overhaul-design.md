@@ -287,17 +287,76 @@ type DiffItem = {
 | Tailor to JD | 2 | Core value, most credits consumed here |
 | Download PDF | 0 | Never gate the output |
 
-### Credit packs (prices TBD — validate with users)
-| Pack | Credits | Tailors equivalent |
-|---|---|---|
-| Starter | 10 | 5 tailors |
-| Pro | 25 | 12 tailors |
-| Max | 50 | 25 tailors |
+### Credit packs
+Defined in `apps/backend/src/config/pricing.config.js` — single source of truth. Change prices/credits there, no other code changes needed.
+
+| Pack | Credits | Price | Tailors equivalent |
+|---|---|---|---|
+| Starter | 20 | $10 | 10 tailors |
+| Pro | 50 | $20 | 25 tailors |
+| Max | 120 | $40 | 60 tailors |
+
+> Pricing is intentionally configurable — see §6.4 for the pricing architecture.
+
+### Pricing Architecture (configurable, zero-code-change updates)
+
+**Pattern used by Vercel, Linear, Lemon Squeezy:**
+- All pricing defined in one `pricing.config.js` file — credit amounts, pack names, Stripe Price IDs
+- All credit operation costs defined in one `credits.config.js` file
+- Discounts and coupons handled 100% in Stripe dashboard — no custom discount code needed
+- To change a price: update Stripe product → update the Price ID in `pricing.config.js` → deploy
+
+```js
+// apps/backend/src/config/pricing.config.js
+export const SIGNUP_CREDITS = 5;
+
+export const CREDIT_PACKS = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    credits: 20,
+    priceUsd: 10,
+    stripePriceId: process.env.STRIPE_PRICE_STARTER, // set in .env
+    popular: false,
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    credits: 50,
+    priceUsd: 20,
+    stripePriceId: process.env.STRIPE_PRICE_PRO,
+    popular: true,
+  },
+  {
+    id: 'max',
+    name: 'Max',
+    credits: 120,
+    priceUsd: 40,
+    stripePriceId: process.env.STRIPE_PRICE_MAX,
+    popular: false,
+  },
+];
+
+// apps/backend/src/config/credits.config.js
+export const CREDIT_COSTS = {
+  RESUME_SCORE: 1,
+  RESUME_TAILOR: 2,
+  RESUME_RESCORE: 1,
+};
+```
+
+**How discounts/deals work (no custom code ever):**
+- **Launch deal / % off:** Create a Stripe Coupon (e.g. 30% off), share the coupon code. Stripe handles everything.
+- **Limited-time pricing:** Create a new Stripe Price with the lower amount, swap the `stripePriceId` in `.env`. Revert when done.
+- **Referral credits:** Just add credits directly to user's balance via `/api/credits/grant` (internal endpoint).
+- **Promo codes:** Stripe Promotion Codes — attach to any coupon, set usage limits, expiry. Zero backend work.
+
+**Future subscription tier (V2):** Add a `SUBSCRIPTION_PLANS` array to `pricing.config.js` alongside `CREDIT_PACKS`. The pattern scales cleanly.
 
 ### Free tier
-- 3 credits on signup (covers: 1 score + 1 tailor)
-- Enough to experience full product loop once
-- Conversion trigger: second tailor attempt
+- 5 credits on signup (covers: 1 score + 2 tailors, or 2 scores + 1 tailor)
+- Enough to experience the full product loop meaningfully
+- Conversion trigger: third tailor attempt or second score cycle
 
 ---
 
@@ -325,7 +384,7 @@ type DiffItem = {
 
 ## 10. Open Questions (decide before implementation)
 
-1. **Credit pricing** — what is 1 credit worth in $? Suggested: $0.20–0.30 (so Starter pack ≈ $2–3)
+1. ~~**Credit pricing**~~ — resolved: 5 free on signup, $10 = 20 credits. Full pricing in `pricing.config.js`.
 2. **PDF generation** — keep LaTeX pipeline or switch to Puppeteer/HTML-to-PDF? LaTeX is higher quality but slower.
 3. **File storage** — local `/uploads` for now is fine, but define S3 migration point (probably when deploying to prod)
 4. **ATS scoring algorithm** — pure keyword match vs Gemini-powered semantic match? Gemini is more accurate but costs more per call.
