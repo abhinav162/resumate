@@ -96,6 +96,15 @@ export const resumesApi = {
   deleteResume: async (id: string): Promise<void> => {
     await api.delete(`/resumes/${id}`);
   },
+
+  uploadPdf: async (file: File): Promise<{ resumeId: string; name: string; parsed: any }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/uploads/resume', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data.data;
+  },
 };
 
 /**

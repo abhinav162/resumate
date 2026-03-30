@@ -13,6 +13,7 @@ import {
 import { RootLayout } from "./layouts/RootLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
 import Dashboard from "./pages/Dashboard";
+import UploadPage from "./pages/UploadPage";
 import TailorWorkspace from "./pages/TailorWorkspace";
 import { AuroraWorkbenchEditor } from "./components/features/editor/AuroraWorkbenchEditor";
 import LandingPage from "./pages/LandingPage";
@@ -60,6 +61,19 @@ const router = createBrowserRouter([
           <SignedIn>
             <AuroraWorkbenchEditor />
           </SignedIn>
+        ),
+      },
+      {
+        path: "/upload",
+        element: (
+          <>
+            <SignedIn>
+              <UploadPage />
+            </SignedIn>
+            <SignedOut>
+              <Navigate to="/sign-in" replace />
+            </SignedOut>
+          </>
         ),
       },
       {
