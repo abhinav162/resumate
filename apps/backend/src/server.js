@@ -12,6 +12,7 @@ import resumesRouter from "./routes/resumes.js";
 import tailoredResumesRouter from "./routes/tailored-resumes.js";
 import aiRouter from "./routes/ai.js";
 import uploadsRouter from "./routes/uploads.js";
+import creditsRouter from "./routes/credits.js";
 import { ensureUserExists } from "./middleware/ensureUser.js";
 
 // Load environment variables
@@ -62,6 +63,7 @@ app.use("/api/resumes", resumesRouter);
 app.use("/api/tailored-resumes", tailoredResumesRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/uploads", uploadsRouter);
+app.use("/api/credits", creditsRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
