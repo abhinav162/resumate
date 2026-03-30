@@ -4,6 +4,9 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
 import { EditorLayout } from "../../../layouts/EditorLayout";
 import { Button } from "../../ui/Button";
+import { ScorePill } from "../../ui/ScorePill";
+import { Badge } from "../../ui/Badge";
+import { RequiresCredits } from "../../ui/RequiresCredits";
 import { ResumeEditorProvider, useResumeEditor } from "./ResumeEditorContext";
 import { generateLatexPdf } from "../../../services/latexService";
 import type { ResumeData } from "../../../types";
@@ -55,6 +58,12 @@ function AuroraWorkbenchInner() {
     isLoading,
     setResumeData,
     saveResume,
+    score,
+    suggestions,
+    scoring,
+    triggerScore,
+    acceptSuggestion,
+    dismissSuggestion,
   } = useResumeEditor();
 
   // URL Sync: If we started without an ID but now have one (after first save), update URL
@@ -362,7 +371,47 @@ function AuroraWorkbenchInner() {
         </div>
       </div>
 
-      {/* 3. Right Panel: The Preview (Output) */}
+      {/* 3. AI Suggestions Panel */}
+      <div className="w-72 shrink-0 border-l border-white/10 bg-void-950 overflow-y-auto p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-mist-400 uppercase tracking-wider">AI Suggestions</span>
+          {score !== null && <ScorePill score={score} size="sm" />}
+        </div>
+
+        {scoring && (
+          <div className="text-sm text-mist-400 flex items-center gap-2">
+            <span className="w-3.5 h-3.5 border-2 border-aurora-teal border-t-transparent rounded-full animate-spin inline-block" />
+            Analyzing...
+          </div>
+        )}
+
+        {suggestions.length === 0 && !scoring && (
+          <div className="text-center py-8 space-y-2">
+            <p className="text-mist-500 text-sm">No suggestions yet.</p>
+            <RequiresCredits cost={1}>
+              <Button size="sm" variant="ghost" onClick={triggerScore} disabled={scoring}>
+                Score Resume — 1 credit
+              </Button>
+            </RequiresCredits>
+          </div>
+        )}
+
+        {suggestions.map(s => (
+          <div key={s.bulletId} className="bg-white/[0.03] border border-white/10 rounded-lg p-3 space-y-2">
+            <Badge variant={s.severity === 'error' ? 'danger' : 'warning'}>
+              {s.issueType.replace(/_/g, ' ')}
+            </Badge>
+            <p className="text-xs text-mist-500 line-through leading-relaxed">{s.original}</p>
+            <p className="text-xs text-mist-100 leading-relaxed font-medium">"{s.rewrite}"</p>
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" onClick={() => acceptSuggestion(s.bulletId)}>Accept</Button>
+              <Button size="sm" variant="ghost" onClick={() => dismissSuggestion(s.bulletId)}>Skip</Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 4. Right Panel: The Preview (Output) */}
       <div className="flex-1 bg-void-900 overflow-hidden relative flex flex-col">
         {/* Toolbar */}
         <div className="h-12 border-b border-white/5 flex items-center justify-end px-4 gap-2 text-xs text-mist-400 bg-void-900/50">

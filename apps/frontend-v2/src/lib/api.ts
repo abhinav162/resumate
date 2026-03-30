@@ -97,6 +97,11 @@ export const resumesApi = {
     await api.delete(`/resumes/${id}`);
   },
 
+  scoreResume: async (resumeId: string): Promise<{ score: number; issues: any[]; suggestions: any[] }> => {
+    const response = await api.post(`/ai/score/${resumeId}`);
+    return response.data.data;
+  },
+
   uploadPdf: async (file: File): Promise<{ resumeId: string; name: string; parsed: any }> => {
     const formData = new FormData();
     formData.append('file', file);

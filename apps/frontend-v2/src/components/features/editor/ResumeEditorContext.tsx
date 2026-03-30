@@ -7,7 +7,16 @@ import React, {
   useRef,
 } from "react";
 import { resumesApi } from "../../../lib/api";
+import { useCredits } from "../../../contexts/CreditContext";
 import type { ResumeData } from "../../../types";
+
+export type Suggestion = {
+  bulletId: string;
+  original: string;
+  rewrite: string;
+  issueType: string;
+  severity: 'warn' | 'error';
+};
 
 interface ResumeEditorContextType {
   resumeData: ResumeData;
@@ -19,6 +28,12 @@ interface ResumeEditorContextType {
   removeListItem: (path: "experience" | "education", index: number) => void;
   saveResume: () => Promise<string | undefined>;
   setResumeData: React.Dispatch<React.SetStateAction<ResumeData>>;
+  score: number | null;
+  suggestions: Suggestion[];
+  scoring: boolean;
+  triggerScore: () => Promise<void>;
+  acceptSuggestion: (bulletId: string) => void;
+  dismissSuggestion: (bulletId: string) => void;
 }
 
 const ResumeEditorContext = createContext<ResumeEditorContextType | undefined>(
@@ -62,8 +77,12 @@ export const ResumeEditorProvider: React.FC<{
   const [isLoading, setIsLoading] = useState(!!resumeId && !initialData);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [score, setScore] = useState<number | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [scoring, setScoring] = useState(false);
   const isDirty = useRef(false);
   const currentResumeId = useRef<string | undefined>(resumeId);
+  const { refresh: refreshCredits } = useCredits();
 
   // Sync ref with prop
   useEffect(() => {
@@ -157,6 +176,47 @@ export const ResumeEditorProvider: React.FC<{
     isDirty.current = true;
   };
 
+  const triggerScore = async () => {
+    if (!resumeId) return;
+    setScoring(true);
+    try {
+      const result = await resumesApi.scoreResume(resumeId);
+      setScore(result.score);
+      setSuggestions(result.suggestions ?? []);
+      await refreshCredits();
+    } finally {
+      setScoring(false);
+    }
+  };
+
+  const acceptSuggestion = (bulletId: string) => {
+    const s = suggestions.find(s => s.bulletId === bulletId);
+    if (!s) return;
+    // bulletId format: "experience-0-1" → sectionType, sectionIndex, bulletIndex
+    const parts = bulletId.split('-');
+    const sectionType = parts[0]; // "experience"
+    const sectionIdx = parseInt(parts[1], 10);
+    const bulletIdx = parseInt(parts[2], 10);
+
+    setResumeData((prev: any) => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      if (sectionType === 'experience' && updated.experience?.[sectionIdx]?.responsibilities) {
+        const exp = { ...updated.experience[sectionIdx] };
+        const responsibilities = [...exp.responsibilities];
+        responsibilities[bulletIdx] = s.rewrite;
+        exp.responsibilities = responsibilities;
+        updated.experience = updated.experience.map((e: any, i: number) => i === sectionIdx ? exp : e);
+      }
+      return updated;
+    });
+    setSuggestions(prev => prev.filter(s => s.bulletId !== bulletId));
+  };
+
+  const dismissSuggestion = (bulletId: string) => {
+    setSuggestions(prev => prev.filter(s => s.bulletId !== bulletId));
+  };
+
   const value = {
     resumeData,
     isLoading,
@@ -167,6 +227,12 @@ export const ResumeEditorProvider: React.FC<{
     removeListItem,
     saveResume,
     setResumeData,
+    score,
+    suggestions,
+    scoring,
+    triggerScore,
+    acceptSuggestion,
+    dismissSuggestion,
   };
 
   return (
