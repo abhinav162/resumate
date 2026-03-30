@@ -28,6 +28,10 @@ export const ensureUserExists = async (req, res, next) => {
       console.log(`Auto-created user: ${userId}`);
     }
 
+    // Attach user to request for downstream middleware (e.g. requireCredits)
+    const userRow = existingUser || await database.get('SELECT id FROM users WHERE uuid = ?', [userId]);
+    if (userRow) req.user = { id: userRow.id, uuid: userId };
+
     next();
   } catch (error) {
     console.error("Error in ensureUserExists middleware:", error);
