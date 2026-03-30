@@ -8,9 +8,6 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Use environment variable if set, otherwise fallback to default path
-const dbPath = process.env.DB_PATH || join(__dirname, '../../data/resumate.db');
-
 // Enable verbose mode for debugging
 sqlite3.verbose();
 
@@ -20,6 +17,8 @@ class Database {
   }
 
   async connect() {
+    // Resolve path at connect-time so tests can set DB_PATH before connecting
+    const dbPath = process.env.DB_PATH || join(__dirname, '../../data/resumate.db');
     return new Promise((resolve, reject) => {
       this.db = new sqlite3.Database(dbPath, (err) => {
         if (err) {
