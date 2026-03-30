@@ -1,48 +1,38 @@
-import { type ButtonHTMLAttributes, forwardRef } from "react";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { ButtonHTMLAttributes, forwardRef } from 'react';
 
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Size = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost" | "outline";
-  size?: "sm" | "md" | "lg";
+  variant?: Variant;
+  size?: Size;
+  loading?: boolean;
 }
 
-const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", ...props }, ref) => {
-    return (
-      <button
-        ref={ref}
-        className={cn(
-          "inline-flex items-center justify-center font-medium transition-all active:scale-95 disabled:pointer-events-none disabled:opacity-50",
-          "rounded-full", // Horizon Principle: Pill Shape
-          {
-            // Variants
-            "bg-flash-white text-flash-text hover:scale-105 shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)]":
-              variant === "primary",
-            "bg-void-900 border border-mist-400/20 text-mist-100 hover:border-mist-100/50 hover:bg-void-900/80":
-              variant === "secondary",
-            "hover:bg-mist-100/10 text-mist-400 hover:text-mist-100":
-              variant === "ghost",
-            "border border-mist-400/20 text-mist-400 hover:text-mist-100 hover:border-mist-100":
-              variant === "outline",
+const variantClasses: Record<Variant, string> = {
+  primary: 'bg-indigo-600 text-white hover:bg-indigo-700 border-transparent',
+  secondary: 'bg-white text-ink-primary border-paper-border hover:border-paper-border-strong hover:bg-paper-bg',
+  ghost: 'bg-transparent text-ink-secondary border-transparent hover:bg-paper-bg hover:text-ink-primary',
+  danger: 'bg-danger-bg text-danger-text border-danger-border hover:bg-red-50',
+};
 
-            // Sizes
-            "h-9 px-4 text-xs": size === "sm",
-            "h-11 px-6 text-sm": size === "md",
-            "h-14 px-8 text-base": size === "lg",
-          },
-          className
-        )}
-        {...props}
-      />
-    );
-  }
+const sizeClasses: Record<Size, string> = {
+  sm: 'text-xs px-3 py-1.5 rounded',
+  md: 'text-sm px-4 py-2 rounded',
+  lg: 'text-sm px-5 py-2.5 rounded-lg',
+};
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ variant = 'primary', size = 'md', loading, disabled, className = '', children, ...props }, ref) => (
+    <button
+      ref={ref}
+      disabled={disabled || loading}
+      className={`inline-flex items-center justify-center gap-2 font-sans font-medium border transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      {...props}
+    >
+      {loading && <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+      {children}
+    </button>
+  )
 );
-
-Button.displayName = "Button";
-
-export { Button };
+Button.displayName = 'Button';
