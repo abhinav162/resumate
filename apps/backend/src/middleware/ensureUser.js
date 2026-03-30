@@ -1,4 +1,5 @@
 import database from "../config/database.js";
+import { SIGNUP_CREDITS } from "../config/pricing.config.js";
 
 /**
  * Middleware to ensure user exists in database
@@ -21,8 +22,8 @@ export const ensureUserExists = async (req, res, next) => {
     if (!existingUser) {
       // Auto-create user
       await database.run(
-        "INSERT INTO users (uuid, email, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))",
-        [userId, `${userId}@clerk.user`]
+        "INSERT INTO users (uuid, email, credits, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))",
+        [userId, `${userId}@clerk.user`, SIGNUP_CREDITS]
       );
       console.log(`Auto-created user: ${userId}`);
     }
