@@ -1,18 +1,47 @@
-import React from "react";
+import { ReactNode } from 'react';
+import { NavLink } from 'react-router-dom';
+import { CreditCounter } from '../components/ui/CreditCounter';
 
-interface AppLayoutProps {
-  children: React.ReactNode;
-}
+const navItems = [
+  { to: '/dashboard', label: 'My Resumes', icon: '📄' },
+  { to: '/tailor', label: 'Tailor', icon: '✨' },
+];
 
-export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
+export function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-void-950 text-mist-400 font-sans selection:bg-aurora-teal selection:text-void-950 overflow-x-hidden relative">
-      {/* Decorative Blobs */}
-      <div className="fixed top-[-20%] left-[-10%] w-[60vw] h-[60vw] bg-aurora-purple/10 blur-[130px] rounded-full pointer-events-none mix-blend-screen" />
-      <div className="fixed bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-aurora-teal/10 blur-[130px] rounded-full pointer-events-none mix-blend-screen" />
+    <div className="flex min-h-screen bg-paper-bg">
+      {/* Sidebar */}
+      <aside className="w-52 shrink-0 border-r border-paper-border bg-paper-surface flex flex-col">
+        <div className="p-4 border-b border-paper-border">
+          <span className="font-heading font-bold text-lg text-ink-primary tracking-tight">
+            resu<span className="text-indigo-600">mate</span>
+          </span>
+        </div>
+        <nav className="flex-1 p-3 space-y-0.5">
+          {navItems.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-ink-secondary hover:bg-paper-bg hover:text-ink-primary'
+                }`
+              }
+            >
+              <span>{item.icon}</span>
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="p-3 border-t border-paper-border">
+          <CreditCounter />
+        </div>
+      </aside>
 
-      {/* Main Content */}
-      <main className="relative z-10 w-full">{children}</main>
+      {/* Main */}
+      <main className="flex-1 overflow-auto">{children}</main>
     </div>
   );
-};
+}

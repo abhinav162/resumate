@@ -152,6 +152,7 @@ const router = createBrowserRouter([
 import { useAuth } from "@clerk/clerk-react";
 import { useEffect } from "react";
 import { setAuthHeaders } from "./lib/api";
+import { CreditProvider } from "./contexts/CreditContext";
 
 export default function AppRouter() {
   return (
@@ -178,5 +179,5 @@ function AuthInitializer({ children }: { children: React.ReactNode }) {
     syncAuth();
   }, [getToken, userId]);
 
-  return <>{children}</>;
+  return <CreditProvider>{children}</CreditProvider>;
 }

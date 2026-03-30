@@ -239,4 +239,22 @@ export const aiApi = {
   },
 };
 
+/**
+ * Credits methods
+ */
+export const creditsApi = {
+  getBalance: async (): Promise<{ balance: number }> => {
+    const response = await api.get('/credits/balance');
+    return response.data.data;
+  },
+  getPacks: async () => {
+    const response = await api.get('/credits/packs');
+    return response.data.data;
+  },
+  createCheckout: async (packId: string): Promise<{ url: string }> => {
+    const response = await api.post('/credits/checkout', { packId });
+    return response.data.data;
+  },
+};
+
 export default api;
