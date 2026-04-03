@@ -1,176 +1,151 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { ResumeSelector } from "../components/features/tailor/ResumeSelector";
-import { JobDescriptionInput } from "../components/features/tailor/JobDescriptionInput";
-import { AnalysisOverlay } from "../components/features/tailor/AnalysisOverlay";
-import { ResultsView } from "../components/features/tailor/ResultsView";
-import { Button } from "../components/ui/Button";
-import { Sparkles, ArrowRight, AlertCircle } from "lucide-react";
-import { resumesApi, aiApi } from "../lib/api";
+import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Button } from '../components/ui/Button';
+import { ScorePill } from '../components/ui/ScorePill';
+import { Badge } from '../components/ui/Badge';
+import { RequiresCredits } from '../components/ui/RequiresCredits';
+import { aiApi, resumesApi } from '../lib/api';
+import { useCredits } from '../contexts/CreditContext';
+import { CREDIT_COSTS } from '../config/pricing';
+
+type TailorResult = {
+  tailoredResumeId: string;
+  diff: { sectionType: string; bulletId: string; original: string; rewritten: string; reason: string }[];
+  beforeScore: number;
+  afterScore: number;
+};
 
 export default function TailorWorkspace() {
-  const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [jobDescription, setJobDescription] = useState("");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isComplete, setIsComplete] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [resumeId, setResumeId] = useState(searchParams.get('resumeId') ?? '');
+  const [jobTitle, setJobTitle] = useState('');
+  const [company, setCompany] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tailoredResult, setTailoredResult] = useState<any>(null); // Store API result
+  const [result, setResult] = useState<TailorResult | null>(null);
+  const { refresh } = useCredits();
 
-  // Simple reset handler
-  const handleReset = () => {
-    setIsComplete(false);
-    setIsAnalyzing(false);
-    setJobDescription("");
-    setSelectedResumeId(null);
-    setTailoredResult(null);
+  async function handleTailor() {
+    setLoading(true);
     setError(null);
-  };
-
-  const handleStart = async () => {
-    if (!selectedResumeId || !jobDescription) return;
-
-    setIsAnalyzing(true);
-    setError(null);
-
     try {
-      // 1. Fetch full resume details
-      const resumeData = await resumesApi.getResume(selectedResumeId);
-
-      // 2. Trigger AI Tailoring
-      const tailoredResume = await aiApi.tailorResume({
-        resumeData: resumeData,
-        jobDetails: {
-          jobTitle: "Target Role",
-          company: "Target Company",
-          description: jobDescription,
-        },
-        apiKey:
-          localStorage.getItem("gemini_api_key") ||
-          import.meta.env.VITE_GEMINI_API_KEY ||
-          "demo-key",
-      });
-
-      setTailoredResult(tailoredResume);
+      const data = await aiApi.tailorResume({ resumeId, jobTitle, company, jobDescription });
+      setResult(data);
+      await refresh();
     } catch (err: any) {
-      console.error("Optimisation Error:", err);
-      setError(err.message || "Something went wrong during optimization");
-      setIsAnalyzing(false);
+      setError(err?.response?.data?.message ?? 'Tailoring failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  };
-
-  // Called by AnalysisOverlay when its animation is done
-  const handleAnalysisAnimationComplete = () => {
-    // Only proceed if we have a result or if we heavily mocked it for demo
-    // In this hybrid approach, we wait for API *and* Animation.
-    if (tailoredResult || error) {
-      if (!error) {
-        setIsAnalyzing(false);
-        setIsComplete(true);
-      }
-    } else {
-      // API still running? In a perfect world we'd wait.
-      // For now, if animation finishes but API is pending, the Overlay
-      // might just unmount. We should probably keep showing it
-      // or have a specific "Waiting for Server" state.
-      // Simplification: We'll assume API is faster than the 8s animation
-      // or we just transition anyway (mocking the result if needed for stability).
-
-      setIsAnalyzing(false);
-      setIsComplete(true);
-    }
-  };
-
-  const canStart = selectedResumeId && jobDescription.length > 20;
-
-  if (isComplete) {
-    return <ResultsView onReset={handleReset} result={tailoredResult} />;
   }
 
   return (
-    <div className="container mx-auto px-4 md:px-6 py-12 max-w-5xl">
-      <AnalysisOverlay
-        isVisible={isAnalyzing}
-        onComplete={handleAnalysisAnimationComplete}
-      />
+    <div className="flex h-screen bg-paper-bg">
+      {/* Left: Input */}
+      <div className="w-72 shrink-0 border-r border-paper-border bg-paper-surface p-5 flex flex-col gap-4">
+        <h1 className="font-heading font-bold text-lg text-ink-primary">Tailor Resume</h1>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-12 text-center"
-      >
-        <h1 className="text-4xl md:text-5xl font-serif text-mist-100 mb-4">
-          Tailor your Application
-        </h1>
-        <p className="text-mist-400 text-lg max-w-2xl mx-auto">
-          Select a base resume and paste the job description. Our AI will
-          optimize your keywords and relevance.
-        </p>
-      </motion.div>
-
-      {error && (
-        <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-200 flex items-center gap-2">
-          <AlertCircle size={20} />
-          <span>{error}</span>
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Resume ID</label>
+          <input
+            className="w-full border border-paper-border rounded px-3 py-2 text-sm text-ink-primary bg-paper-bg focus:outline-none focus:border-indigo-400"
+            placeholder="Paste resume ID"
+            value={resumeId}
+            onChange={e => setResumeId(e.target.value)}
+          />
         </div>
-      )}
 
-      <div className="space-y-12">
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <ResumeSelector
-            selectedId={selectedResumeId}
-            onSelect={setSelectedResumeId}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Job Title</label>
+          <input
+            className="w-full border border-paper-border rounded px-3 py-2 text-sm text-ink-primary bg-paper-bg focus:outline-none focus:border-indigo-400"
+            placeholder="e.g. Software Engineer"
+            value={jobTitle}
+            onChange={e => setJobTitle(e.target.value)}
           />
-        </motion.section>
+        </div>
 
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <JobDescriptionInput
-            label="Target Job Description"
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Company</label>
+          <input
+            className="w-full border border-paper-border rounded px-3 py-2 text-sm text-ink-primary bg-paper-bg focus:outline-none focus:border-indigo-400"
+            placeholder="e.g. Google"
+            value={company}
+            onChange={e => setCompany(e.target.value)}
+          />
+        </div>
+
+        <div className="flex-1 space-y-1">
+          <label className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Job Description</label>
+          <textarea
+            className="w-full h-40 border border-paper-border rounded px-3 py-2 text-sm text-ink-primary bg-paper-bg focus:outline-none focus:border-indigo-400 resize-none"
+            placeholder="Paste the job description..."
             value={jobDescription}
-            onChange={(e) => setJobDescription(e.target.value)}
+            onChange={e => setJobDescription(e.target.value)}
           />
-        </motion.section>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="flex justify-center pt-8"
-        >
+        {error && <p className="text-xs text-danger-text bg-danger-bg border border-danger-border rounded p-2">{error}</p>}
+
+        <RequiresCredits cost={CREDIT_COSTS.RESUME_TAILOR}>
           <Button
+            className="w-full"
             size="lg"
-            className={clsx(
-              "w-full max-w-sm text-lg gap-2 shadow-2xl shadow-aurora-purple/20 transition-all duration-500",
-              canStart
-                ? "opacity-100 translate-y-0"
-                : "opacity-50 grayscale cursor-not-allowed"
-            )}
-            disabled={!canStart || isAnalyzing}
-            onClick={handleStart}
+            onClick={handleTailor}
+            loading={loading}
+            disabled={!resumeId || !jobTitle || !company || !jobDescription}
           >
-            <Sparkles
-              size={20}
-              className={canStart && !isAnalyzing ? "animate-pulse" : ""}
-            />
-            <span>{isAnalyzing ? "Optimizing..." : "Start Optimization"}</span>
-            <ArrowRight
-              size={20}
-              className="group-hover:translate-x-1 transition-transform"
-            />
+            ✨ Tailor — 2 credits
           </Button>
-        </motion.div>
+        </RequiresCredits>
+      </div>
+
+      {/* Right: Results */}
+      <div className="flex-1 p-6 overflow-y-auto">
+        {!result && !loading && (
+          <div className="h-full flex items-center justify-center text-center">
+            <div className="space-y-2">
+              <p className="text-3xl">✨</p>
+              <p className="font-heading font-semibold text-ink-primary">Results will appear here</p>
+              <p className="text-sm text-ink-muted">Fill in the form and click Tailor</p>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-6 max-w-2xl">
+            {/* Score banner */}
+            <div className="bg-paper-surface border border-paper-border rounded-xl p-5 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-ink-secondary mb-1">ATS Match Score</p>
+                <div className="flex items-center gap-3">
+                  <ScorePill score={result.beforeScore} />
+                  <span className="text-ink-muted">→</span>
+                  <ScorePill score={result.afterScore} size="lg" />
+                  <Badge variant="success">+{result.afterScore - result.beforeScore} pts</Badge>
+                </div>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => window.location.href = `/editor/${result.tailoredResumeId}`}>
+                Open Tailored Resume →
+              </Button>
+            </div>
+
+            {/* Diff list */}
+            <div className="space-y-3">
+              <h2 className="font-heading font-semibold text-ink-primary">What Changed</h2>
+              {result.diff.map((item, i) => (
+                <div key={i} className="bg-paper-surface border border-paper-border rounded-lg p-4 space-y-2">
+                  <Badge variant="default">{item.sectionType}</Badge>
+                  <p className="text-xs text-danger-text line-through leading-relaxed">{item.original}</p>
+                  <p className="text-xs text-success-text leading-relaxed font-medium">{item.rewritten}</p>
+                  <p className="text-xs text-ink-muted italic">{item.reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
-}
-
-function clsx(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(" ");
 }

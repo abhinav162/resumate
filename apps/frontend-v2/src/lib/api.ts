@@ -192,64 +192,14 @@ export const aiApi = {
     };
   },
 
-  tailorResume: async (data: {
-    resumeData: ResumeData;
-    jobDetails: {
-      jobTitle: string;
-      company: string;
-      description: string;
-    };
-    apiKey: string;
-    useRaReOptimization?: boolean;
-  }): Promise<ResumeData> => {
-    // Map frontend structure to backend structure
-    const backendData = {
-      ...data,
-      resumeData: {
-        ...data.resumeData,
-        name: data.resumeData.title,
-        contact: {
-          ...data.resumeData.contact,
-          name: data.resumeData.contact.fullName,
-        },
-        experience: data.resumeData.experience.map(exp => ({
-          ...exp,
-          responsibilities: exp.description.split('\n').filter(r => r.trim())
-        })),
-        education: data.resumeData.education.map(edu => ({
-          ...edu,
-          institution: edu.school,
-          graduationDate: edu.year
-        }))
-      }
-    };
-
-    const response = await api.post<ApiResponse<any>>('/ai/tailor-resume', backendData);
-    if (!response.data.data) throw new Error('Failed to tailor resume');
-
-    // Map back
-    const result = response.data.data;
-    return {
-      ...data.resumeData,
-      contact: {
-        ...data.resumeData.contact,
-        fullName: result.contact?.name || data.resumeData.contact.fullName,
-      },
-      summary: result.summary || data.resumeData.summary,
-      experience: (result.experience || []).map((exp: any) => ({
-        company: exp.company || '',
-        role: exp.role || '',
-        startDate: exp.startDate || '',
-        endDate: exp.endDate || '',
-        description: (exp.responsibilities || []).join('\n'),
-      })),
-      education: (result.education || []).map((edu: any) => ({
-        school: edu.institution || '',
-        degree: edu.degree || '',
-        year: edu.graduationDate || '',
-      })),
-      skills: result.skills || data.resumeData.skills,
-    };
+  tailorResume: async (payload: {
+    resumeId: string;
+    jobTitle: string;
+    company: string;
+    jobDescription: string;
+  }): Promise<{ tailoredResumeId: string; tailoredResume: any; diff: any[]; beforeScore: number; afterScore: number }> => {
+    const response = await api.post('/ai/tailor', payload);
+    return response.data.data;
   },
 };
 
