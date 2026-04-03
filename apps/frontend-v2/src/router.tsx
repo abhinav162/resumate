@@ -15,6 +15,7 @@ import { AuthLayout } from "./layouts/AuthLayout";
 import Dashboard from "./pages/Dashboard";
 import UploadPage from "./pages/UploadPage";
 import TailorWorkspace from "./pages/TailorWorkspace";
+import CreditsPage from "./pages/CreditsPage";
 import { AuroraWorkbenchEditor } from "./components/features/editor/AuroraWorkbenchEditor";
 import LandingPage from "./pages/LandingPage";
 import { dark } from "@clerk/themes";
@@ -82,6 +83,19 @@ const router = createBrowserRouter([
           <SignedIn>
             <TailorWorkspace />
           </SignedIn>
+        ),
+      },
+      {
+        path: "/credits",
+        element: (
+          <>
+            <SignedIn>
+              <CreditsPage />
+            </SignedIn>
+            <SignedOut>
+              <Navigate to="/sign-in" replace />
+            </SignedOut>
+          </>
         ),
       },
     ],
