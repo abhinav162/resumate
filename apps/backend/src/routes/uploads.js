@@ -1,6 +1,8 @@
 import express from 'express';
 import multer from 'multer';
-import pdfParse from 'pdf-parse';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
 import { v4 as uuidv4 } from 'uuid';
 import database from '../config/database.js';
 import { parseResumeText } from '../services/aiService.js';
