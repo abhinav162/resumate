@@ -11,6 +11,7 @@ import {
   SignUp,
 } from "@clerk/clerk-react";
 import { RootLayout } from "./layouts/RootLayout";
+import { AppShellLayout } from "./layouts/AppShellLayout";
 import { AuthLayout } from "./layouts/AuthLayout";
 import Dashboard from "./pages/Dashboard";
 import UploadPage from "./pages/UploadPage";
@@ -28,73 +29,53 @@ if (!PUBLISHABLE_KEY) {
 }
 
 const router = createBrowserRouter([
+  // Bare layout: public pages + full-screen editor
   {
     element: <RootLayout />,
     children: [
+      { path: "/", element: <LandingPage /> },
       {
-        path: "/",
-        element: <LandingPage />,
-      },
-      {
-        path: "/dashboard",
+        path: "/upload",
         element: (
           <>
-            <SignedIn>
-              <Dashboard />
-            </SignedIn>
-            <SignedOut>
-              <Navigate to="/sign-in" replace />
-            </SignedOut>
+            <SignedIn><UploadPage /></SignedIn>
+            <SignedOut><Navigate to="/sign-in" replace /></SignedOut>
           </>
         ),
       },
       {
         path: "/editor",
-        element: (
-          <SignedIn>
-            <AuroraWorkbenchEditor />
-          </SignedIn>
-        ),
+        element: <SignedIn><AuroraWorkbenchEditor /></SignedIn>,
       },
       {
         path: "/editor/:id",
-        element: (
-          <SignedIn>
-            <AuroraWorkbenchEditor />
-          </SignedIn>
-        ),
+        element: <SignedIn><AuroraWorkbenchEditor /></SignedIn>,
       },
+    ],
+  },
+  // App shell (sidebar): dashboard, tailor, credits
+  {
+    element: <AppShellLayout />,
+    children: [
       {
-        path: "/upload",
+        path: "/dashboard",
         element: (
           <>
-            <SignedIn>
-              <UploadPage />
-            </SignedIn>
-            <SignedOut>
-              <Navigate to="/sign-in" replace />
-            </SignedOut>
+            <SignedIn><Dashboard /></SignedIn>
+            <SignedOut><Navigate to="/sign-in" replace /></SignedOut>
           </>
         ),
       },
       {
         path: "/tailor",
-        element: (
-          <SignedIn>
-            <TailorWorkspace />
-          </SignedIn>
-        ),
+        element: <SignedIn><TailorWorkspace /></SignedIn>,
       },
       {
         path: "/credits",
         element: (
           <>
-            <SignedIn>
-              <CreditsPage />
-            </SignedIn>
-            <SignedOut>
-              <Navigate to="/sign-in" replace />
-            </SignedOut>
+            <SignedIn><CreditsPage /></SignedIn>
+            <SignedOut><Navigate to="/sign-in" replace /></SignedOut>
           </>
         ),
       },

@@ -208,7 +208,7 @@ function AuroraWorkbenchInner() {
                               relative w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 group
                               ${
                                 isActive
-                                  ? "bg-aurora-teal text-void-950 shadow-[0_0_10px_rgba(20,184,166,0.3)]"
+                                  ? "bg-indigo-600 text-white shadow-sm"
                                   : "text-mist-400 hover:text-mist-100 hover:bg-white/5"
                               }
                           `}
@@ -222,11 +222,11 @@ function AuroraWorkbenchInner() {
 
                 {/* Status Dot */}
                 {isCompleted && !isActive && (
-                  <div className="absolute -top-1 -right-1 text-aurora-teal bg-void-950 rounded-full">
+                  <div className="absolute -top-1 -right-1 text-indigo-500 bg-void-950 rounded-full">
                     <CheckCircle2
                       size={12}
                       fill="currentColor"
-                      className="text-aurora-teal"
+                      className="text-indigo-500"
                     />
                   </div>
                 )}
@@ -740,7 +740,7 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
   return (
     <div className="p-12 h-full flex flex-col text-gray-800">
       <header className="border-b-2 border-gray-900 pb-6 mb-8">
-        <h1 className="text-5xl font-serif font-bold text-gray-900 mb-3 uppercase tracking-tight">
+        <h1 className="text-5xl font-heading font-bold text-gray-900 mb-3 uppercase tracking-tight">
           {resumeData.contact.fullName || "Your Name"}
         </h1>
         <div className="flex gap-4 text-sm font-medium tracking-wide text-gray-600 uppercase">
