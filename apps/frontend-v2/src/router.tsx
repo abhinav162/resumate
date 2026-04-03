@@ -165,7 +165,7 @@ import { CreditProvider } from "./contexts/CreditContext";
 
 export default function AppRouter() {
   return (
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/" signInFallbackRedirectUrl="/dashboard" signUpFallbackRedirectUrl="/dashboard">
       <AuthInitializer>
         <RouterProvider router={router} />
       </AuthInitializer>
