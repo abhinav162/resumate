@@ -48,5 +48,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/your-username/resumate.git"
+  },
+  "dependencies": {
+    "stripe": "^21.0.1"
   }
 }
