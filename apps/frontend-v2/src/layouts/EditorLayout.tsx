@@ -19,42 +19,42 @@ export function EditorLayout({
   isExporting = false,
 }: EditorLayoutProps) {
   return (
-    <div className="h-screen w-screen bg-void-950 flex flex-col overflow-hidden font-sans text-mist-100">
+    <div className="h-screen w-screen bg-paper-bg flex flex-col overflow-hidden font-sans text-ink-primary">
       {/* 1. Global Header (Thin: 48px) */}
-      <header className="h-[48px] border-b border-white/10 bg-void-950 flex items-center justify-between px-4 shrink-0 z-50">
+      <header className="h-[48px] border-b border-paper-border bg-paper-surface flex items-center justify-between px-4 shrink-0 z-50">
         <div className="flex items-center gap-4">
           <Link
             to="/api/resumes"
-            className="text-mist-400 hover:text-white transition-colors"
+            className="text-ink-secondary hover:text-ink-primary transition-colors"
           >
             <ArrowLeft size={16} />
           </Link>
-          <div className="h-4 w-px bg-white/10" />
+          <div className="h-4 w-px bg-paper-border" />
           <div className="flex items-center gap-2">
             <span className="font-bold tracking-tight text-sm">Resumate</span>
-            <span className="text-mist-500 text-xs">/</span>
+            <span className="text-ink-secondary text-xs">/</span>
             <input
               type="text"
               defaultValue={title}
-              className="bg-transparent border-none p-0 text-sm focus:ring-0 text-mist-100 font-medium w-48 placeholder:text-mist-500"
+              className="bg-transparent border-none p-0 text-sm focus:ring-0 text-ink-primary font-medium w-48 placeholder:text-ink-secondary"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           {actions}
-          <div className="h-4 w-px bg-white/10 mx-2" />
+          <div className="h-4 w-px bg-paper-border mx-2" />
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0 text-mist-400"
+            className="h-8 w-8 p-0 text-ink-secondary"
           >
             <Share2 size={14} />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0 text-mist-400"
+            className="h-8 w-8 p-0 text-ink-secondary"
           >
             <Maximize2 size={14} />
           </Button>

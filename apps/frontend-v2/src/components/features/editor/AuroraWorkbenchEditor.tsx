@@ -27,7 +27,7 @@ import {
   Wand2,
   Sparkles,
 } from "lucide-react";
-import { dark } from "@clerk/themes";
+// Paper light theme — no dark import needed
 
 const STEPS = [
   { id: "contact", label: "Contact", icon: <User size={18} /> },
@@ -158,8 +158,8 @@ function AuroraWorkbenchInner() {
 
   if (isLoading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-void-950">
-        <Loader2 className="w-8 h-8 text-aurora-teal animate-spin" />
+      <div className="h-screen w-screen flex items-center justify-center bg-paper-bg">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
       </div>
     );
   }
@@ -172,16 +172,16 @@ function AuroraWorkbenchInner() {
       actions={
         <div className="flex items-center gap-2 mr-4">
           {isSaving ? (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/5 border border-white/5">
-              <Loader2 size={12} className="animate-spin text-aurora-teal" />
-              <span className="text-[10px] text-mist-400 uppercase tracking-wider font-mono">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-paper-bg border border-paper-border">
+              <Loader2 size={12} className="animate-spin text-indigo-600" />
+              <span className="text-[10px] text-ink-secondary uppercase tracking-wider font-mono">
                 Saving...
               </span>
             </div>
           ) : lastSaved ? (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/5 border border-white/5">
-              <CheckCircle2 size={12} className="text-aurora-teal" />
-              <span className="text-[10px] text-mist-400 uppercase tracking-wider font-mono">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-paper-bg border border-paper-border">
+              <CheckCircle2 size={12} className="text-indigo-600" />
+              <span className="text-[10px] text-ink-secondary uppercase tracking-wider font-mono">
                 Saved{" "}
                 {lastSaved.toLocaleTimeString([], {
                   hour: "2-digit",
@@ -194,7 +194,7 @@ function AuroraWorkbenchInner() {
       }
     >
       {/* 1. Left Rail: Navigation */}
-      <div className="w-16 bg-void-950 border-r border-white/10 flex flex-col items-center py-4 gap-4 z-20">
+      <div className="w-16 bg-paper-surface border-r border-paper-border flex flex-col items-center py-4 gap-4 z-20">
         <div className="flex flex-col items-center gap-4 flex-1">
           {STEPS.map((step, index) => {
             const isActive = index === currentStepIndex;
@@ -209,20 +209,20 @@ function AuroraWorkbenchInner() {
                               ${
                                 isActive
                                   ? "bg-indigo-600 text-white shadow-sm"
-                                  : "text-mist-400 hover:text-mist-100 hover:bg-white/5"
+                                  : "text-ink-secondary hover:text-ink-primary hover:bg-paper-bg"
                               }
                           `}
               >
                 {step.icon}
 
                 {/* Tooltip */}
-                <div className="absolute left-14 bg-void-900 border border-white/10 px-2 py-1 rounded text-[10px] uppercase tracking-wider text-mist-100 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl">
+                <div className="absolute left-14 bg-paper-surface border border-paper-border px-2 py-1 rounded text-[10px] uppercase tracking-wider text-ink-primary opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-card">
                   {step.label}
                 </div>
 
                 {/* Status Dot */}
                 {isCompleted && !isActive && (
-                  <div className="absolute -top-1 -right-1 text-indigo-500 bg-void-950 rounded-full">
+                  <div className="absolute -top-1 -right-1 text-indigo-500 bg-paper-surface rounded-full">
                     <CheckCircle2
                       size={12}
                       fill="currentColor"
@@ -236,54 +236,54 @@ function AuroraWorkbenchInner() {
         </div>
 
         {/* Global Navigation (Bottom of Rail) */}
-        <div className="flex flex-col items-center gap-4 pt-4 border-t border-white/5 mt-auto">
+        <div className="flex flex-col items-center gap-4 pt-4 border-t border-paper-border mt-auto">
           <Link
             to="/dashboard"
-            className="w-10 h-10 rounded-lg flex items-center justify-center text-mist-400 hover:text-mist-100 hover:bg-white/5 transition-all group relative"
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-ink-secondary hover:text-ink-primary hover:bg-paper-bg transition-all group relative"
           >
             <LayoutDashboard size={18} />
-            <div className="absolute left-14 bg-void-900 border border-white/10 px-2 py-1 rounded text-[10px] uppercase tracking-wider text-mist-100 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl">
+            <div className="absolute left-14 bg-paper-surface border border-paper-border px-2 py-1 rounded text-[10px] uppercase tracking-wider text-ink-primary opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-card">
               Dashboard
             </div>
           </Link>
           <Link
             to="/tailor"
-            className="w-10 h-10 rounded-lg flex items-center justify-center text-mist-400 hover:text-mist-100 hover:bg-white/5 transition-all group relative"
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-ink-secondary hover:text-ink-primary hover:bg-paper-bg transition-all group relative"
           >
             <Wand2 size={18} />
-            <div className="absolute left-14 bg-void-900 border border-white/10 px-2 py-1 rounded text-[10px] uppercase tracking-wider text-mist-100 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl">
+            <div className="absolute left-14 bg-paper-surface border border-paper-border px-2 py-1 rounded text-[10px] uppercase tracking-wider text-ink-primary opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-card">
               Tailor
             </div>
           </Link>
           <div className="pt-2">
             <UserButton
               appearance={{
-                baseTheme: dark,
                 variables: {
-                  colorText: "#F4F4F5",
-                  colorPrimary: "#14B8A6",
-                  colorTextSecondary: "#A1A1AA",
-                  colorInputBackground: "#18181B",
-                  colorInputText: "#F4F4F5",
+                  colorBackground: "#ffffff",
+                  colorText: "#0f0f0f",
+                  colorPrimary: "#4f46e5",
+                  colorTextSecondary: "#555555",
+                  colorInputBackground: "#fafaf8",
+                  colorInputText: "#0f0f0f",
                 },
                 elements: {
                   avatarBox:
-                    "w-8 h-8 rounded-lg border border-white/10 overflow-hidden",
+                    "w-8 h-8 rounded-lg border border-paper-border overflow-hidden",
                   rootBox: "w-full flex justify-center",
                   card: "bg-transparent shadow-none w-full max-w-full p-0",
-                  headerTitle: "text-mist-100 font-serif text-center",
-                  headerSubtitle: "text-mist-400 text-center",
+                  headerTitle: "text-ink-primary font-serif text-center",
+                  headerSubtitle: "text-ink-secondary text-center",
                   socialButtonsBlockButton:
-                    "bg-void-950/50 border border-white/10 text-mist-100 hover:bg-white/5 transition-colors",
-                  dividerLine: "bg-white/10",
+                    "bg-paper-bg border border-paper-border text-ink-primary hover:bg-paper-bg transition-colors",
+                  dividerLine: "bg-paper-border",
                   dividerText:
-                    "text-mist-400 font-mono text-xs uppercase tracking-wider",
-                  formFieldLabel: "text-mist-400 font-medium",
+                    "text-ink-secondary font-mono text-xs uppercase tracking-wider",
+                  formFieldLabel: "text-ink-secondary font-medium",
                   formFieldInput:
-                    "bg-void-950/50 border-white/10 text-mist-100 focus:border-aurora-purple rounded-xl transition-all",
-                  footerActionText: "text-mist-400",
+                    "bg-paper-bg border-paper-border text-ink-primary focus:border-indigo-400 rounded-xl transition-all",
+                  footerActionText: "text-ink-secondary",
                   footerActionLink:
-                    "text-aurora-teal hover:text-aurora-teal/80 font-medium",
+                    "text-indigo-600 hover:text-indigo-700 font-medium",
                 },
               }}
             />
@@ -292,11 +292,11 @@ function AuroraWorkbenchInner() {
       </div>
 
       {/* 2. Middle Panel: The Editor (Input) */}
-      <div className="w-[40%] min-w-[400px] max-w-[600px] bg-void-950 flex flex-col border-r border-white/10 relative z-10">
+      <div className="w-[40%] min-w-[400px] max-w-[600px] bg-paper-bg flex flex-col border-r border-paper-border relative z-10">
         {/* Rigid Header for Step */}
-        <div className="h-14 border-b border-white/10 flex items-center justify-between px-6 bg-void-950/50 backdrop-blur-sm sticky top-0 z-10">
-          <h2 className="text-lg font-bold text-mist-100 flex items-center gap-2">
-            <span className="text-aurora-teal opacity-50 font-mono text-sm">
+        <div className="h-14 border-b border-paper-border flex items-center justify-between px-6 bg-paper-surface/50 backdrop-blur-sm sticky top-0 z-10">
+          <h2 className="text-lg font-bold text-ink-primary flex items-center gap-2">
+            <span className="text-indigo-300 font-mono text-sm">
               0{currentStepIndex + 1}.
             </span>
             {currentStep.label}
@@ -354,17 +354,17 @@ function AuroraWorkbenchInner() {
         </div>
 
         {/* Bottom Action Bar */}
-        <div className="p-4 border-t border-white/10 bg-void-950">
+        <div className="p-4 border-t border-paper-border bg-paper-bg">
           {!isLast ? (
             <Button
               onClick={nextStep}
-              className="w-full bg-white/5 text-mist-200 border border-white/10 hover:bg-white/10 transition-all text-[10px] font-bold uppercase tracking-widest h-10 gap-2"
+              className="w-full bg-paper-surface text-ink-primary border border-paper-border hover:bg-indigo-50 transition-all text-[10px] font-bold uppercase tracking-widest h-10 gap-2"
             >
               Continue to {STEPS[currentStepIndex + 1].label}
               <ChevronRight size={14} />
             </Button>
           ) : (
-            <div className="flex items-center justify-center h-10 px-4 text-[10px] text-mist-500 uppercase tracking-widest font-mono">
+            <div className="flex items-center justify-center h-10 px-4 text-[10px] text-ink-muted uppercase tracking-widest font-mono">
               Final Optimization Step
             </div>
           )}
@@ -372,22 +372,22 @@ function AuroraWorkbenchInner() {
       </div>
 
       {/* 3. AI Suggestions Panel */}
-      <div className="w-72 shrink-0 border-l border-white/10 bg-void-950 overflow-y-auto p-4 space-y-3">
+      <div className="w-72 shrink-0 border-l border-paper-border bg-paper-surface overflow-y-auto p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-mist-400 uppercase tracking-wider">AI Suggestions</span>
+          <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">AI Suggestions</span>
           {score !== null && <ScorePill score={score} size="sm" />}
         </div>
 
         {scoring && (
-          <div className="text-sm text-mist-400 flex items-center gap-2">
-            <span className="w-3.5 h-3.5 border-2 border-aurora-teal border-t-transparent rounded-full animate-spin inline-block" />
+          <div className="text-sm text-ink-secondary flex items-center gap-2">
+            <span className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin inline-block" />
             Analyzing...
           </div>
         )}
 
         {suggestions.length === 0 && !scoring && (
           <div className="text-center py-8 space-y-2">
-            <p className="text-mist-500 text-sm">No suggestions yet.</p>
+            <p className="text-ink-muted text-sm">No suggestions yet.</p>
             <RequiresCredits cost={1}>
               <Button size="sm" variant="ghost" onClick={triggerScore} disabled={scoring}>
                 Score Resume — 1 credit
@@ -397,12 +397,12 @@ function AuroraWorkbenchInner() {
         )}
 
         {suggestions.map(s => (
-          <div key={s.bulletId} className="bg-white/[0.03] border border-white/10 rounded-lg p-3 space-y-2">
+          <div key={s.bulletId} className="bg-paper-bg border border-paper-border rounded-lg p-3 space-y-2">
             <Badge variant={s.severity === 'error' ? 'danger' : 'warning'}>
               {s.issueType.replace(/_/g, ' ')}
             </Badge>
-            <p className="text-xs text-mist-500 line-through leading-relaxed">{s.original}</p>
-            <p className="text-xs text-mist-100 leading-relaxed font-medium">"{s.rewrite}"</p>
+            <p className="text-xs text-ink-muted line-through leading-relaxed">{s.original}</p>
+            <p className="text-xs text-ink-primary leading-relaxed font-medium">"{s.rewrite}"</p>
             <div className="flex gap-2 pt-1">
               <Button size="sm" onClick={() => acceptSuggestion(s.bulletId)}>Accept</Button>
               <Button size="sm" variant="ghost" onClick={() => dismissSuggestion(s.bulletId)}>Skip</Button>
@@ -412,17 +412,17 @@ function AuroraWorkbenchInner() {
       </div>
 
       {/* 4. Right Panel: The Preview (Output) */}
-      <div className="flex-1 bg-void-900 overflow-hidden relative flex flex-col">
+      <div className="flex-1 bg-paper-bg overflow-hidden relative flex flex-col">
         {/* Toolbar */}
-        <div className="h-12 border-b border-white/5 flex items-center justify-end px-4 gap-2 text-xs text-mist-400 bg-void-900/50">
+        <div className="h-12 border-b border-paper-border flex items-center justify-end px-4 gap-2 text-xs text-ink-secondary bg-paper-bg/50">
           <span>View Mode:</span>
-          <select className="bg-void-950 border border-white/10 rounded px-2 py-1 focus:outline-none">
+          <select className="bg-paper-surface border border-paper-border rounded px-2 py-1 focus:outline-none">
             <option>A4 Page</option>
             <option>Full Width</option>
           </select>
-          <div className="h-4 w-px bg-white/10 mx-2" />
-          <button className="hover:text-white">Fit</button>
-          <button className="hover:text-white">100%</button>
+          <div className="h-4 w-px bg-paper-border mx-2" />
+          <button className="hover:text-ink-primary">Fit</button>
+          <button className="hover:text-ink-primary">100%</button>
         </div>
 
         {/* Canvas */}
@@ -454,12 +454,12 @@ function EducationForm() {
       {resumeData.education.map((edu: any, i: number) => (
         <div
           key={i}
-          className="group relative border border-white/5 bg-white/[0.02] rounded-lg p-4 hover:border-white/10 transition-colors"
+          className="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
         >
           <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
             <button
               onClick={() => removeListItem("education", i)}
-              className="text-mist-500 hover:text-red-400 p-1"
+              className="text-ink-muted hover:text-red-400 p-1"
             >
               <Trash2 size={14} />
             </button>
@@ -490,7 +490,7 @@ function EducationForm() {
         onClick={() =>
           addListItem("education", { school: "", degree: "", year: "" })
         }
-        className="w-full border-dashed border-white/20 text-mist-400 hover:text-aurora-teal hover:border-aurora-teal py-6 flex flex-col gap-1 h-auto"
+        className="w-full border-dashed border-paper-border text-ink-secondary hover:text-indigo-600 hover:border-indigo-400 py-6 flex flex-col gap-1 h-auto"
       >
         <Plus size={20} />
         <span className="text-xs font-bold uppercase tracking-wider">
@@ -506,12 +506,12 @@ function SkillsForm() {
 
   return (
     <div className="space-y-4">
-      <div className="p-4 bg-white/[0.02] border border-white/5 rounded-lg">
-        <label className="block text-[10px] font-mono text-mist-400 mb-3 uppercase tracking-wider">
+      <div className="p-4 bg-paper-surface border border-paper-border rounded-lg">
+        <label className="block text-[10px] font-mono text-ink-muted mb-3 uppercase tracking-wider">
           Technical Skills (Comma Separated)
         </label>
         <textarea
-          className="w-full bg-void-900 border border-white/10 rounded px-3 py-2 text-mist-100 text-sm focus:outline-none focus:border-aurora-teal/50 focus:bg-void-950 transition-all min-h-[150px] resize-y"
+          className="w-full bg-paper-bg border border-paper-border rounded px-3 py-2 text-ink-primary text-sm focus:outline-none focus:border-indigo-400 transition-all min-h-[150px] resize-y"
           value={resumeData.skills.join(", ")}
           onChange={(e) =>
             updateField(
@@ -522,7 +522,7 @@ function SkillsForm() {
           placeholder="React, TypeScript, Node.js..."
         />
       </div>
-      <p className="text-[10px] text-mist-500 italic px-2">
+      <p className="text-[10px] text-ink-muted italic px-2">
         Separate skills with commas. They will be formatted automatically in the
         preview.
       </p>
@@ -598,7 +598,7 @@ function ContactForm() {
         />
       </div>
 
-      <div className="h-px bg-white/5 my-4" />
+      <div className="h-px bg-paper-border my-4" />
 
       <div className="space-y-4">
         <DenseInput
@@ -639,15 +639,15 @@ function ExperienceForm() {
       {resumeData.experience.map((exp: any, i: number) => (
         <div
           key={i}
-          className="group relative border border-white/5 bg-white/[0.02] rounded-lg p-4 hover:border-white/10 transition-colors"
+          className="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
         >
           <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
-            <button className="text-mist-500 hover:text-white p-1">
+            <button className="text-ink-muted hover:text-ink-primary p-1">
               <GripVertical size={14} />
             </button>
             <button
               onClick={() => removeListItem("experience", i)}
-              className="text-mist-500 hover:text-red-400 p-1"
+              className="text-ink-muted hover:text-red-400 p-1"
             >
               <Trash2 size={14} />
             </button>
@@ -700,7 +700,7 @@ function ExperienceForm() {
             description: "",
           })
         }
-        className="w-full border-dashed border-white/20 text-mist-400 hover:text-aurora-teal hover:border-aurora-teal py-6 flex flex-col gap-1 h-auto"
+        className="w-full border-dashed border-paper-border text-ink-secondary hover:text-indigo-600 hover:border-indigo-400 py-6 flex flex-col gap-1 h-auto"
       >
         <Plus size={20} />
         <span className="text-xs font-bold uppercase tracking-wider">
@@ -715,19 +715,19 @@ function DenseInput({ label, isTextArea, className, ...props }: any) {
   return (
     <div className={className}>
       {label && (
-        <label className="block text-[10px] font-mono text-mist-400 mb-1.5 uppercase tracking-wider">
+        <label className="block text-[10px] font-mono text-ink-muted mb-1.5 uppercase tracking-wider">
           {label}
         </label>
       )}
       {isTextArea ? (
         <textarea
-          className="w-full bg-void-900 border border-white/10 rounded px-3 py-2 text-mist-100 text-sm focus:outline-none focus:border-aurora-teal/50 focus:bg-void-950 transition-all min-h-[100px] resize-y placeholder:text-mist-700"
+          className="w-full bg-paper-bg border border-paper-border rounded px-3 py-2 text-ink-primary text-sm focus:outline-none focus:border-indigo-400 transition-all min-h-[100px] resize-y placeholder:text-ink-muted"
           {...props}
         />
       ) : (
         <input
           type="text"
-          className="w-full bg-void-900 border border-white/10 rounded px-3 py-2 text-mist-100 text-sm focus:outline-none focus:border-aurora-teal/50 focus:bg-void-950 transition-all placeholder:text-mist-700"
+          className="w-full bg-paper-bg border border-paper-border rounded px-3 py-2 text-ink-primary text-sm focus:outline-none focus:border-indigo-400 transition-all placeholder:text-ink-muted"
           {...props}
         />
       )}
@@ -820,13 +820,13 @@ function AITailorForm({
 }: any) {
   return (
     <div className="space-y-8 pb-32">
-      <div className="bg-aurora-teal/5 border border-aurora-teal/10 rounded-xl p-6 relative overflow-hidden group">
-        <div className="absolute -right-8 -top-8 w-32 h-32 bg-aurora-teal/5 rounded-full blur-3xl group-hover:bg-aurora-teal/10 transition-colors" />
+      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 relative overflow-hidden group">
+        <div className="absolute -right-8 -top-8 w-32 h-32 bg-indigo-50 rounded-full blur-3xl group-hover:bg-indigo-100 transition-colors" />
         <div className="relative">
-          <h3 className="text-sm font-bold text-aurora-teal uppercase tracking-widest mb-1 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-1 flex items-center gap-2">
             <Sparkles size={14} /> AI Context
           </h3>
-          <p className="text-xs text-mist-400 mb-6 font-mono uppercase tracking-tighter">
+          <p className="text-xs text-ink-secondary mb-6 font-mono uppercase tracking-tighter">
             Optimization Engine Config
           </p>
 
@@ -837,16 +837,16 @@ function AITailorForm({
               value={geminiKey}
               onChange={(e: any) => setGeminiKey(e.target.value)}
               placeholder="Paste your API key here..."
-              className="bg-void-950/50"
+              className="bg-paper-bg"
             />
-            <p className="text-[10px] text-mist-500 italic">
+            <p className="text-[10px] text-ink-muted italic">
               Your key is stored locally and never sent to our servers. Get one
               at{" "}
               <a
                 href="https://aistudio.google.com/"
                 target="_blank"
                 rel="noreferrer"
-                className="text-aurora-teal hover:underline"
+                className="text-indigo-600 hover:underline"
               >
                 Google AI Studio
               </a>
@@ -857,7 +857,7 @@ function AITailorForm({
       </div>
 
       <div className="space-y-6">
-        <h3 className="text-sm font-bold text-mist-100 uppercase tracking-widest flex items-center gap-2">
+        <h3 className="text-sm font-bold text-ink-primary uppercase tracking-widest flex items-center gap-2">
           Target Job Details
         </h3>
 
@@ -893,7 +893,7 @@ function AITailorForm({
 
         <Button
           variant="primary"
-          className="w-full h-12 text-sm gap-2 font-bold shadow-[0_0_20px_rgba(45,212,191,0.1)] py-4"
+          className="w-full h-12 text-sm gap-2 font-bold shadow-card py-4"
           onClick={onTailor}
           disabled={isTailoring}
         >
@@ -911,8 +911,8 @@ function AITailorForm({
         </Button>
       </div>
 
-      <div className="p-4 bg-white/5 rounded-lg border border-white/5 space-y-3">
-        <h4 className="text-[10px] font-bold text-mist-300 uppercase tracking-widest">
+      <div className="p-4 bg-paper-bg rounded-lg border border-paper-border space-y-3">
+        <h4 className="text-[10px] font-bold text-ink-secondary uppercase tracking-widest">
           How it works
         </h4>
         <ul className="space-y-2">
@@ -923,9 +923,9 @@ function AITailorForm({
           ].map((text, i) => (
             <li
               key={i}
-              className="text-[10px] text-mist-500 flex items-center gap-2"
+              className="text-[10px] text-ink-muted flex items-center gap-2"
             >
-              <CheckCircle2 size={10} className="text-aurora-teal/50" />
+              <CheckCircle2 size={10} className="text-indigo-300" />
               {text}
             </li>
           ))}
