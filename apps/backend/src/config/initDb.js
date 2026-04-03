@@ -158,6 +158,10 @@ async function createTables() {
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN after_score INTEGER`).catch(() => {});
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN diff TEXT`).catch(() => {});
 
+  // Seed existing users who have 0 credits (accounts created before credit system)
+  const { SIGNUP_CREDITS } = await import('./pricing.config.js');
+  await database.run(`UPDATE users SET credits = ? WHERE credits = 0`, [SIGNUP_CREDITS]).catch(() => {});
+
   console.log('All tables created successfully');
 }
 
