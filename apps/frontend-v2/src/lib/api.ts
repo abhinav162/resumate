@@ -38,6 +38,11 @@ api.interceptors.response.use(
  * Resume methods
  */
 export const resumesApi = {
+  getAll: async (): Promise<any[]> => {
+    const response = await api.get('/resumes');
+    return response.data.data ?? response.data.resumes ?? [];
+  },
+
   getResumes: async (): Promise<ResumeData[]> => {
     const response = await api.get<ApiResponse<any[]>>('/resumes');
     const data = response.data.data || [];

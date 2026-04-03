@@ -1,212 +1,78 @@
-import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useUser } from "@clerk/clerk-react";
-import { motion } from "framer-motion";
-import { Plus, FileText, Trash2, Clock, TrendingUp } from "lucide-react";
-import { resumesApi } from "../lib/api";
-import { AppLayout } from "../layouts/AppLayout";
-import { Button } from "../components/ui/Button";
-import { Card } from "../components/ui/Card";
-import type { ResumeData } from "../types";
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import { ScorePill } from '../components/ui/ScorePill';
+import { Badge } from '../components/ui/Badge';
+import { resumesApi } from '../lib/api';
+
+type Resume = { uuid: string; name: string; score: number | null; tailoredCount?: number; updated_at: string };
 
 export default function Dashboard() {
-  const { user } = useUser();
-  const navigate = useNavigate();
-  const [resumes, setResumes] = useState<ResumeData[]>([]);
+  const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchResumes = async () => {
-      try {
-        const data = await resumesApi.getResumes();
-        setResumes(data);
-      } catch (error) {
-        console.error("Failed to load resumes", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchResumes();
+    resumesApi.getAll()
+      .then(data => setResumes(data))
+      .finally(() => setLoading(false));
   }, []);
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this resume? This action cannot be undone.",
-      )
-    ) {
-      return;
-    }
-
-    try {
-      await resumesApi.deleteResume(id);
-      setResumes((prev) => prev.filter((r) => r.id !== id));
-    } catch (error) {
-      console.error("Failed to delete resume", error);
-      alert("Failed to delete resume. Please try again.");
-    }
-  };
-
   return (
-    <AppLayout>
-      <div className="container mx-auto px-6 py-12 md:py-20">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-16">
-          <div>
-            <h1 className="text-4xl md:text-6xl font-serif font-light mb-6 text-mist-100 leading-tight">
-              Welcome back, <br />
-              <span className="italic text-mist-400">
-                {user?.firstName || "User"}
-              </span>
-            </h1>
-            <p className="text-mist-400 text-lg md:text-xl max-w-xl font-light">
-              You have{" "}
-              <span className="font-mono text-aurora-teal">
-                {resumes.length}
-              </span>{" "}
-              resumes on file. Ready to tailor your next application?
-            </p>
-          </div>
-          <Link to="/tailor">
-            <Button className="shadow-[0_0_20px_rgba(45,212,191,0.1)] gap-2">
-              <Plus size={18} /> New Application
-            </Button>
-          </Link>
-        </header>
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="font-heading text-2xl font-bold text-ink-primary">My Resumes</h1>
+        <Button onClick={() => navigate('/upload')}>+ Upload Resume</Button>
+      </div>
 
-        {/* Quick Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <StatsCard
-            label="Total Resumes"
-            value={resumes.length.toString()}
-            icon={<FileText size={20} />}
-            trend="All time"
-          />
-          <StatsCard
-            label="Avg. Match Score"
-            value="--"
-            icon={<TrendingUp size={20} />}
-            trend="Requires Analysis"
-          />
-          <StatsCard
-            label="Saved Applications"
-            value="0"
-            icon={<Clock size={20} />}
-            trend="Pending"
-          />
+      {loading && (
+        <div className="grid grid-cols-2 gap-4">
+          {[1, 2].map(i => <div key={i} className="h-28 bg-paper-border rounded-lg animate-pulse" />)}
         </div>
+      )}
 
-        {/* Main Grid */}
-        <h2 className="text-xl font-serif text-mist-100 mb-6">
-          Resume Library
-        </h2>
+      {!loading && resumes.length === 0 && (
+        <div
+          className="border-2 border-dashed border-paper-border rounded-xl p-12 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+          onClick={() => navigate('/upload')}
+        >
+          <p className="text-3xl mb-2">📄</p>
+          <p className="font-heading font-semibold text-ink-primary">Upload your first resume</p>
+          <p className="text-sm text-ink-muted mt-1">AI will score it and suggest improvements instantly</p>
+        </div>
+      )}
 
-        {loading ? (
-          <div className="text-mist-400 font-mono animate-pulse">
-            Loading library...
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-            {/* 'Create New' Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <button
-                onClick={() => navigate("/editor")}
-                className="w-full h-full min-h-[220px] rounded-[32px] border border-dashed border-white/10 hover:border-aurora-teal/50 hover:bg-aurora-teal/5 transition-all flex flex-col items-center justify-center gap-4 text-mist-400 hover:text-aurora-teal group bg-void-950/20"
-              >
-                <div className="w-12 h-12 rounded-full bg-white/5 group-hover:bg-aurora-teal/20 flex items-center justify-center transition-colors">
-                  <Plus size={24} />
-                </div>
-                <span className="font-medium">Create Blank Resume</span>
-              </button>
-            </motion.div>
+      <div className="grid grid-cols-2 gap-4">
+        {resumes.map(resume => (
+          <Card key={resume.uuid} className="p-4 space-y-3 hover:shadow-elevated transition-shadow">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-heading font-semibold text-ink-primary">{resume.name}</p>
+                <p className="text-xs text-ink-muted mt-0.5">Updated {new Date(resume.updated_at).toLocaleDateString()}</p>
+              </div>
+              {resume.score !== null && resume.score !== undefined && <ScorePill score={resume.score} />}
+            </div>
+            {resume.tailoredCount !== undefined && resume.tailoredCount > 0 && (
+              <Badge variant="indigo">{resume.tailoredCount} tailored {resume.tailoredCount === 1 ? 'copy' : 'copies'}</Badge>
+            )}
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" variant="secondary" onClick={() => navigate(`/editor/${resume.uuid}`)}>Edit</Button>
+              <Button size="sm" variant="ghost" onClick={() => navigate(`/tailor?resumeId=${resume.uuid}`)}>Tailor →</Button>
+            </div>
+          </Card>
+        ))}
 
-            {/* Resume Cards */}
-            {resumes.map((resume, index) => (
-              <motion.div
-                key={resume.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                onClick={() => navigate(`/editor/${resume.id}`)}
-              >
-                <Card className="group cursor-pointer hover:border-white/10 transition-colors h-full flex flex-col">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="p-3 rounded-xl bg-void-950/50 text-aurora-teal border border-white/5">
-                      <FileText size={24} />
-                    </div>
-                    <button
-                      className="text-mist-400 hover:text-aurora-teal transition-colors p-2 -mr-2"
-                      onClick={(e) => handleDelete(resume.id!, e)}
-                      title="Delete Resume"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-
-                  <h3 className="text-lg font-medium text-mist-100 mb-2 group-hover:text-aurora-teal transition-colors truncate">
-                    {resume.title}
-                  </h3>
-
-                  <div className="flex flex-wrap gap-2 mb-6 flex-grow">
-                    {(resume.skills || []).slice(0, 3).map((keyword, i) => (
-                      <span
-                        key={i}
-                        className="px-2 py-1 rounded-md bg-white/5 text-xs text-mist-400 font-mono border border-white/5 truncate max-w-[100px]"
-                      >
-                        {keyword}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-4 border-t border-white/5 mt-auto">
-                    <span className="text-xs text-mist-400 font-mono flex items-center gap-1.5">
-                      <Clock size={12} />{" "}
-                      {resume.updatedAt
-                        ? new Date(resume.updatedAt).toLocaleDateString()
-                        : "Just now"}
-                    </span>
-                    {resume.isBase && (
-                      <span className="text-xs font-bold text-aurora-purple bg-aurora-purple/10 px-2 py-1 rounded">
-                        Base
-                      </span>
-                    )}
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+        {resumes.length > 0 && (
+          <div
+            className="border-2 border-dashed border-paper-border rounded-lg p-4 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-indigo-300 transition-colors"
+            onClick={() => navigate('/upload')}
+          >
+            <span className="text-xl text-ink-muted">+</span>
+            <span className="text-sm text-ink-muted">Upload new resume</span>
           </div>
         )}
       </div>
-    </AppLayout>
-  );
-}
-
-function StatsCard({
-  label,
-  value,
-  icon,
-  trend,
-}: {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-  trend: string;
-}) {
-  return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-mist-400 font-mono text-xs uppercase tracking-wider">
-          {label}
-        </span>
-        <div className="text-aurora-teal">{icon}</div>
-      </div>
-      <div className="text-3xl font-serif text-mist-100 mb-2">{value}</div>
-      <div className="text-xs text-mist-400/60">{trend}</div>
-    </Card>
+    </div>
   );
 }
