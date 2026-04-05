@@ -39,6 +39,7 @@ pids
 .idea/
 *.swp
 *.swo
+.superpowers
 
 # OS generated files
 .DS_Store
