@@ -6,7 +6,7 @@ import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
 import { resumesApi } from '../lib/api';
 
-type Resume = { uuid: string; name: string; score: number | null; tailoredCount?: number; updated_at: string };
+type Resume = { id: string; name: string; score: number | null; tailoredCount?: number; updated_at: string };
 
 export default function Dashboard() {
   const [resumes, setResumes] = useState<Resume[]>([]);
@@ -45,7 +45,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 gap-4">
         {resumes.map(resume => (
-          <Card key={resume.uuid} className="p-4 space-y-3 hover:shadow-elevated transition-shadow">
+          <Card key={resume.id} className="p-4 space-y-3 hover:shadow-elevated transition-shadow">
             <div className="flex items-start justify-between">
               <div>
                 <p className="font-heading font-semibold text-ink-primary">{resume.name}</p>
@@ -57,8 +57,8 @@ export default function Dashboard() {
               <Badge variant="indigo">{resume.tailoredCount} tailored {resume.tailoredCount === 1 ? 'copy' : 'copies'}</Badge>
             )}
             <div className="flex gap-2 pt-1">
-              <Button size="sm" variant="secondary" onClick={() => navigate(`/editor/${resume.uuid}`)}>Edit</Button>
-              <Button size="sm" variant="ghost" onClick={() => navigate(`/tailor?resumeId=${resume.uuid}`)}>Tailor →</Button>
+              <Button size="sm" variant="secondary" onClick={() => navigate(`/editor/${resume.id}`)}>Edit</Button>
+              <Button size="sm" variant="ghost" onClick={() => navigate(`/tailor?resumeId=${resume.id}`)}>Tailor →</Button>
             </div>
           </Card>
         ))}

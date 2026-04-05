@@ -24,7 +24,7 @@ export function EditorLayout({
       <header className="h-[48px] border-b border-paper-border bg-paper-surface flex items-center justify-between px-4 shrink-0 z-50">
         <div className="flex items-center gap-4">
           <Link
-            to="/api/resumes"
+            to="/dashboard"
             className="text-ink-secondary hover:text-ink-primary transition-colors"
           >
             <ArrowLeft size={16} />
