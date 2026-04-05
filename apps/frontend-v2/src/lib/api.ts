@@ -25,6 +25,20 @@ export const setAuthHeaders = (token: string | null | undefined, userId: string 
   }
 };
 
+// Request interceptor — inject auth headers from Clerk global on every request.
+// This avoids the race condition where components fetch before AuthInitializer
+// finishes its async getToken() call.
+api.interceptors.request.use(async (config) => {
+  const clerk = (window as any).Clerk;
+  if (clerk?.session) {
+    const token = await clerk.session.getToken();
+    if (token) config.headers['Authorization'] = `Bearer ${token}`;
+    const userId = clerk.user?.id;
+    if (userId) config.headers['x-user-id'] = userId;
+  }
+  return config;
+});
+
 // Response interceptor for consistent error handling
 api.interceptors.response.use(
   (response) => response,
