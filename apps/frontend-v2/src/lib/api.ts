@@ -3,7 +3,7 @@ import type { ResumeData, TailoredResume, ApiResponse } from '../types';
 
 // Create a standard axios instance
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4300/api',
+  baseURL: (window as any).ENV?.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:4300/api',
   headers: {
     'Content-Type': 'application/json',
   },

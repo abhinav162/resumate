@@ -11,6 +11,8 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Runtime env injection: populated by env.sh in Docker, no-op in dev -->
+    <script src="/config.js" onerror="window.ENV={}"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

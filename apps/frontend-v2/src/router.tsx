@@ -21,8 +21,11 @@ import { AuroraWorkbenchEditor } from "./components/features/editor/AuroraWorkbe
 import LandingPage from "./pages/LandingPage";
 import { dark } from "@clerk/themes";
 
-// Environment check
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+// Environment check — prefer runtime window.ENV injection (Docker), fall back to build-time
+declare global { interface Window { ENV?: Record<string, string> } }
+const PUBLISHABLE_KEY =
+  window.ENV?.VITE_CLERK_PUBLISHABLE_KEY ||
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 if (!PUBLISHABLE_KEY) {
   throw new Error("Missing Publishable Key");
