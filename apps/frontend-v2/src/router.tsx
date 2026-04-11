@@ -19,7 +19,6 @@ import TailorWorkspace from "./pages/TailorWorkspace";
 import CreditsPage from "./pages/CreditsPage";
 import { AuroraWorkbenchEditor } from "./components/features/editor/AuroraWorkbenchEditor";
 import LandingPage from "./pages/LandingPage";
-import { dark } from "@clerk/themes";
 
 // Environment check — prefer runtime window.ENV injection (Docker), fall back to build-time
 declare global { interface Window { ENV?: Record<string, string> } }
@@ -92,31 +91,35 @@ const router = createBrowserRouter([
         element: (
           <SignIn
             appearance={{
-              baseTheme: dark,
               variables: {
-                colorBackground: "transparent",
-                colorText: "#F4F4F5",
-                colorPrimary: "#14B8A6",
-                colorTextSecondary: "#A1A1AA",
-                colorInputBackground: "#18181B",
-                colorInputText: "#F4F4F5",
+                colorBackground: "#ffffff",
+                colorText: "#0f0f0f",
+                colorPrimary: "#4f46e5",
+                colorTextSecondary: "#555555",
+                colorInputBackground: "#fafaf8",
+                colorInputText: "#0f0f0f",
+                colorNeutral: "#0f0f0f",
+                borderRadius: "8px",
+                fontFamily: '"DM Sans", sans-serif',
               },
               elements: {
                 rootBox: "w-full flex justify-center",
-                card: "bg-transparent shadow-none w-full max-w-full p-0",
-                headerTitle: "text-mist-100 font-serif text-center",
-                headerSubtitle: "text-mist-400 text-center",
+                card: "shadow-elevated border border-paper-border w-full max-w-md",
+                headerTitle: "font-heading text-ink-primary",
+                headerSubtitle: "text-ink-secondary",
                 socialButtonsBlockButton:
-                  "bg-void-950/50 border border-white/10 text-mist-100 hover:bg-white/5 transition-colors",
-                dividerLine: "bg-white/10",
-                dividerText:
-                  "text-mist-400 font-mono text-xs uppercase tracking-wider",
-                formFieldLabel: "text-mist-400 font-medium",
+                  "border border-paper-border text-ink-primary bg-paper-bg hover:bg-paper-surface transition-colors",
+                socialButtonsBlockButtonText: "text-ink-primary font-medium",
+                dividerLine: "bg-paper-border",
+                dividerText: "text-ink-muted text-xs uppercase tracking-wider",
+                formFieldLabel: "text-ink-secondary font-medium",
                 formFieldInput:
-                  "bg-void-950/50 border-white/10 text-mist-100 focus:border-aurora-purple rounded-xl transition-all",
-                footerActionText: "text-mist-400",
+                  "bg-paper-bg border-paper-border text-ink-primary focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500",
+                footerActionText: "text-ink-muted",
                 footerActionLink:
-                  "text-aurora-teal hover:text-aurora-teal/80 font-medium",
+                  "text-indigo-600 hover:text-indigo-700 font-medium",
+                formButtonPrimary:
+                  "bg-indigo-600 hover:bg-indigo-700 text-white",
               },
             }}
           />
@@ -127,31 +130,35 @@ const router = createBrowserRouter([
         element: (
           <SignUp
             appearance={{
-              baseTheme: dark,
               variables: {
-                colorBackground: "transparent",
-                colorText: "#F4F4F5",
-                colorPrimary: "#14B8A6",
-                colorTextSecondary: "#A1A1AA",
-                colorInputBackground: "#18181B",
-                colorInputText: "#F4F4F5",
+                colorBackground: "#ffffff",
+                colorText: "#0f0f0f",
+                colorPrimary: "#4f46e5",
+                colorTextSecondary: "#555555",
+                colorInputBackground: "#fafaf8",
+                colorInputText: "#0f0f0f",
+                colorNeutral: "#0f0f0f",
+                borderRadius: "8px",
+                fontFamily: '"DM Sans", sans-serif',
               },
               elements: {
                 rootBox: "w-full flex justify-center",
-                card: "bg-transparent shadow-none w-full max-w-full p-0",
-                headerTitle: "text-mist-100 font-serif text-center",
-                headerSubtitle: "text-mist-400 text-center",
+                card: "shadow-elevated border border-paper-border w-full max-w-md",
+                headerTitle: "font-heading text-ink-primary",
+                headerSubtitle: "text-ink-secondary",
                 socialButtonsBlockButton:
-                  "bg-void-950/50 border border-white/10 text-mist-100 hover:bg-white/5 transition-colors",
-                dividerLine: "bg-white/10",
-                dividerText:
-                  "text-mist-400 font-mono text-xs uppercase tracking-wider",
-                formFieldLabel: "text-mist-400 font-medium",
+                  "border border-paper-border text-ink-primary bg-paper-bg hover:bg-paper-surface transition-colors",
+                socialButtonsBlockButtonText: "text-ink-primary font-medium",
+                dividerLine: "bg-paper-border",
+                dividerText: "text-ink-muted text-xs uppercase tracking-wider",
+                formFieldLabel: "text-ink-secondary font-medium",
                 formFieldInput:
-                  "bg-void-950/50 border-white/10 text-mist-100 focus:border-aurora-purple rounded-xl transition-all",
-                footerActionText: "text-mist-400",
+                  "bg-paper-bg border-paper-border text-ink-primary focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500",
+                footerActionText: "text-ink-muted",
                 footerActionLink:
-                  "text-aurora-teal hover:text-aurora-teal/80 font-medium",
+                  "text-indigo-600 hover:text-indigo-700 font-medium",
+                formButtonPrimary:
+                  "bg-indigo-600 hover:bg-indigo-700 text-white",
               },
             }}
           />
