@@ -19,11 +19,11 @@ services:
     image: ghcr.io/${GHCR_USERNAME:-abhinav162}/resumate-frontend:${IMAGE_TAG:-latest}
     build:
       context: .
-      dockerfile: apps/frontend/Dockerfile
+      dockerfile: apps/frontend-v2/Dockerfile
     ports:
       - "${FRONTEND_PORT:-3160}:80"
     env_file:
-      - apps/frontend/.env # standard .env file, swapped by deploy script
+      - apps/frontend-v2/.env # standard .env file, swapped by deploy script
     restart: always
     depends_on:
       - backend
