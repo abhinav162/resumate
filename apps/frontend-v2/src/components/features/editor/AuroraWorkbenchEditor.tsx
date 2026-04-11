@@ -9,7 +9,6 @@ import { Badge } from "../../ui/Badge";
 import { RequiresCredits } from "../../ui/RequiresCredits";
 import { ResumeEditorProvider, useResumeEditor } from "./ResumeEditorContext";
 import { generateLatexPdf } from "../../../services/latexService";
-import type { ResumeData } from "../../../types";
 import {
   User,
   Briefcase,
@@ -56,7 +55,6 @@ function AuroraWorkbenchInner() {
     isSaving,
     lastSaved,
     isLoading,
-    setResumeData,
     saveResume,
     score,
     suggestions,
@@ -137,17 +135,14 @@ function AuroraWorkbenchInner() {
 
     setIsTailoring(true);
     try {
-      localStorage.setItem("gemini_api_key", geminiKey);
-
       const { aiApi } = await import("../../../lib/api");
-      const tailoredResume = await aiApi.tailorResume({
-        resumeData,
-        jobDetails,
-        apiKey: geminiKey,
+      await aiApi.tailorResume({
+        resumeId: id ?? "",
+        jobTitle: jobDetails.jobTitle,
+        company: jobDetails.company,
+        jobDescription: jobDetails.description,
       });
-
-      setResumeData(tailoredResume);
-      alert("Resume tailored successfully! Preview updated.");
+      alert("Resume tailored successfully!");
     } catch (error: any) {
       console.error("Tailoring failed:", error);
       alert(`Optimization failed: ${error.message}`);
@@ -486,7 +481,7 @@ function EducationForm() {
         </div>
       ))}
       <Button
-        variant="outline"
+        variant="secondary"
         onClick={() =>
           addListItem("education", { school: "", degree: "", year: "" })
         }
@@ -690,7 +685,7 @@ function ExperienceForm() {
         </div>
       ))}
       <Button
-        variant="outline"
+        variant="secondary"
         onClick={() =>
           addListItem("experience", {
             company: "",

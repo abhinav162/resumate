@@ -1,5 +1,5 @@
-import { ComponentProps, useEffect, useRef } from "react";
-import { clsx } from "clsx";
+import { useEffect, useRef } from "react";
+import type { ComponentProps } from "react";
 import { twMerge } from "tailwind-merge";
 
 interface JobDescriptionInputProps extends ComponentProps<"textarea"> {

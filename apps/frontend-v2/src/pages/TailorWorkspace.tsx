@@ -4,7 +4,7 @@ import { Button } from '../components/ui/Button';
 import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
 import { RequiresCredits } from '../components/ui/RequiresCredits';
-import { aiApi, resumesApi } from '../lib/api';
+import { aiApi } from '../lib/api';
 import { useCredits } from '../contexts/CreditContext';
 import { CREDIT_COSTS } from '../config/pricing';
 

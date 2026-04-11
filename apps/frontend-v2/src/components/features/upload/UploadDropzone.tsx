@@ -1,4 +1,5 @@
-import { useCallback, useState, DragEvent } from 'react';
+import { useCallback, useState } from 'react';
+import type { DragEvent } from 'react';
 
 interface UploadDropzoneProps {
   onFile: (file: File) => void;
