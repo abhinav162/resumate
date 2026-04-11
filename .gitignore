@@ -67,6 +67,7 @@ temp/
 apps/frontend-v2/playwright/.auth/
 apps/frontend-v2/playwright-report/
 apps/frontend-v2/test-results/
+test-results/
 
 # Deployment
 .vercel
