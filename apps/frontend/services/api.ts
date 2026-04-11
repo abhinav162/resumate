@@ -1,5 +1,6 @@
 import { Resume, TailoredResume, ApiResponse } from '@resumate/shared';
 
+// Read from runtime config (window.ENV) first, then fallback to build-time env
 const API_BASE_URL = window.ENV?.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:4300/api';
 
 // API client class for backend communication

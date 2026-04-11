@@ -1,0 +1,5 @@
+export const CREDIT_COSTS = {
+  RESUME_SCORE: 1,
+  RESUME_RESCORE: 1,
+  RESUME_TAILOR: 2,
+};

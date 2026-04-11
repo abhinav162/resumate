@@ -11,11 +11,13 @@ const __dirname = dirname(__filename);
 
 async function initializeDatabase() {
   try {
-    // Create data directory if it doesn't exist
+    // Create data directory if it doesn't exist (skip for in-memory DB)
     const dbPath = process.env.DB_PATH || join(__dirname, '../../data/resumate.db');
-    const dataDir = dirname(resolve(dbPath));
-    console.log(`Creating data directory: ${dataDir}`);
-    await mkdir(dataDir, { recursive: true });
+    if (dbPath !== ':memory:') {
+      const dataDir = dirname(resolve(dbPath));
+      console.log(`Creating data directory: ${dataDir}`);
+      await mkdir(dataDir, { recursive: true });
+    }
 
     // Connect to database
     await database.connect();
@@ -147,6 +149,18 @@ async function createTables() {
   await database.run('CREATE INDEX IF NOT EXISTS idx_education_resume_id ON education(resume_id)');
   await database.run('CREATE INDEX IF NOT EXISTS idx_projects_resume_id ON projects(resume_id)');
   await database.run('CREATE INDEX IF NOT EXISTS idx_tailored_resumes_base_id ON tailored_resumes(base_resume_id)');
+
+  // Migrations — safe to run repeatedly (SQLite ignores duplicate column errors via .catch)
+  await database.run(`ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0`).catch(() => {});
+  await database.run(`ALTER TABLE base_resumes ADD COLUMN score INTEGER`).catch(() => {});
+  await database.run(`ALTER TABLE base_resumes ADD COLUMN suggestions TEXT`).catch(() => {});
+  await database.run(`ALTER TABLE tailored_resumes ADD COLUMN before_score INTEGER`).catch(() => {});
+  await database.run(`ALTER TABLE tailored_resumes ADD COLUMN after_score INTEGER`).catch(() => {});
+  await database.run(`ALTER TABLE tailored_resumes ADD COLUMN diff TEXT`).catch(() => {});
+
+  // Seed existing users who have 0 credits (accounts created before credit system)
+  const { SIGNUP_CREDITS } = await import('./pricing.config.js');
+  await database.run(`UPDATE users SET credits = ? WHERE credits = 0`, [SIGNUP_CREDITS]).catch(() => {});
 
   console.log('All tables created successfully');
 }

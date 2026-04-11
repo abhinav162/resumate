@@ -9,10 +9,10 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "dev:frontend": "npm run dev --workspace=apps/frontend-v2",
     "dev:backend": "npm run dev --workspace=apps/backend",
     "build": "npm run build --workspaces --if-present",
-    "build:frontend": "npm run build --workspace=apps/frontend",
+    "build:frontend": "npm run build --workspace=apps/frontend-v2",
     "build:backend": "npm run build --workspace=apps/backend",
     "build:shared": "npm run build --workspace=packages/shared",
     "start": "npm run start --workspace=apps/backend",
@@ -48,5 +48,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/your-username/resumate.git"
+  },
+  "dependencies": {
+    "stripe": "^21.0.1"
   }
 }
