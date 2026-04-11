@@ -23,7 +23,7 @@ services:
     ports:
       - "${FRONTEND_PORT:-3160}:80"
     env_file:
-      - apps/frontend-v2/.env # standard .env file, swapped by deploy script
+      - apps/frontend/.env # standard .env file, swapped by deploy script
     restart: always
     depends_on:
       - backend
