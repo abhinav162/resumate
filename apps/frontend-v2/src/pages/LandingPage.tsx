@@ -1,8 +1,10 @@
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
 import { Button } from '../components/ui/Button';
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
 
   return (
     <div className="min-h-screen bg-paper-bg">
@@ -15,8 +17,14 @@ export default function LandingPage() {
           <div className="flex items-center gap-6">
             <a href="#how" className="text-sm text-ink-secondary hover:text-ink-primary transition-colors">How it works</a>
             <a href="#pricing" className="text-sm text-ink-secondary hover:text-ink-primary transition-colors">Pricing</a>
-            <Button size="sm" variant="secondary" onClick={() => navigate('/sign-in')}>Sign in</Button>
-            <Button size="sm" onClick={() => navigate('/sign-up')}>Get started →</Button>
+            {isSignedIn ? (
+              <Button size="sm" onClick={() => navigate('/dashboard')}>Dashboard →</Button>
+            ) : (
+              <>
+                <Button size="sm" variant="secondary" onClick={() => navigate('/sign-in')}>Sign in</Button>
+                <Button size="sm" onClick={() => navigate('/sign-up')}>Get started →</Button>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -34,10 +42,10 @@ export default function LandingPage() {
             Upload your resume. AI scores it, rewrites weak spots, and tailors it to any job description — in seconds.
           </p>
           <div className="flex gap-3">
-            <Button size="lg" onClick={() => navigate('/sign-up')}>Upload your resume →</Button>
+            <Button size="lg" onClick={() => navigate(isSignedIn ? '/upload' : '/sign-up')}>Upload your resume →</Button>
             <Button size="lg" variant="secondary" onClick={() => document.getElementById('how')?.scrollIntoView({ behavior: 'smooth' })}>See how it works</Button>
           </div>
-          <p className="text-xs text-ink-muted">5 free credits on signup · No credit card required</p>
+          {!isSignedIn && <p className="text-xs text-ink-muted">5 free credits on signup · No credit card required</p>}
         </div>
 
         {/* Floating score card */}
@@ -119,9 +127,15 @@ export default function LandingPage() {
 
       {/* CTA footer */}
       <section className="max-w-5xl mx-auto px-6 py-20 text-center space-y-4">
-        <h2 className="font-heading text-3xl font-bold text-ink-primary">Start for free today</h2>
-        <p className="text-ink-secondary">Upload your resume. 5 free credits. No credit card needed.</p>
-        <Button size="lg" onClick={() => navigate('/sign-up')}>Upload your resume →</Button>
+        <h2 className="font-heading text-3xl font-bold text-ink-primary">
+          {isSignedIn ? 'Ready to improve your resume?' : 'Start for free today'}
+        </h2>
+        <p className="text-ink-secondary">
+          {isSignedIn ? 'Go to your dashboard or upload a new resume.' : 'Upload your resume. 5 free credits. No credit card needed.'}
+        </p>
+        <Button size="lg" onClick={() => navigate(isSignedIn ? '/dashboard' : '/sign-up')}>
+          {isSignedIn ? 'Go to Dashboard →' : 'Upload your resume →'}
+        </Button>
       </section>
 
       <footer className="border-t border-paper-border py-6 text-center text-xs text-ink-muted">
