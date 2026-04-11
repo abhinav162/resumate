@@ -63,6 +63,11 @@ temp/
 .yarn/build-state.yml
 .yarn/install-state.gz
 
+# Playwright
+apps/frontend-v2/playwright/.auth/
+apps/frontend-v2/playwright-report/
+apps/frontend-v2/test-results/
+
 # Deployment
 .vercel
 .netlify

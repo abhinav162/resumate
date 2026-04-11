@@ -13,6 +13,7 @@ import tailoredResumesRouter from "./routes/tailored-resumes.js";
 import aiRouter from "./routes/ai.js";
 import uploadsRouter from "./routes/uploads.js";
 import creditsRouter from "./routes/credits.js";
+import testRouter from "./routes/test.js";
 import { ensureUserExists } from "./middleware/ensureUser.js";
 
 // Load environment variables
@@ -36,10 +37,10 @@ app.use(
   })
 );
 
-// Rate limiting
+// Rate limiting — higher limit in development so E2E tests don't get throttled
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === "production" ? 100 : 10000,
 });
 app.use(limiter);
 
@@ -64,6 +65,11 @@ app.use("/api/tailored-resumes", tailoredResumesRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/credits", creditsRouter);
+
+// Dev/test-only routes — never mounted in production
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api/test", testRouter);
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {

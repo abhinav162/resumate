@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
-import { resumesApi } from '../lib/api';
+import { resumesApi, setAuthHeaders } from '../lib/api';
 
 type Resume = { id: string; name: string; score: number | null; tailoredCount?: number; updated_at: string };
 
@@ -12,12 +13,28 @@ export default function Dashboard() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { isLoaded, isSignedIn, getToken, userId } = useAuth();
 
   useEffect(() => {
-    resumesApi.getAll()
-      .then(data => setResumes(data))
-      .finally(() => setLoading(false));
-  }, []);
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      setLoading(false);
+      return;
+    }
+    const fetchResumes = async () => {
+      try {
+        const token = await getToken();
+        setAuthHeaders(token, userId);
+        const data = await resumesApi.getAll();
+        setResumes(data);
+      } catch {
+        // silently fail
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchResumes();
+  }, [isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
