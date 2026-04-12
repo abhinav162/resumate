@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { UserButton } from '@clerk/clerk-react';
+import { UserButton, useUser } from '@clerk/clerk-react';
 import { CreditCounter } from '../components/ui/CreditCounter';
 
 const navItems = [
@@ -10,6 +10,8 @@ const navItems = [
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
+  const { user } = useUser();
+
   return (
     <div className="flex min-h-screen bg-paper-bg">
       {/* Sidebar */}
@@ -39,7 +41,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </nav>
         <div className="p-3 border-t border-paper-border space-y-3">
           <CreditCounter />
-          <div className="flex items-center justify-center">
+          <div className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-paper-bg transition-colors">
             <UserButton
               appearance={{
                 variables: {
@@ -55,6 +57,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 },
               }}
             />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-ink-primary truncate">
+                {user?.fullName || user?.firstName || 'User'}
+              </p>
+              <p className="text-xs text-ink-muted truncate">
+                {user?.primaryEmailAddress?.emailAddress}
+              </p>
+            </div>
           </div>
         </div>
       </aside>
