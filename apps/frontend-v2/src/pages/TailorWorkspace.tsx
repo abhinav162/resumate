@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
 import { RequiresCredits } from '../components/ui/RequiresCredits';
-import { aiApi } from '../lib/api';
+import { aiApi, resumesApi } from '../lib/api';
 import { useCredits } from '../contexts/CreditContext';
 import { CREDIT_COSTS } from '../config/pricing';
 
@@ -15,9 +15,13 @@ type TailorResult = {
   afterScore: number;
 };
 
+type ResumeOption = { id: string; name: string };
+
 export default function TailorWorkspace() {
   const [searchParams] = useSearchParams();
   const [resumeId, setResumeId] = useState(searchParams.get('resumeId') ?? '');
+  const [resumes, setResumes] = useState<ResumeOption[]>([]);
+  const [resumesLoading, setResumesLoading] = useState(true);
   const [jobTitle, setJobTitle] = useState('');
   const [company, setCompany] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -25,6 +29,13 @@ export default function TailorWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TailorResult | null>(null);
   const { refresh } = useCredits();
+
+  useEffect(() => {
+    resumesApi.getAll().then((data) => {
+      setResumes(data.map((r: any) => ({ id: r.id, name: r.name || 'Untitled' })));
+      // If no resumeId from URL params but user has resumes, don't auto-select
+    }).catch(() => {}).finally(() => setResumesLoading(false));
+  }, []);
 
   async function handleTailor() {
     setLoading(true);
@@ -47,13 +58,17 @@ export default function TailorWorkspace() {
         <h1 className="font-heading font-bold text-lg text-ink-primary">Tailor Resume</h1>
 
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Resume ID</label>
-          <input
+          <label className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Resume</label>
+          <select
             className="w-full border border-paper-border rounded px-3 py-2 text-sm text-ink-primary bg-paper-bg focus:outline-none focus:border-indigo-400"
-            placeholder="Paste resume ID"
             value={resumeId}
             onChange={e => setResumeId(e.target.value)}
-          />
+          >
+            <option value="">{resumesLoading ? 'Loading...' : 'Select a resume'}</option>
+            {resumes.map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-1">

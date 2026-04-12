@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
+import { UserButton } from '@clerk/clerk-react';
 import { CreditCounter } from '../components/ui/CreditCounter';
 
 const navItems = [
   { to: '/dashboard', label: 'My Resumes', icon: '📄' },
   { to: '/tailor', label: 'Tailor', icon: '✨' },
+  { to: '/credits', label: 'Credits', icon: '💳' },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -35,8 +37,25 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="p-3 border-t border-paper-border">
+        <div className="p-3 border-t border-paper-border space-y-3">
           <CreditCounter />
+          <div className="flex items-center justify-center">
+            <UserButton
+              appearance={{
+                variables: {
+                  colorBackground: '#ffffff',
+                  colorText: '#0f0f0f',
+                  colorPrimary: '#4f46e5',
+                  colorTextSecondary: '#555555',
+                  colorInputBackground: '#fafaf8',
+                  colorInputText: '#0f0f0f',
+                },
+                elements: {
+                  avatarBox: 'w-8 h-8 rounded-lg border border-paper-border',
+                },
+              }}
+            />
+          </div>
         </div>
       </aside>
 

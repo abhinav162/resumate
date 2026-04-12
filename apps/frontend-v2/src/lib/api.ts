@@ -176,41 +176,6 @@ export const tailoredResumesApi = {
  * AI methods
  */
 export const aiApi = {
-  parseResume: async (resumeText: string, apiKey: string): Promise<ResumeData> => {
-    const response = await api.post<ApiResponse<any>>('/ai/parse-resume', { resumeText, apiKey });
-    if (!response.data.data) throw new Error('Failed to parse resume');
-    
-    // Map backend structure back to frontend-v2 structure
-    const data = response.data.data;
-    return {
-      title: 'Parsed Resume',
-      contact: {
-        fullName: data.contact.name || '',
-        role: '',
-        email: data.contact.email || '',
-        phone: data.contact.phone || '',
-        location: data.contact.location || '',
-        linkedin: data.contact.linkedin || '',
-        github: data.contact.github || '',
-        website: data.contact.website || '',
-      },
-      summary: data.summary || '',
-      experience: (data.experience || []).map((exp: any) => ({
-        company: exp.company || '',
-        role: exp.role || '',
-        startDate: exp.startDate || '',
-        endDate: exp.endDate || '',
-        description: (exp.responsibilities || []).join('\n'),
-      })),
-      education: (data.education || []).map((edu: any) => ({
-        school: edu.institution || '',
-        degree: edu.degree || '',
-        year: edu.graduationDate || '',
-      })),
-      skills: data.skills || [],
-    };
-  },
-
   tailorResume: async (payload: {
     resumeId: string;
     jobTitle: string;
