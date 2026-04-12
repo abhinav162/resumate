@@ -8,7 +8,11 @@ function getModel() {
 
 function parseJsonResponse(text) {
   const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    throw new Error(`Failed to parse AI response as JSON: ${e.message}`);
+  }
 }
 
 export async function parseResumeText(resumeText) {

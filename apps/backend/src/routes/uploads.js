@@ -3,8 +3,8 @@ import multer from 'multer';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
-import { v4 as uuidv4 } from 'uuid';
 import database from '../config/database.js';
+import { Resume } from '../models/Resume.js';
 import { parseResumeText } from '../services/aiService.js';
 
 const router = express.Router();
@@ -28,39 +28,26 @@ router.post('/resume', upload.single('file'), async (req, res) => {
 
     const parsed = await parseResumeText(pdfData.text);
 
-    const resumeUuid = uuidv4();
     const resumeName = parsed.contact?.name
       ? `${parsed.contact.name}'s Resume`
       : req.file.originalname.replace('.pdf', '');
 
-    await database.run(
-      `INSERT INTO base_resumes (uuid, user_id, name, contact_data, summary, skills, is_base)
-       VALUES (?, ?, ?, ?, ?, ?, 1)`,
-      [resumeUuid, userRow.id, resumeName, JSON.stringify(parsed), parsed.summary || '', JSON.stringify(parsed.skills || [])]
-    );
-
-    for (let i = 0; i < (parsed.experience || []).length; i++) {
-      const exp = parsed.experience[i];
-      await database.run(
-        `INSERT INTO experiences (uuid, resume_id, role, company, location, start_date, end_date, responsibilities, display_order)
-         VALUES (?, (SELECT id FROM base_resumes WHERE uuid = ?), ?, ?, ?, ?, ?, ?, ?)`,
-        [uuidv4(), resumeUuid, exp.role, exp.company, exp.location || '', exp.startDate || '', exp.endDate || '', JSON.stringify(exp.responsibilities || []), i]
-      );
-    }
-
-    for (let i = 0; i < (parsed.education || []).length; i++) {
-      const edu = parsed.education[i];
-      await database.run(
-        `INSERT INTO education (uuid, resume_id, degree, institution, location, graduation_date, gpa, display_order)
-         VALUES (?, (SELECT id FROM base_resumes WHERE uuid = ?), ?, ?, ?, ?, ?, ?)`,
-        [uuidv4(), resumeUuid, edu.degree, edu.institution, edu.location || '', edu.graduationDate || '', edu.gpa || '', i]
-      );
-    }
+    const resume = await Resume.create({
+      name: resumeName,
+      contact: parsed.contact || {},
+      summary: parsed.summary || '',
+      skills: parsed.skills || [],
+      experience: parsed.experience || [],
+      education: parsed.education || [],
+      projects: parsed.projects || [],
+      userId: userRow.id,
+      isBase: true,
+    });
 
     res.status(201).json({
       success: true,
       message: 'Resume uploaded and parsed successfully',
-      data: { resumeId: resumeUuid, name: resumeName, parsed }
+      data: { resumeId: resume.id, name: resume.name, parsed: resume }
     });
   } catch (error) {
     console.error('Upload error:', error);
