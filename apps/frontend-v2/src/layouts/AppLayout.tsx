@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { UserButton, useUser } from '@clerk/clerk-react';
+import { FileText, Sparkles } from 'lucide-react';
 import { CreditCounter } from '../components/ui/CreditCounter';
 
 const navItems = [
-  { to: '/dashboard', label: 'My Resumes', icon: '📄' },
-  { to: '/tailor', label: 'Tailor', icon: '✨' },
-  { to: '/credits', label: 'Credits', icon: '💳' },
+  { to: '/dashboard', label: 'My Resumes', icon: FileText },
+  { to: '/tailor', label: 'Tailor', icon: Sparkles },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -34,7 +34,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 }`
               }
             >
-              <span>{item.icon}</span>
+              <item.icon size={16} />
               {item.label}
             </NavLink>
           ))}
