@@ -3,15 +3,29 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 function getModel() {
   if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  return genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  return genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: { responseMimeType: 'application/json' },
+  });
 }
 
 function parseJsonResponse(text) {
-  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   try {
     return JSON.parse(cleaned);
-  } catch (e) {
-    throw new Error(`Failed to parse AI response as JSON: ${e.message}`);
+  } catch (firstError) {
+    // Fix common LLM JSON issues:
+    // 1. Missing closing } between array elements: ]\n,\n{ → ]},\n{
+    cleaned = cleaned.replace(/\]\s*,\s*\{/g, ']},\n{');
+    // 2. Trailing commas before } or ]
+    cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
+    // 3. Double/extra commas between elements
+    cleaned = cleaned.replace(/,\s*,/g, ',');
+    try {
+      return JSON.parse(cleaned);
+    } catch (e) {
+      throw new Error(`Failed to parse AI response as JSON: ${firstError.message}`);
+    }
   }
 }
 
