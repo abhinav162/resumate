@@ -48,6 +48,29 @@ api.interceptors.response.use(
   }
 );
 
+// Map frontend field names to backend field names
+function toBackendPayload(resumeData: any) {
+  const payload: any = { ...resumeData };
+  if (resumeData.title) payload.name = resumeData.title;
+  if (resumeData.contact?.fullName) {
+    payload.contact = { ...resumeData.contact, name: resumeData.contact.fullName };
+  }
+  if (resumeData.experience) {
+    payload.experience = resumeData.experience.map((exp: any) => ({
+      ...exp,
+      responsibilities: exp.responsibilities || (exp.description ? exp.description.split('\n').filter(Boolean) : []),
+    }));
+  }
+  if (resumeData.education) {
+    payload.education = resumeData.education.map((edu: any) => ({
+      ...edu,
+      institution: edu.institution || edu.school || '',
+      graduationDate: edu.graduationDate || edu.year || '',
+    }));
+  }
+  return payload;
+}
+
 /**
  * Resume methods
  */
@@ -66,7 +89,16 @@ export const resumesApi = {
       contact: {
         ...r.contact,
         fullName: r.contact?.name || '',
-      }
+      },
+      experience: (r.experience || []).map((exp: any) => ({
+        ...exp,
+        description: exp.description || (exp.responsibilities || []).join('\n'),
+      })),
+      education: (r.education || []).map((edu: any) => ({
+        ...edu,
+        school: edu.school || edu.institution || '',
+        year: edu.year || edu.graduationDate || '',
+      })),
     }));
   },
 
@@ -80,34 +112,27 @@ export const resumesApi = {
       contact: {
         ...r.contact,
         fullName: r.contact?.name || '',
-      }
+      },
+      experience: (r.experience || []).map((exp: any) => ({
+        ...exp,
+        description: exp.description || (exp.responsibilities || []).join('\n'),
+      })),
+      education: (r.education || []).map((edu: any) => ({
+        ...edu,
+        school: edu.school || edu.institution || '',
+        year: edu.year || edu.graduationDate || '',
+      })),
     };
   },
 
   createResume: async (resumeData: ResumeData): Promise<ResumeData> => {
-    const response = await api.post<ApiResponse<ResumeData>>('/resumes', {
-      ...resumeData,
-      name: resumeData.title, // Backend uses 'name'
-      contact: {
-        ...resumeData.contact,
-        name: resumeData.contact.fullName, // Backend uses 'contact.name'
-      }
-    });
+    const response = await api.post<ApiResponse<ResumeData>>('/resumes', toBackendPayload(resumeData));
     if (!response.data.data) throw new Error('Failed to create resume');
     return response.data.data;
   },
 
   updateResume: async (id: string, resumeData: Partial<ResumeData>): Promise<ResumeData> => {
-    const payload: any = { ...resumeData };
-    if (resumeData.title) payload.name = resumeData.title;
-    if (resumeData.contact?.fullName) {
-      payload.contact = {
-        ...resumeData.contact,
-        name: resumeData.contact.fullName
-      };
-    }
-
-    const response = await api.put<ApiResponse<ResumeData>>(`/resumes/${id}`, payload);
+    const response = await api.put<ApiResponse<ResumeData>>(`/resumes/${id}`, toBackendPayload(resumeData));
     if (!response.data.data) throw new Error('Failed to update resume');
     return response.data.data;
   },
