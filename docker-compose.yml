@@ -12,7 +12,7 @@ services:
     env_file:
       - apps/backend/.env # standard .env file, swapped by deploy script
     volumes:
-      - ./data:/app/data
+      - resumate-data:/app/data
     restart: always
 
   frontend:
@@ -27,3 +27,6 @@ services:
     restart: always
     depends_on:
       - backend
+
+volumes:
+  resumate-data:
