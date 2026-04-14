@@ -66,8 +66,9 @@ else
 fi
 
 # 4. Build and Run
-print_status "� Stopping existing containers..."
+print_status "Stopping existing containers (data volumes preserved)..."
 docker-compose -p $COMPOSE_PROJECT_NAME down || true
+# NOTE: Do NOT use 'down --volumes' — that destroys the SQLite database
 
 print_status "�🐳 Starting containers for $COMPOSE_PROJECT_NAME..."
 # Pull latest images first to ensure we aren't using cached ones
