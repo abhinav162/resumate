@@ -8,6 +8,13 @@ import { getCredits } from '../services/creditService.js';
  */
 export function requireCredits(amount) {
   return async (req, res, next) => {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+
     try {
       const balance = await getCredits(req.user.id);
       if (balance < amount) {
