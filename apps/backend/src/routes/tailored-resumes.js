@@ -1,22 +1,10 @@
 import express from 'express';
 import TailoredResume from '../models/TailoredResume.js';
 import { Resume } from '../models/Resume.js';
-import { body, param, validationResult } from 'express-validator';
+import { body, param } from 'express-validator';
+import { handleValidationErrors } from '../middleware/errorHelpers.js';
 
 const router = express.Router();
-
-// Validation middleware
-const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation errors',
-      errors: errors.array()
-    });
-  }
-  next();
-};
 
 // GET /api/tailored-resumes - Get all tailored resumes
 router.get('/', async (req, res) => {

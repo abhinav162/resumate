@@ -1,5 +1,5 @@
 import express from 'express';
-import { body, validationResult } from 'express-validator';
+import { body } from 'express-validator';
 import { v4 as uuidv4 } from 'uuid';
 import database from '../config/database.js';
 import { Resume } from '../models/Resume.js';
@@ -7,14 +7,9 @@ import { scoreResume, tailorResume } from '../services/aiService.js';
 import { deductCredits } from '../services/creditService.js';
 import { requireCredits } from '../middleware/requireCredits.js';
 import { CREDIT_COSTS } from '../config/credits.config.js';
+import { handleValidationErrors } from '../middleware/errorHelpers.js';
 
 const router = express.Router();
-
-const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
-  next();
-};
 
 // POST /api/ai/score/:resumeId — score a stored resume (costs 1 credit)
 router.post('/score/:resumeId', requireCredits(CREDIT_COSTS.RESUME_SCORE), async (req, res) => {
