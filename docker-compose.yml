@@ -10,9 +10,7 @@ services:
       - NODE_ENV=production
       - PORT=4300
     env_file:
-      - apps/backend/.env # standard .env file, swapped by deploy script
-    volumes:
-      - resumate-data:/app/data
+      - apps/backend/.env
     restart: always
 
   frontend:
@@ -23,10 +21,7 @@ services:
     ports:
       - "${FRONTEND_PORT:-3160}:80"
     env_file:
-      - apps/frontend/.env # standard .env file, swapped by deploy script
+      - apps/frontend/.env
     restart: always
     depends_on:
       - backend
-
-volumes:
-  resumate-data:
