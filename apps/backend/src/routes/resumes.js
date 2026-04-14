@@ -1,22 +1,10 @@
 import express from "express";
 import { Resume } from "../models/Resume.js";
-import { body, param, validationResult } from "express-validator";
+import { body, param } from "express-validator";
 import database from "../config/database.js";
+import { handleValidationErrors } from "../middleware/errorHelpers.js";
 
 const router = express.Router();
-
-// Validation middleware
-const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: "Validation errors",
-      errors: errors.array(),
-    });
-  }
-  next();
-};
 
 // GET /api/resumes - Get all resumes
 router.get("/", async (req, res) => {

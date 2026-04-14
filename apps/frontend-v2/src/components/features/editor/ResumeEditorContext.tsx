@@ -201,15 +201,21 @@ export const ResumeEditorProvider: React.FC<{
     setResumeData((prev: any) => {
       if (!prev) return prev;
       const updated = { ...prev };
-      if (sectionType === 'experience' && updated.experience?.[sectionIdx]?.responsibilities) {
+      if (sectionType === 'experience' && updated.experience?.[sectionIdx]) {
         const exp = { ...updated.experience[sectionIdx] };
-        const responsibilities = [...exp.responsibilities];
-        responsibilities[bulletIdx] = s.rewrite;
-        exp.responsibilities = responsibilities;
+        // Frontend stores description as a newline-joined string; split, replace, rejoin
+        const bullets = (exp.description || '').split('\n').filter(Boolean);
+        if (bulletIdx < bullets.length) {
+          bullets[bulletIdx] = s.rewrite;
+        } else {
+          bullets.push(s.rewrite);
+        }
+        exp.description = bullets.join('\n');
         updated.experience = updated.experience.map((e: any, i: number) => i === sectionIdx ? exp : e);
       }
       return updated;
     });
+    isDirty.current = true;
     setSuggestions(prev => prev.filter(s => s.bulletId !== bulletId));
   };
 

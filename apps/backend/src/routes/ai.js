@@ -1,19 +1,15 @@
 import express from 'express';
-import { body, validationResult } from 'express-validator';
+import { body } from 'express-validator';
 import { v4 as uuidv4 } from 'uuid';
 import database from '../config/database.js';
+import { Resume } from '../models/Resume.js';
 import { scoreResume, tailorResume } from '../services/aiService.js';
 import { deductCredits } from '../services/creditService.js';
 import { requireCredits } from '../middleware/requireCredits.js';
 import { CREDIT_COSTS } from '../config/credits.config.js';
+import { handleValidationErrors } from '../middleware/errorHelpers.js';
 
 const router = express.Router();
-
-const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
-  next();
-};
 
 // POST /api/ai/score/:resumeId — score a stored resume (costs 1 credit)
 router.post('/score/:resumeId', requireCredits(CREDIT_COSTS.RESUME_SCORE), async (req, res) => {
@@ -21,19 +17,20 @@ router.post('/score/:resumeId', requireCredits(CREDIT_COSTS.RESUME_SCORE), async
     const userRow = await database.get('SELECT id FROM users WHERE uuid = ?', [req.headers['x-user-id']]);
     if (!userRow) return res.status(401).json({ success: false, message: 'User not found' });
 
-    const resume = await database.get(
-      'SELECT * FROM base_resumes WHERE uuid = ? AND user_id = ?',
-      [req.params.resumeId, userRow.id]
-    );
+    // Use Resume model to get complete resume with experience, education, projects
+    const resume = await Resume.findByUuid(req.params.resumeId);
     if (!resume) return res.status(404).json({ success: false, message: 'Resume not found' });
 
-    const resumeData = JSON.parse(resume.contact_data);
-    const scoreReport = await scoreResume(resumeData);
+    const scoreReport = await scoreResume(resume);
 
-    await database.run(
-      "UPDATE base_resumes SET score = ?, suggestions = ?, updated_at = datetime('now') WHERE id = ?",
-      [scoreReport.score, JSON.stringify(scoreReport.suggestions), resume.id]
-    );
+    // Store score in DB using the internal ID
+    const dbResume = await database.get('SELECT id FROM base_resumes WHERE uuid = ?', [req.params.resumeId]);
+    if (dbResume) {
+      await database.run(
+        "UPDATE base_resumes SET score = ?, suggestions = ?, updated_at = datetime('now') WHERE id = ?",
+        [scoreReport.score, JSON.stringify(scoreReport.suggestions), dbResume.id]
+      );
+    }
 
     await deductCredits(userRow.id, CREDIT_COSTS.RESUME_SCORE);
 
@@ -56,22 +53,20 @@ router.post('/tailor', [
     const userRow = await database.get('SELECT id FROM users WHERE uuid = ?', [req.headers['x-user-id']]);
     if (!userRow) return res.status(401).json({ success: false, message: 'User not found' });
 
-    const baseResume = await database.get(
-      'SELECT * FROM base_resumes WHERE uuid = ? AND user_id = ?',
-      [resumeId, userRow.id]
-    );
-    if (!baseResume) return res.status(404).json({ success: false, message: 'Resume not found' });
+    // Use Resume model to get complete resume with experience, education, projects
+    const resumeData = await Resume.findByUuid(resumeId);
+    if (!resumeData) return res.status(404).json({ success: false, message: 'Resume not found' });
 
-    const resumeData = JSON.parse(baseResume.contact_data);
     const { tailoredResume, diff, beforeScore, afterScore } = await tailorResume(
       resumeData, jobTitle, company, jobDescription
     );
 
+    const dbResume = await database.get('SELECT id FROM base_resumes WHERE uuid = ?', [resumeId]);
     const tailoredUuid = uuidv4();
     await database.run(
       `INSERT INTO tailored_resumes (uuid, base_resume_id, job_title, company, job_description, tailored_data, before_score, after_score, diff)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tailoredUuid, baseResume.id, jobTitle, company, jobDescription,
+      [tailoredUuid, dbResume.id, jobTitle, company, jobDescription,
        JSON.stringify(tailoredResume), beforeScore, afterScore, JSON.stringify(diff)]
     );
 
