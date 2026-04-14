@@ -6,6 +6,29 @@ import { CREDIT_PACKS } from '../config/pricing.config.js';
 
 const router = express.Router();
 
+// Validate and create Stripe instance once at module load
+function createStripeClient() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key || key === 'sk_test_...' || key.length < 20) {
+    console.warn('WARNING: STRIPE_SECRET_KEY is missing or is a placeholder. Credit purchases will fail.');
+    return null;
+  }
+  return new Stripe(key);
+}
+
+const stripe = createStripeClient();
+
+// Guard for routes that need Stripe
+function requireStripe(req, res, next) {
+  if (!stripe) {
+    return res.status(503).json({
+      success: false,
+      message: 'Payment service is not configured. Please contact support.',
+    });
+  }
+  next();
+}
+
 // GET /api/credits/balance
 router.get('/balance', async (req, res) => {
   try {
@@ -27,14 +50,13 @@ router.get('/packs', (req, res) => {
 });
 
 // POST /api/credits/checkout — create Stripe checkout session
-router.post('/checkout', async (req, res) => {
+router.post('/checkout', requireStripe, async (req, res) => {
   try {
     const { packId } = req.body;
     const pack = CREDIT_PACKS.find(p => p.id === packId);
     if (!pack) return res.status(400).json({ success: false, message: 'Invalid pack' });
     if (!pack.stripePriceId) return res.status(500).json({ success: false, message: 'Stripe price not configured' });
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price: pack.stripePriceId, quantity: 1 }],
@@ -50,8 +72,7 @@ router.post('/checkout', async (req, res) => {
 });
 
 // POST /api/credits/webhook — Stripe webhook (raw body required, handled in server.js)
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+router.post('/webhook', requireStripe, express.raw({ type: 'application/json' }), async (req, res) => {
   let event;
   try {
     event = stripe.webhooks.constructEvent(
@@ -60,7 +81,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    return res.status(400).json({ message: `Webhook error: ${err.message}` });
+    return res.status(400).json({ success: false, message: `Webhook error: ${err.message}` });
   }
 
   if (event.type === 'checkout.session.completed') {
