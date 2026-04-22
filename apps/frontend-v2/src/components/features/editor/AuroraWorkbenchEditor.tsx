@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
@@ -421,15 +421,7 @@ function AuroraWorkbenchInner() {
         </div>
 
         {/* Canvas */}
-        <div className="flex-1 overflow-auto p-8 flex justify-center custom-scrollbar bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
-          {/* Scale wrapper — sized to match the visual scaled paper so it takes correct layout space */}
-          <div className="w-[calc(210mm*0.85)] md:w-[calc(210mm*0.9)] lg:w-[210mm] flex-shrink-0">
-            {/* The "Paper" */}
-            <div className="w-[210mm] min-h-[297mm] bg-white text-black shadow-2xl origin-top-left transition-transform duration-300 transform scale-[0.85] md:scale-[0.9] lg:scale-[1] overflow-hidden">
-              <ResumePreviewMock resumeData={resumeData} />
-            </div>
-          </div>
-        </div>
+        <ResponsivePreviewCanvas resumeData={resumeData} />
       </div>
     </EditorLayout>
   );
@@ -733,6 +725,55 @@ function DenseInput({ label, isTextArea, className, ...props }: any) {
           {...props}
         />
       )}
+    </div>
+  );
+}
+
+// -- Responsive preview canvas that auto-scales the A4 paper to fit the container --
+function ResponsivePreviewCanvas({ resumeData }: { resumeData: any }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  // 210mm at 96dpi ≈ 793.7px. Recompute whenever the container resizes so the paper always fits.
+  useLayoutEffect(() => {
+    const PAPER_WIDTH_PX = 794;
+    const HORIZONTAL_PADDING = 64; // p-8 = 2rem each side
+    const compute = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const available = el.clientWidth - HORIZONTAL_PADDING;
+      const next = Math.min(1, Math.max(0.45, available / PAPER_WIDTH_PX));
+      setScale(next);
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    if (containerRef.current) ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-auto p-8 flex justify-center custom-scrollbar bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100"
+    >
+      {/* Outer wrapper is sized to match the scaled paper so flex layout and scrollbars behave correctly */}
+      <div
+        className="flex-shrink-0"
+        style={{ width: `${210 * scale}mm`, height: `${297 * scale}mm` }}
+      >
+        {/* The "Paper" renders at full A4 size, visually shrunk via transform */}
+        <div
+          className="bg-white text-black shadow-2xl overflow-hidden transition-transform duration-150"
+          style={{
+            width: "210mm",
+            minHeight: "297mm",
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+          }}
+        >
+          <ResumePreviewMock resumeData={resumeData} />
+        </div>
+      </div>
     </div>
   );
 }
