@@ -422,9 +422,12 @@ function AuroraWorkbenchInner() {
 
         {/* Canvas */}
         <div className="flex-1 overflow-auto p-8 flex justify-center custom-scrollbar bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
-          {/* The "Paper" */}
-          <div className="w-[210mm] min-h-[297mm] bg-white text-black shadow-2xl origin-top transition-transform duration-300 transform scale-[0.85] md:scale-[0.9] lg:scale-[1]">
-            <ResumePreviewMock resumeData={resumeData} />
+          {/* Scale wrapper — sized to match the visual scaled paper so it takes correct layout space */}
+          <div className="w-[calc(210mm*0.85)] md:w-[calc(210mm*0.9)] lg:w-[210mm] flex-shrink-0">
+            {/* The "Paper" */}
+            <div className="w-[210mm] min-h-[297mm] bg-white text-black shadow-2xl origin-top-left transition-transform duration-300 transform scale-[0.85] md:scale-[0.9] lg:scale-[1] overflow-hidden">
+              <ResumePreviewMock resumeData={resumeData} />
+            </div>
           </div>
         </div>
       </div>
@@ -675,13 +678,17 @@ function ExperienceForm() {
             />
           </div>
           <DenseInput
-            label="Description"
+            label="Description (one bullet per line)"
             isTextArea
             value={exp.description}
             onChange={(e: any) =>
               handleUpdate(i, "description", e.target.value)
             }
+            placeholder={"Engineered an AI Copilot feature...\nDesigned a distributed email rotation system..."}
           />
+          <p className="text-[10px] text-ink-muted italic mt-2 px-1">
+            Each new line becomes a bullet point in the preview and final PDF.
+          </p>
         </div>
       ))}
       <Button
@@ -761,24 +768,34 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
             Experience
           </h3>
           <div className="space-y-6">
-            {resumeData.experience.map((exp: any, i: number) => (
-              <div key={i}>
-                <div className="flex justify-between items-baseline mb-1">
-                  <h4 className="font-bold text-gray-900 text-base">
-                    {exp.role || "Position"}
-                  </h4>
-                  <span className="text-xs font-mono text-gray-500">
-                    {exp.startDate} – {exp.endDate}
-                  </span>
+            {resumeData.experience.map((exp: any, i: number) => {
+              const bullets = (exp.description || "")
+                .split("\n")
+                .map((s: string) => s.trim())
+                .filter(Boolean);
+              return (
+                <div key={i}>
+                  <div className="flex justify-between items-baseline mb-1 gap-4">
+                    <h4 className="font-bold text-gray-900 text-base break-words">
+                      {exp.role || "Position"}
+                    </h4>
+                    <span className="text-xs font-mono text-gray-500 whitespace-nowrap">
+                      {exp.startDate} – {exp.endDate}
+                    </span>
+                  </div>
+                  <div className="text-sm font-medium text-gray-600 mb-2 break-words">
+                    {exp.company || "Company"}
+                  </div>
+                  {bullets.length > 0 && (
+                    <ul className="text-sm text-gray-700 leading-relaxed list-disc pl-5 space-y-1 break-words">
+                      {bullets.map((b: string, idx: number) => (
+                        <li key={idx}>{b}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                <div className="text-sm font-medium text-gray-600 mb-2">
-                  {exp.company || "Company"}
-                </div>
-                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {exp.description}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
