@@ -37,7 +37,12 @@ router.post('/score/:resumeId', requireCredits(CREDIT_COSTS.RESUME_SCORE), async
     res.json({ success: true, data: scoreReport });
   } catch (error) {
     console.error('Error scoring resume:', error);
-    res.status(500).json({ success: false, message: error.message });
+    const status = error.status === 503 ? 503 : 500;
+    res.status(status).json({
+      success: false,
+      code: error.code,
+      message: error.message,
+    });
   }
 });
 
@@ -78,7 +83,12 @@ router.post('/tailor', [
     });
   } catch (error) {
     console.error('Error tailoring resume:', error);
-    res.status(500).json({ success: false, message: error.message });
+    const status = error.status === 503 ? 503 : 500;
+    res.status(status).json({
+      success: false,
+      code: error.code,
+      message: error.message,
+    });
   }
 });
 

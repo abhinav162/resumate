@@ -1,12 +1,76 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-function getModel() {
+// Primary model + fallback when primary is overloaded
+const PRIMARY_MODEL = 'gemini-2.5-flash';
+const FALLBACK_MODEL = 'gemini-2.0-flash';
+
+function getModel(modelName = PRIMARY_MODEL) {
   if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   return genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: modelName,
     generationConfig: { responseMimeType: 'application/json' },
   });
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function isRetryableError(err) {
+  // Gemini returns 503 when overloaded, 429 when rate-limited, 500 for transient errors
+  const status = err?.status ?? err?.response?.status;
+  if (status === 429 || status === 500 || status === 503) return true;
+  // Fallback: check the message text
+  const msg = (err?.message ?? '').toLowerCase();
+  return msg.includes('overloaded') || msg.includes('high demand') || msg.includes('rate limit') || msg.includes('try again');
+}
+
+function isOverloadedError(err) {
+  const status = err?.status ?? err?.response?.status;
+  if (status === 503) return true;
+  const msg = (err?.message ?? '').toLowerCase();
+  return msg.includes('overloaded') || msg.includes('high demand');
+}
+
+/**
+ * Call Gemini with retry + fallback-model strategy.
+ * - Retries the same model up to 2 times with exponential backoff (1s, 2s) on transient errors
+ * - If primary model is still overloaded, falls back to FALLBACK_MODEL for one more attempt
+ * - Throws a tagged error with .status = 503 if all attempts fail due to overload
+ */
+async function generateWithRetry(prompt, { maxAttempts = 3 } = {}) {
+  let lastError;
+
+  // Attempts 1 & 2: primary model with exponential backoff
+  for (let attempt = 1; attempt <= maxAttempts - 1; attempt++) {
+    try {
+      const model = getModel(PRIMARY_MODEL);
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    } catch (err) {
+      lastError = err;
+      if (!isRetryableError(err)) throw err;
+      const delay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s
+      console.warn(`Gemini ${PRIMARY_MODEL} attempt ${attempt} failed (${err.status ?? '?'}). Retrying in ${delay}ms.`);
+      await sleep(delay);
+    }
+  }
+
+  // Final attempt: fallback model
+  try {
+    console.warn(`Gemini ${PRIMARY_MODEL} exhausted retries. Falling back to ${FALLBACK_MODEL}.`);
+    const model = getModel(FALLBACK_MODEL);
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  } catch (err) {
+    // Tag the error so routes can return 503 instead of 500
+    if (isOverloadedError(err) || isOverloadedError(lastError)) {
+      const e = new Error('AI service is temporarily overloaded. Please try again in a moment.');
+      e.status = 503;
+      e.code = 'AI_OVERLOADED';
+      throw e;
+    }
+    throw err;
+  }
 }
 
 function parseJsonResponse(text) {
@@ -30,7 +94,6 @@ function parseJsonResponse(text) {
 }
 
 export async function parseResumeText(resumeText) {
-  const model = getModel();
   const prompt = `Parse the following resume text into structured JSON. Extract contact, summary, experience (with responsibilities as arrays), education, projects, and skills.
 
 Resume:
@@ -48,12 +111,11 @@ Return ONLY valid JSON with this structure:
   "skills": []
 }`;
 
-  const result = await model.generateContent(prompt);
-  return parseJsonResponse(result.response.text());
+  const text = await generateWithRetry(prompt);
+  return parseJsonResponse(text);
 }
 
 export async function scoreResume(resumeData) {
-  const model = getModel();
   const prompt = `You are an ATS resume expert. Analyze this resume and return a JSON score report.
 
 Resume:
@@ -72,13 +134,11 @@ Return ONLY valid JSON:
 
 bulletId format: "experience-0-2" means experience[0].responsibilities[2]. Use "summary-0-0" for summary, "skills-0-0" for skills section.`;
 
-  const result = await model.generateContent(prompt);
-  return parseJsonResponse(result.response.text());
+  const text = await generateWithRetry(prompt);
+  return parseJsonResponse(text);
 }
 
 export async function tailorResume(resumeData, jobTitle, company, jobDescription) {
-  const model = getModel();
-
   // Score before tailoring
   const beforeScoreData = await scoreResume(resumeData);
   const beforeScore = beforeScoreData.score;
@@ -110,8 +170,8 @@ Return ONLY valid JSON with two keys:
   ]
 }`;
 
-  const result = await model.generateContent(prompt);
-  const parsed = parseJsonResponse(result.response.text());
+  const text = await generateWithRetry(prompt);
+  const parsed = parseJsonResponse(text);
 
   // Score after tailoring
   const afterScoreData = await scoreResume(parsed.tailoredResume);
