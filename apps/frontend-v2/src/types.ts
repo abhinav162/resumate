@@ -27,6 +27,10 @@ export interface ResumeData {
   skills: string[];
   updatedAt?: string;
   isBase?: boolean;
+  // True when this resume was loaded from the tailored_resumes table (via getResume fallback).
+  // The save path uses this flag to route updates to the tailored endpoint.
+  isTailored?: boolean;
+  baseResumeId?: string;
 }
 
 export interface TailoredResume {

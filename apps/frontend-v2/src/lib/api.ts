@@ -71,6 +71,27 @@ function toBackendPayload(resumeData: any) {
   return payload;
 }
 
+// Map a backend resume object (or a tailored resume's tailoredData) into the editor's expected shape.
+function fromBackendPayload(r: any): ResumeData {
+  return {
+    ...r,
+    title: r.name || r.title || 'Untitled',
+    contact: {
+      ...(r.contact || {}),
+      fullName: r.contact?.fullName || r.contact?.name || '',
+    },
+    experience: (r.experience || []).map((exp: any) => ({
+      ...exp,
+      description: exp.description || (exp.responsibilities || []).join('\n'),
+    })),
+    education: (r.education || []).map((edu: any) => ({
+      ...edu,
+      school: edu.school || edu.institution || '',
+      year: edu.year || edu.graduationDate || '',
+    })),
+  };
+}
+
 /**
  * Resume methods
  */
@@ -83,46 +104,33 @@ export const resumesApi = {
   getResumes: async (): Promise<ResumeData[]> => {
     const response = await api.get<ApiResponse<any[]>>('/resumes');
     const data = response.data.data || [];
-    return data.map(r => ({
-      ...r,
-      title: r.name || 'Untitled',
-      contact: {
-        ...r.contact,
-        fullName: r.contact?.name || '',
-      },
-      experience: (r.experience || []).map((exp: any) => ({
-        ...exp,
-        description: exp.description || (exp.responsibilities || []).join('\n'),
-      })),
-      education: (r.education || []).map((edu: any) => ({
-        ...edu,
-        school: edu.school || edu.institution || '',
-        year: edu.year || edu.graduationDate || '',
-      })),
-    }));
+    return data.map(fromBackendPayload);
   },
 
+  // Fetches a resume by ID. Transparently falls back to the tailored-resumes
+  // endpoint if the ID isn't a base resume — this lets the editor open both kinds.
   getResume: async (id: string): Promise<ResumeData> => {
-    const response = await api.get<ApiResponse<any>>(`/resumes/${id}`);
-    const r = response.data.data;
-    if (!r) throw new Error('Resume not found');
-    return {
-      ...r,
-      title: r.name || 'Untitled',
-      contact: {
-        ...r.contact,
-        fullName: r.contact?.name || '',
-      },
-      experience: (r.experience || []).map((exp: any) => ({
-        ...exp,
-        description: exp.description || (exp.responsibilities || []).join('\n'),
-      })),
-      education: (r.education || []).map((edu: any) => ({
-        ...edu,
-        school: edu.school || edu.institution || '',
-        year: edu.year || edu.graduationDate || '',
-      })),
-    };
+    try {
+      const response = await api.get<ApiResponse<any>>(`/resumes/${id}`);
+      const r = response.data.data;
+      if (r) return fromBackendPayload(r);
+    } catch (err: any) {
+      if (err?.response?.status !== 404) throw err;
+    }
+
+    // Fallback: try to load as a tailored resume
+    const tailored = await api.get<ApiResponse<any>>(`/tailored-resumes/${id}`);
+    const tr = tailored.data.data;
+    if (!tr) throw new Error('Resume not found');
+
+    const content = tr.tailoredData ?? {};
+    const mapped = fromBackendPayload({
+      ...content,
+      id: tr.id,
+      name: `${tr.jobDetails?.jobTitle ?? 'Tailored'} @ ${tr.jobDetails?.company ?? 'Resume'}`,
+    });
+    // Tag the resume so the save path can route updates to the tailored endpoint
+    return { ...mapped, isTailored: true, baseResumeId: tr.baseResumeId } as any;
   },
 
   createResume: async (resumeData: ResumeData): Promise<ResumeData> => {
@@ -132,7 +140,24 @@ export const resumesApi = {
   },
 
   updateResume: async (id: string, resumeData: Partial<ResumeData>): Promise<ResumeData> => {
-    const response = await api.put<ApiResponse<ResumeData>>(`/resumes/${id}`, toBackendPayload(resumeData));
+    // Tailored resumes are flagged via getResume(); save them through the tailored endpoint.
+    if ((resumeData as any).isTailored) {
+      const payload = { tailoredData: toBackendPayload(resumeData) };
+      const response = await api.put<ApiResponse<any>>(`/tailored-resumes/${id}`, payload);
+      if (!response.data.data) throw new Error('Failed to update tailored resume');
+      return response.data.data;
+    }
+
+    try {
+      const response = await api.put<ApiResponse<ResumeData>>(`/resumes/${id}`, toBackendPayload(resumeData));
+      if (response.data.data) return response.data.data;
+    } catch (err: any) {
+      if (err?.response?.status !== 404) throw err;
+    }
+
+    // Fallback: write to tailored_resumes if the ID isn't a base resume
+    const payload = { tailoredData: toBackendPayload(resumeData) };
+    const response = await api.put<ApiResponse<any>>(`/tailored-resumes/${id}`, payload);
     if (!response.data.data) throw new Error('Failed to update resume');
     return response.data.data;
   },
