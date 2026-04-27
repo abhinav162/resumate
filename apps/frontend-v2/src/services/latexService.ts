@@ -9,8 +9,8 @@ const defaultConfig: ResumeBuilderConfig = {
         urlDisplayThreshold: 30,
         showEmptyFields: false
     },
-    sectionOrder: ['summary', 'skills', 'experience', 'education'],
-    enabledSections: ['summary', 'skills', 'experience', 'education']
+    sectionOrder: ['summary', 'skills', 'experience', 'projects', 'education'],
+    enabledSections: ['summary', 'skills', 'experience', 'projects', 'education']
 };
 
 /**

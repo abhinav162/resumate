@@ -134,7 +134,11 @@ Return ONLY valid JSON:
   ]
 }
 
-bulletId format: "experience-0-2" means experience[0].responsibilities[2]. Use "summary-0-0" for summary, "skills-0-0" for skills section.`;
+bulletId format:
+- "experience-<expIdx>-<bulletIdx>" → experience[expIdx].responsibilities[bulletIdx]
+- "projects-<projIdx>-<bulletIdx>" → projects[projIdx].description[bulletIdx]
+- "summary-0-0" for summary
+- "skills-0-0" for skills section`;
 
   const text = await generateWithRetry(prompt);
   return parseJsonResponse(text);
@@ -166,9 +170,10 @@ ${JSON.stringify(resumeData, null, 2)}
 
 Return ONLY valid JSON with two keys:
 {
-  "tailoredResume": <full resume object matching original structure>,
+  "tailoredResume": <full resume object matching original structure (preserve projects array if present)>,
   "diff": [
-    { "sectionType": "experience", "bulletId": "experience-0-1", "original": "<old text>", "rewritten": "<new text>", "reason": "<why changed>" }
+    { "sectionType": "experience", "bulletId": "experience-0-1", "original": "<old text>", "rewritten": "<new text>", "reason": "<why changed>" },
+    { "sectionType": "projects", "bulletId": "projects-0-2", "original": "<old text>", "rewritten": "<new text>", "reason": "<why changed>" }
   ]
 }`;
 
