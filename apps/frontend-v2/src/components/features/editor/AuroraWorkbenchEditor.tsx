@@ -37,11 +37,11 @@ const STEPS = [
   { id: "tailor", label: "AI Tailor", icon: <Wand2 size={18} /> },
 ];
 
-export function AuroraWorkbenchEditor() {
+export function AuroraWorkbenchEditor({ mode = 'base' }: { mode?: 'base' | 'tailored' } = {}) {
   const { id } = useParams<{ id: string }>();
 
   return (
-    <ResumeEditorProvider resumeId={id}>
+    <ResumeEditorProvider resumeId={id} mode={mode}>
       <AuroraWorkbenchInner />
     </ResumeEditorProvider>
   );
@@ -51,6 +51,8 @@ function AuroraWorkbenchInner() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
+    mode,
+    tailoredMeta,
     resumeData,
     isSaving,
     lastSaved,
@@ -64,13 +66,13 @@ function AuroraWorkbenchInner() {
     dismissSuggestion,
   } = useResumeEditor();
 
-  // URL Sync: If we started without an ID but now have one (after first save), update URL
+  // URL Sync: If we started without an ID but now have one (after first save), update URL.
+  // Skipped in tailored mode — tailored rows are created server-side by /api/ai/tailor and
+  // the route always has the ID.
   useEffect(() => {
+    if (mode === 'tailored') return;
     const checkId = async () => {
       if (!id && !isLoading && lastSaved) {
-        // If we are on /editor and we have successfully saved once
-        // (meaning an ID has been generated in the background by the provider)
-        // we should try to get that ID and update the URL.
         const currentId = await saveResume();
         if (currentId) {
           navigate(`/editor/${currentId}`, { replace: true });
@@ -78,7 +80,7 @@ function AuroraWorkbenchInner() {
       }
     };
     checkId();
-  }, [id, isLoading, lastSaved, navigate, saveResume]);
+  }, [id, isLoading, lastSaved, navigate, saveResume, mode]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [isTailoring, setIsTailoring] = useState(false);
@@ -166,6 +168,14 @@ function AuroraWorkbenchInner() {
       isExporting={isExporting}
       actions={
         <div className="flex items-center gap-2 mr-4">
+          {mode === 'tailored' && tailoredMeta && (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-indigo-50 border border-indigo-200">
+              <Sparkles size={12} className="text-indigo-600" />
+              <span className="text-[10px] text-indigo-700 uppercase tracking-wider font-mono">
+                Tailored · {tailoredMeta.jobTitle} @ {tailoredMeta.company}
+              </span>
+            </div>
+          )}
           {isSaving ? (
             <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-paper-bg border border-paper-border">
               <Loader2 size={12} className="animate-spin text-indigo-600" />

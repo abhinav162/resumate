@@ -225,7 +225,7 @@ export default function TailorWorkspace() {
                   <Badge variant="success">+{result.afterScore - result.beforeScore} pts</Badge>
                 </div>
               </div>
-              <Button size="sm" variant="secondary" onClick={() => window.location.href = `/editor/${result.tailoredResumeId}`}>
+              <Button size="sm" variant="secondary" onClick={() => window.location.href = `/editor/tailored/${result.tailoredResumeId}`}>
                 Open Tailored Resume →
               </Button>
             </div>
