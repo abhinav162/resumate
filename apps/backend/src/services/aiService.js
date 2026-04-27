@@ -3,8 +3,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Primary model + fallback when primary is overloaded
 // gemini-3.1-pro: latest top-tier reasoning for resume scoring/tailoring
 // gemini-3-flash: fast 3-gen fallback if pro is overloaded
-const PRIMARY_MODEL = 'gemini-3.1-pro';
-const FALLBACK_MODEL = 'gemini-3-flash';
+const PRIMARY_MODEL = 'gemini-3.1-pro-preview';
+const FALLBACK_MODEL = 'gemini-3-flash-preview';
 
 function getModel(modelName = PRIMARY_MODEL) {
   if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
