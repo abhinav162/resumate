@@ -8,6 +8,7 @@ import { escapeLatex, createHyperlink, createEmailLink, joinWithLineBreaks } fro
 type ContactInfo = ResumeData['contact'];
 type Experience = ResumeData['experience'][0];
 type Education = ResumeData['education'][0];
+type Project = ResumeData['projects'][0];
 
 /**
  * Configuration for section generation
@@ -182,6 +183,58 @@ export class ExperienceGenerator {
         // Fallback to native Date parsing
         const parsed = new Date(dateStr);
         return isNaN(parsed.getTime()) ? new Date(0) : parsed;
+    }
+}
+
+/**
+ * Generates the projects section
+ */
+export class ProjectsGenerator {
+    private config: SectionConfig;
+    constructor(config: SectionConfig = {}) {
+        this.config = config;
+    }
+
+    generate(projects: Project[]): string {
+        if (!projects || projects.length === 0) return '';
+
+        const sectionTitle = this.config.customLabels?.projects || 'PROJECTS';
+        const urlThreshold = this.config.urlDisplayThreshold || 30;
+
+        const projectsFormatted = projects.map(proj => {
+            const links: string[] = [];
+            if (proj.url && proj.url.trim()) {
+                const display = proj.url.length > urlThreshold ? 'Live' : proj.url;
+                links.push(createHyperlink(proj.url, display));
+            }
+            if (proj.repoUrl && proj.repoUrl.trim()) {
+                const display = proj.repoUrl.length > urlThreshold ? 'Repo' : proj.repoUrl;
+                links.push(createHyperlink(proj.repoUrl, display));
+            }
+
+            const bullets = (Array.isArray(proj.description) ? proj.description : [])
+                .map(b => (b || '').trim())
+                .filter(Boolean);
+
+            const header = `\\textbf{${escapeLatex(proj.name || '')}}${links.length ? ` \\hfill ${links.join(' | ')}` : ''}`;
+
+            if (bullets.length === 0) {
+                return `\n${header}\n`;
+            }
+
+            return `
+${header}
+ \\begin{itemize}
+    \\itemsep -5pt {}
+    ${bullets.map(b => `\\item ${escapeLatex(b)}`).join('\n    ')}
+ \\end{itemize}
+`;
+        }).join('\n');
+
+        return `\\begin{rSection}{${sectionTitle}}
+    ${projectsFormatted}
+\\end{rSection}
+`;
     }
 }
 

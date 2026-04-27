@@ -24,6 +24,13 @@ export interface ResumeData {
     degree: string;
     year: string;
   }>;
+  projects: Array<{
+    id?: string;
+    name: string;
+    url?: string;
+    repoUrl?: string;
+    description: string[];
+  }>;
   skills: string[];
   updatedAt?: string;
   isBase?: boolean;

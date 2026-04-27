@@ -35,8 +35,8 @@ interface ResumeEditorContextType {
   isSaving: boolean;
   lastSaved: Date | null;
   updateField: (path: string, value: any) => void;
-  addListItem: (path: "experience" | "education", item: any) => void;
-  removeListItem: (path: "experience" | "education", index: number) => void;
+  addListItem: (path: "experience" | "education" | "projects", item: any) => void;
+  removeListItem: (path: "experience" | "education" | "projects", index: number) => void;
   saveResume: () => Promise<string | undefined>;
   setResumeData: React.Dispatch<React.SetStateAction<ResumeData>>;
   score: number | null;
@@ -84,6 +84,7 @@ export const ResumeEditorProvider: React.FC<{
       summary: "",
       experience: [],
       education: [],
+      projects: [],
       skills: [],
     },
   );
@@ -110,11 +111,11 @@ export const ResumeEditorProvider: React.FC<{
         try {
           if (mode === 'tailored') {
             const { data, jobDetails, baseResumeId } = await tailoredResumesApi.getEditorData(resumeId);
-            setResumeData(data);
+            setResumeData({ ...data, projects: data.projects ?? [] });
             setTailoredMeta({ ...jobDetails, baseResumeId });
           } else {
             const data = await resumesApi.getResume(resumeId);
-            setResumeData(data);
+            setResumeData({ ...data, projects: data.projects ?? [] });
             setTailoredMeta(null);
           }
           isDirty.current = false;
@@ -187,18 +188,18 @@ export const ResumeEditorProvider: React.FC<{
     });
   };
 
-  const addListItem = (path: "experience" | "education", item: any) => {
+  const addListItem = (path: "experience" | "education" | "projects", item: any) => {
     setResumeData((prev) => ({
       ...prev,
-      [path]: [...prev[path], item],
+      [path]: [...(prev[path] ?? []), item],
     }));
     isDirty.current = true;
   };
 
-  const removeListItem = (path: "experience" | "education", index: number) => {
+  const removeListItem = (path: "experience" | "education" | "projects", index: number) => {
     setResumeData((prev) => ({
       ...prev,
-      [path]: prev[path].filter((_, i) => i !== index),
+      [path]: (prev[path] ?? []).filter((_: any, i: number) => i !== index),
     }));
     isDirty.current = true;
   };
@@ -239,6 +240,16 @@ export const ResumeEditorProvider: React.FC<{
         }
         exp.description = bullets.join('\n');
         updated.experience = updated.experience.map((e: any, i: number) => i === sectionIdx ? exp : e);
+      } else if (sectionType === 'projects' && updated.projects?.[sectionIdx]) {
+        const proj = { ...updated.projects[sectionIdx] };
+        const bullets = Array.isArray(proj.description) ? [...proj.description] : [];
+        if (bulletIdx < bullets.length) {
+          bullets[bulletIdx] = s.rewrite;
+        } else {
+          bullets.push(s.rewrite);
+        }
+        proj.description = bullets;
+        updated.projects = updated.projects.map((p: any, i: number) => i === sectionIdx ? proj : p);
       }
       return updated;
     });

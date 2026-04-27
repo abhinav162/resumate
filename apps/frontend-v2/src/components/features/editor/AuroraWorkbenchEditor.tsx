@@ -15,6 +15,7 @@ import {
   GraduationCap,
   Code,
   FileText,
+  FolderGit2,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
@@ -31,6 +32,7 @@ import {
 const STEPS = [
   { id: "contact", label: "Contact", icon: <User size={18} /> },
   { id: "experience", label: "Experience", icon: <Briefcase size={18} /> },
+  { id: "projects", label: "Projects", icon: <FolderGit2 size={18} /> },
   { id: "education", label: "Education", icon: <GraduationCap size={18} /> },
   { id: "skills", label: "Skills", icon: <Code size={18} /> },
   { id: "summary", label: "Summary", icon: <FileText size={18} /> },
@@ -341,6 +343,7 @@ function AuroraWorkbenchInner() {
             >
               {currentStep.id === "contact" && <ContactForm />}
               {currentStep.id === "experience" && <ExperienceForm />}
+              {currentStep.id === "projects" && <ProjectsForm />}
               {currentStep.id === "education" && <EducationForm />}
               {currentStep.id === "skills" && <SkillsForm />}
               {currentStep.id === "summary" && <SummaryForm />}
@@ -715,6 +718,104 @@ function ExperienceForm() {
   );
 }
 
+function ProjectsForm() {
+  const { resumeData, updateField, addListItem, removeListItem } =
+    useResumeEditor();
+
+  const projects = resumeData.projects ?? [];
+
+  const handleUpdate = (index: number, field: string, value: any) => {
+    const newProjects = [...projects];
+    newProjects[index] = { ...newProjects[index], [field]: value };
+    updateField("projects", newProjects);
+  };
+
+  return (
+    <div className="space-y-6">
+      {projects.map((proj: any, i: number) => {
+        const bullets = Array.isArray(proj.description)
+          ? proj.description
+          : [];
+        return (
+          <div
+            key={i}
+            className="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
+          >
+            <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
+              <button className="text-ink-muted hover:text-ink-primary p-1">
+                <GripVertical size={14} />
+              </button>
+              <button
+                onClick={() => removeListItem("projects", i)}
+                className="text-ink-muted hover:text-red-400 p-1"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 mb-3">
+              <DenseInput
+                label="Project Name"
+                value={proj.name || ""}
+                onChange={(e: any) => handleUpdate(i, "name", e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <DenseInput
+                label="Live URL"
+                value={proj.url || ""}
+                onChange={(e: any) => handleUpdate(i, "url", e.target.value)}
+                placeholder="https://example.com"
+              />
+              <DenseInput
+                label="Repo URL"
+                value={proj.repoUrl || ""}
+                onChange={(e: any) =>
+                  handleUpdate(i, "repoUrl", e.target.value)
+                }
+                placeholder="https://github.com/..."
+              />
+            </div>
+            <DenseInput
+              label="Description (one bullet per line)"
+              isTextArea
+              value={bullets.join("\n")}
+              onChange={(e: any) =>
+                handleUpdate(
+                  i,
+                  "description",
+                  e.target.value.split("\n"),
+                )
+              }
+              placeholder={"Built a real-time collaboration engine...\nReduced p95 latency from 400ms to 80ms..."}
+            />
+            <p className="text-[10px] text-ink-muted italic mt-2 px-1">
+              Each new line becomes a bullet point in the preview and final PDF.
+            </p>
+          </div>
+        );
+      })}
+      <Button
+        variant="secondary"
+        onClick={() =>
+          addListItem("projects", {
+            name: "",
+            url: "",
+            repoUrl: "",
+            description: [],
+          })
+        }
+        className="w-full border-dashed border-paper-border text-ink-secondary hover:text-indigo-600 hover:border-indigo-400 py-6 flex flex-col gap-1 h-auto"
+      >
+        <Plus size={20} />
+        <span className="text-xs font-bold uppercase tracking-wider">
+          Add Project
+        </span>
+      </Button>
+    </div>
+  );
+}
+
 function DenseInput({ label, isTextArea, className, ...props }: any) {
   return (
     <div className={className}>
@@ -849,6 +950,40 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
             })}
           </div>
         </section>
+
+        {(resumeData.projects ?? []).length > 0 && (
+          <section>
+            <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
+              Projects
+            </h3>
+            <div className="space-y-6">
+              {(resumeData.projects ?? []).map((proj: any, i: number) => {
+                const bullets = Array.isArray(proj.description)
+                  ? proj.description.filter(Boolean)
+                  : [];
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between items-baseline mb-1 gap-4">
+                      <h4 className="font-bold text-gray-900 text-base break-words">
+                        {proj.name || "Project"}
+                      </h4>
+                      <span className="text-xs font-mono text-gray-500 whitespace-nowrap break-all">
+                        {proj.url || proj.repoUrl || ""}
+                      </span>
+                    </div>
+                    {bullets.length > 0 && (
+                      <ul className="text-sm text-gray-700 leading-relaxed list-disc pl-5 space-y-1 break-words">
+                        {bullets.map((b: string, idx: number) => (
+                          <li key={idx}>{b}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         <section>
           <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
