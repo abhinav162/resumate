@@ -16,6 +16,7 @@ import { AuthLayout } from "./layouts/AuthLayout";
 import Dashboard from "./pages/Dashboard";
 import UploadPage from "./pages/UploadPage";
 import TailorWorkspace from "./pages/TailorWorkspace";
+import TailoredResumesPage from "./pages/TailoredResumesPage";
 import CreditsPage from "./pages/CreditsPage";
 import { AuroraWorkbenchEditor } from "./components/features/editor/AuroraWorkbenchEditor";
 import LandingPage from "./pages/LandingPage";
@@ -71,6 +72,15 @@ const router = createBrowserRouter([
       {
         path: "/tailor",
         element: <SignedIn><TailorWorkspace /></SignedIn>,
+      },
+      {
+        path: "/tailored",
+        element: (
+          <>
+            <SignedIn><TailoredResumesPage /></SignedIn>
+            <SignedOut><Navigate to="/sign-in" replace /></SignedOut>
+          </>
+        ),
       },
       {
         path: "/credits",

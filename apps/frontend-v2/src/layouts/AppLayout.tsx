@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { UserButton, useUser } from '@clerk/clerk-react';
-import { FileText, Sparkles } from 'lucide-react';
+import { FileText, Sparkles, Layers } from 'lucide-react';
 import { CreditCounter } from '../components/ui/CreditCounter';
 
 const navItems = [
   { to: '/dashboard', label: 'My Resumes', icon: FileText },
   { to: '/tailor', label: 'Tailor', icon: Sparkles },
+  { to: '/tailored', label: 'Tailored Resumes', icon: Layers },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {

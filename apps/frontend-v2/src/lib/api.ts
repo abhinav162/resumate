@@ -200,14 +200,30 @@ export const tailoredResumesApi = {
 /**
  * AI methods
  */
+export type TailorStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+
 export const aiApi = {
+  // Kicks off async tailoring. Returns immediately with the job ID + initial status.
   tailorResume: async (payload: {
     resumeId: string;
     jobTitle: string;
     company: string;
     jobDescription: string;
-  }): Promise<{ tailoredResumeId: string; tailoredResume: any; diff: any[]; beforeScore: number; afterScore: number }> => {
+  }): Promise<{ tailoredResumeId: string; status: TailorStatus }> => {
     const response = await api.post('/ai/tailor', payload);
+    return response.data.data;
+  },
+
+  // Poll endpoint — returns just the status fields (cheap, suitable for polling)
+  getTailorStatus: async (tailoredResumeId: string): Promise<{
+    tailoredResumeId: string;
+    status: TailorStatus;
+    errorMessage: string | null;
+    beforeScore: number | null;
+    afterScore: number | null;
+    updatedAt: string;
+  }> => {
+    const response = await api.get(`/ai/tailor/status/${tailoredResumeId}`);
     return response.data.data;
   },
 };

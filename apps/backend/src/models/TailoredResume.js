@@ -60,7 +60,12 @@ class TailoredResume {
         company: tailoredResume.company,
         description: tailoredResume.job_description
       },
-      tailoredData: JSON.parse(tailoredResume.tailored_data),
+      tailoredData: JSON.parse(tailoredResume.tailored_data || '{}'),
+      status: tailoredResume.status || 'COMPLETED',
+      errorMessage: tailoredResume.error_message ?? null,
+      beforeScore: tailoredResume.before_score ?? null,
+      afterScore: tailoredResume.after_score ?? null,
+      diff: tailoredResume.diff ? JSON.parse(tailoredResume.diff) : null,
       createdAt: tailoredResume.created_at,
       updatedAt: tailoredResume.updated_at
     };
@@ -90,7 +95,12 @@ class TailoredResume {
         company: tr.company,
         description: tr.job_description
       },
-      tailoredData: JSON.parse(tr.tailored_data),
+      tailoredData: JSON.parse(tr.tailored_data || '{}'),
+      status: tr.status || 'COMPLETED',
+      errorMessage: tr.error_message ?? null,
+      beforeScore: tr.before_score ?? null,
+      afterScore: tr.after_score ?? null,
+      diff: tr.diff ? JSON.parse(tr.diff) : null,
       createdAt: tr.created_at,
       updatedAt: tr.updated_at
     }));
@@ -112,7 +122,12 @@ class TailoredResume {
         company: tr.company,
         description: tr.job_description
       },
-      tailoredData: JSON.parse(tr.tailored_data),
+      tailoredData: JSON.parse(tr.tailored_data || '{}'),
+      status: tr.status || 'COMPLETED',
+      errorMessage: tr.error_message ?? null,
+      beforeScore: tr.before_score ?? null,
+      afterScore: tr.after_score ?? null,
+      diff: tr.diff ? JSON.parse(tr.diff) : null,
       createdAt: tr.created_at,
       updatedAt: tr.updated_at
     }));

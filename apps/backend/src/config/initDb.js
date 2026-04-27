@@ -157,6 +157,13 @@ async function createTables() {
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN before_score INTEGER`).catch(() => {});
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN after_score INTEGER`).catch(() => {});
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN diff TEXT`).catch(() => {});
+  await database.run(`ALTER TABLE tailored_resumes ADD COLUMN status TEXT DEFAULT 'COMPLETED'`).catch(() => {});
+  await database.run(`ALTER TABLE tailored_resumes ADD COLUMN error_message TEXT`).catch(() => {});
+
+  // Reset any IN_PROGRESS / PENDING rows orphaned by a server restart
+  await database.run(
+    `UPDATE tailored_resumes SET status='FAILED', error_message='Server restarted during tailoring' WHERE status IN ('PENDING','IN_PROGRESS')`
+  ).catch(() => {});
 
   // Note: New users get SIGNUP_CREDITS via ensureUserExists middleware.
   // Do NOT reset credits here — it would undo legitimate credit spending.
