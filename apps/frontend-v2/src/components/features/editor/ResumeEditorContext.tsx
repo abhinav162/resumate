@@ -6,7 +6,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { resumesApi } from "../../../lib/api";
+import { resumesApi, tailoredResumesApi } from "../../../lib/api";
 import { useCredits } from "../../../contexts/CreditContext";
 import type { ResumeData } from "../../../types";
 
@@ -18,7 +18,18 @@ export type Suggestion = {
   severity: 'warn' | 'error';
 };
 
+export type EditorMode = 'base' | 'tailored';
+
+export type TailoredMeta = {
+  jobTitle: string;
+  company: string;
+  description: string;
+  baseResumeId: string;
+};
+
 interface ResumeEditorContextType {
+  mode: EditorMode;
+  tailoredMeta: TailoredMeta | null;
   resumeData: ResumeData;
   isLoading: boolean;
   isSaving: boolean;
@@ -53,8 +64,10 @@ export const useResumeEditor = () => {
 export const ResumeEditorProvider: React.FC<{
   resumeId?: string;
   initialData?: ResumeData;
+  mode?: EditorMode;
   children: React.ReactNode;
-}> = ({ resumeId, initialData, children }) => {
+}> = ({ resumeId, initialData, mode = 'base', children }) => {
+  const [tailoredMeta, setTailoredMeta] = useState<TailoredMeta | null>(null);
   const [resumeData, setResumeData] = useState<ResumeData>(
     initialData || {
       title: "New Resume",
@@ -89,14 +102,21 @@ export const ResumeEditorProvider: React.FC<{
     currentResumeId.current = resumeId;
   }, [resumeId]);
 
-  // Fetch initial data if ID is provided
+  // Fetch initial data if ID is provided. Two clean paths — no fallback hacks.
   useEffect(() => {
     if (resumeId && !initialData) {
       const fetchResume = async () => {
         setIsLoading(true);
         try {
-          const data = await resumesApi.getResume(resumeId);
-          setResumeData(data);
+          if (mode === 'tailored') {
+            const { data, jobDetails, baseResumeId } = await tailoredResumesApi.getEditorData(resumeId);
+            setResumeData(data);
+            setTailoredMeta({ ...jobDetails, baseResumeId });
+          } else {
+            const data = await resumesApi.getResume(resumeId);
+            setResumeData(data);
+            setTailoredMeta(null);
+          }
           isDirty.current = false;
         } catch (error) {
           console.error("Failed to fetch resume:", error);
@@ -106,22 +126,29 @@ export const ResumeEditorProvider: React.FC<{
       };
       fetchResume();
     }
-  }, [resumeId, initialData]);
+  }, [resumeId, initialData, mode]);
 
-  // Save function
+  // Save function — routes to base or tailored endpoint based on editor mode
   const saveResume = useCallback(async () => {
     if (!isDirty.current) return currentResumeId.current;
 
     setIsSaving(true);
     try {
       let finalId = currentResumeId.current;
-      if (currentResumeId.current) {
+
+      if (mode === 'tailored') {
+        // Tailored editor never creates new rows — the row exists once /tailor returns.
+        if (currentResumeId.current) {
+          await tailoredResumesApi.saveEditorData(currentResumeId.current, resumeData);
+        }
+      } else if (currentResumeId.current) {
         await resumesApi.updateResume(currentResumeId.current, resumeData);
       } else {
         const created = await resumesApi.createResume(resumeData);
         currentResumeId.current = created.id;
         finalId = created.id;
       }
+
       setLastSaved(new Date());
       isDirty.current = false;
       return finalId;
@@ -131,7 +158,7 @@ export const ResumeEditorProvider: React.FC<{
     } finally {
       setIsSaving(false);
     }
-  }, [resumeData]);
+  }, [resumeData, mode]);
 
   // Debounced save using useEffect
   useEffect(() => {
@@ -224,6 +251,8 @@ export const ResumeEditorProvider: React.FC<{
   };
 
   const value = {
+    mode,
+    tailoredMeta,
     resumeData,
     isLoading,
     isSaving,

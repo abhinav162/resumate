@@ -107,30 +107,11 @@ export const resumesApi = {
     return data.map(fromBackendPayload);
   },
 
-  // Fetches a resume by ID. Transparently falls back to the tailored-resumes
-  // endpoint if the ID isn't a base resume — this lets the editor open both kinds.
   getResume: async (id: string): Promise<ResumeData> => {
-    try {
-      const response = await api.get<ApiResponse<any>>(`/resumes/${id}`);
-      const r = response.data.data;
-      if (r) return fromBackendPayload(r);
-    } catch (err: any) {
-      if (err?.response?.status !== 404) throw err;
-    }
-
-    // Fallback: try to load as a tailored resume
-    const tailored = await api.get<ApiResponse<any>>(`/tailored-resumes/${id}`);
-    const tr = tailored.data.data;
-    if (!tr) throw new Error('Resume not found');
-
-    const content = tr.tailoredData ?? {};
-    const mapped = fromBackendPayload({
-      ...content,
-      id: tr.id,
-      name: `${tr.jobDetails?.jobTitle ?? 'Tailored'} @ ${tr.jobDetails?.company ?? 'Resume'}`,
-    });
-    // Tag the resume so the save path can route updates to the tailored endpoint
-    return { ...mapped, isTailored: true, baseResumeId: tr.baseResumeId } as any;
+    const response = await api.get<ApiResponse<any>>(`/resumes/${id}`);
+    const r = response.data.data;
+    if (!r) throw new Error('Resume not found');
+    return fromBackendPayload(r);
   },
 
   createResume: async (resumeData: ResumeData): Promise<ResumeData> => {
@@ -140,24 +121,7 @@ export const resumesApi = {
   },
 
   updateResume: async (id: string, resumeData: Partial<ResumeData>): Promise<ResumeData> => {
-    // Tailored resumes are flagged via getResume(); save them through the tailored endpoint.
-    if ((resumeData as any).isTailored) {
-      const payload = { tailoredData: toBackendPayload(resumeData) };
-      const response = await api.put<ApiResponse<any>>(`/tailored-resumes/${id}`, payload);
-      if (!response.data.data) throw new Error('Failed to update tailored resume');
-      return response.data.data;
-    }
-
-    try {
-      const response = await api.put<ApiResponse<ResumeData>>(`/resumes/${id}`, toBackendPayload(resumeData));
-      if (response.data.data) return response.data.data;
-    } catch (err: any) {
-      if (err?.response?.status !== 404) throw err;
-    }
-
-    // Fallback: write to tailored_resumes if the ID isn't a base resume
-    const payload = { tailoredData: toBackendPayload(resumeData) };
-    const response = await api.put<ApiResponse<any>>(`/tailored-resumes/${id}`, payload);
+    const response = await api.put<ApiResponse<ResumeData>>(`/resumes/${id}`, toBackendPayload(resumeData));
     if (!response.data.data) throw new Error('Failed to update resume');
     return response.data.data;
   },
@@ -219,6 +183,29 @@ export const tailoredResumesApi = {
 
   deleteTailoredResume: async (id: string): Promise<void> => {
     await api.delete(`/tailored-resumes/${id}`);
+  },
+
+  // -- Editor integration --
+  // The tailored editor route uses these to load/save the resume content (the
+  // `tailoredData` JSON column) in the same shape the editor expects for base resumes.
+
+  getEditorData: async (id: string): Promise<{ data: ResumeData; jobDetails: { jobTitle: string; company: string; description: string }; baseResumeId: string }> => {
+    const tr = await tailoredResumesApi.getTailoredResume(id);
+    const content = (tr as any).tailoredData ?? {};
+    const data = fromBackendPayload({
+      ...content,
+      id: tr.id,
+      name: `${tr.jobDetails?.jobTitle ?? 'Tailored'} @ ${tr.jobDetails?.company ?? 'Resume'}`,
+    });
+    return {
+      data,
+      jobDetails: tr.jobDetails,
+      baseResumeId: tr.baseResumeId,
+    };
+  },
+
+  saveEditorData: async (id: string, resumeData: Partial<ResumeData>): Promise<void> => {
+    await api.put(`/tailored-resumes/${id}`, { tailoredData: toBackendPayload(resumeData) });
   },
 };
 

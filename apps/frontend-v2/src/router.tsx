@@ -52,7 +52,11 @@ const router = createBrowserRouter([
       },
       {
         path: "/editor/:id",
-        element: <SignedIn><AuroraWorkbenchEditor /></SignedIn>,
+        element: <SignedIn><AuroraWorkbenchEditor mode="base" /></SignedIn>,
+      },
+      {
+        path: "/editor/tailored/:id",
+        element: <SignedIn><AuroraWorkbenchEditor mode="tailored" /></SignedIn>,
       },
     ],
   },

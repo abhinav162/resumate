@@ -180,7 +180,7 @@ export default function TailoredResumesPage() {
                   size="sm"
                   variant="secondary"
                   disabled={!canOpen}
-                  onClick={() => navigate(`/editor/${item.id}`)}
+                  onClick={() => navigate(`/editor/tailored/${item.id}`)}
                 >
                   Open
                 </Button>
