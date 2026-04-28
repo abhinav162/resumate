@@ -36,7 +36,6 @@ const STEPS = [
   { id: "education", label: "Education", icon: <GraduationCap size={18} /> },
   { id: "skills", label: "Skills", icon: <Code size={18} /> },
   { id: "summary", label: "Summary", icon: <FileText size={18} /> },
-  { id: "tailor", label: "AI Tailor", icon: <Wand2 size={18} /> },
 ];
 
 export function AuroraWorkbenchEditor({ mode = 'base' }: { mode?: 'base' | 'tailored' } = {}) {
@@ -85,12 +84,6 @@ function AuroraWorkbenchInner() {
   }, [id, isLoading, lastSaved, navigate, saveResume, mode]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
-  const [isTailoring, setIsTailoring] = useState(false);
-  const [jobDetails, setJobDetails] = useState({
-    jobTitle: "",
-    company: "",
-    description: "",
-  });
 
   const currentStep = STEPS[currentStepIndex];
   const isFirst = currentStepIndex === 0;
@@ -117,34 +110,6 @@ function AuroraWorkbenchInner() {
       alert("Failed to export PDF. Please try again later.");
     } finally {
       setIsExporting(false);
-    }
-  };
-
-  const handleTailor = async () => {
-    if (
-      !jobDetails.jobTitle ||
-      !jobDetails.company ||
-      !jobDetails.description
-    ) {
-      alert("Please fill in all job details.");
-      return;
-    }
-
-    setIsTailoring(true);
-    try {
-      const { aiApi } = await import("../../../lib/api");
-      await aiApi.tailorResume({
-        resumeId: id ?? "",
-        jobTitle: jobDetails.jobTitle,
-        company: jobDetails.company,
-        jobDescription: jobDetails.description,
-      });
-      alert("Resume tailored successfully!");
-    } catch (error: any) {
-      console.error("Tailoring failed:", error);
-      alert(`Optimization failed: ${error.message}`);
-    } finally {
-      setIsTailoring(false);
     }
   };
 
@@ -340,14 +305,6 @@ function AuroraWorkbenchInner() {
               {currentStep.id === "education" && <EducationForm />}
               {currentStep.id === "skills" && <SkillsForm />}
               {currentStep.id === "summary" && <SummaryForm />}
-              {currentStep.id === "tailor" && (
-                <AITailorForm
-                  jobDetails={jobDetails}
-                  setJobDetails={setJobDetails}
-                  onTailor={handleTailor}
-                  isTailoring={isTailoring}
-                />
-              )}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -999,89 +956,3 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
   );
 }
 
-function AITailorForm({
-  jobDetails,
-  setJobDetails,
-  onTailor,
-  isTailoring,
-}: any) {
-  return (
-    <div className="space-y-8 pb-32">
-      <div className="space-y-6">
-        <h3 className="text-sm font-bold text-ink-primary uppercase tracking-widest flex items-center gap-2">
-          Target Job Details
-        </h3>
-
-        <div className="grid grid-cols-2 gap-4">
-          <DenseInput
-            label="Job Title"
-            value={jobDetails.jobTitle}
-            onChange={(e: any) =>
-              setJobDetails({ ...jobDetails, jobTitle: e.target.value })
-            }
-            placeholder="e.g. Senior Frontend Engineer"
-          />
-          <DenseInput
-            label="Company"
-            value={jobDetails.company}
-            onChange={(e: any) =>
-              setJobDetails({ ...jobDetails, company: e.target.value })
-            }
-            placeholder="e.g. Acme Corp"
-          />
-        </div>
-
-        <DenseInput
-          label="Job Description"
-          isTextArea
-          className="h-64"
-          value={jobDetails.description}
-          onChange={(e: any) =>
-            setJobDetails({ ...jobDetails, description: e.target.value })
-          }
-          placeholder="Paste the full job description here..."
-        />
-
-        <Button
-          variant="primary"
-          className="w-full h-12 text-sm gap-2 font-bold shadow-card py-4"
-          onClick={onTailor}
-          disabled={isTailoring}
-        >
-          {isTailoring ? (
-            <>
-              <Loader2 size={18} className="animate-spin" />
-              Tailoring with RARe Framework...
-            </>
-          ) : (
-            <>
-              <Wand2 size={18} />
-              Optimize for this Role
-            </>
-          )}
-        </Button>
-      </div>
-
-      <div className="p-4 bg-paper-bg rounded-lg border border-paper-border space-y-3">
-        <h4 className="text-[10px] font-bold text-ink-secondary uppercase tracking-widest">
-          How it works
-        </h4>
-        <ul className="space-y-2">
-          {[
-            "Readability: Bullets under 280 chars",
-            "Applicability: Keywords aligned to role",
-            "Remarkability: XYZ metric-driven achievements",
-          ].map((text, i) => (
-            <li
-              key={i}
-              className="text-[10px] text-ink-muted flex items-center gap-2"
-            >
-              <CheckCircle2 size={10} className="text-indigo-300" />
-              {text}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
