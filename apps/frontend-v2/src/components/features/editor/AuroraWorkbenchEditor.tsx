@@ -86,9 +86,6 @@ function AuroraWorkbenchInner() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [isTailoring, setIsTailoring] = useState(false);
-  const [geminiKey, setGeminiKey] = useState(
-    localStorage.getItem("gemini_api_key") || "",
-  );
   const [jobDetails, setJobDetails] = useState({
     jobTitle: "",
     company: "",
@@ -124,10 +121,6 @@ function AuroraWorkbenchInner() {
   };
 
   const handleTailor = async () => {
-    if (!geminiKey) {
-      alert("Please provide a Gemini API Key first.");
-      return;
-    }
     if (
       !jobDetails.jobTitle ||
       !jobDetails.company ||
@@ -349,8 +342,6 @@ function AuroraWorkbenchInner() {
               {currentStep.id === "summary" && <SummaryForm />}
               {currentStep.id === "tailor" && (
                 <AITailorForm
-                  geminiKey={geminiKey}
-                  setGeminiKey={setGeminiKey}
                   jobDetails={jobDetails}
                   setJobDetails={setJobDetails}
                   onTailor={handleTailor}
@@ -1009,8 +1000,6 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
 }
 
 function AITailorForm({
-  geminiKey,
-  setGeminiKey,
   jobDetails,
   setJobDetails,
   onTailor,
@@ -1018,42 +1007,6 @@ function AITailorForm({
 }: any) {
   return (
     <div className="space-y-8 pb-32">
-      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 relative overflow-hidden group">
-        <div className="absolute -right-8 -top-8 w-32 h-32 bg-indigo-50 rounded-full blur-3xl group-hover:bg-indigo-100 transition-colors" />
-        <div className="relative">
-          <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-1 flex items-center gap-2">
-            <Sparkles size={14} /> AI Context
-          </h3>
-          <p className="text-xs text-ink-secondary mb-6 font-mono uppercase tracking-tighter">
-            Optimization Engine Config
-          </p>
-
-          <div className="space-y-4">
-            <DenseInput
-              label="Gemini API Key"
-              type="password"
-              value={geminiKey}
-              onChange={(e: any) => setGeminiKey(e.target.value)}
-              placeholder="Paste your API key here..."
-              className="bg-paper-bg"
-            />
-            <p className="text-[10px] text-ink-muted italic">
-              Your key is stored locally and never sent to our servers. Get one
-              at{" "}
-              <a
-                href="https://aistudio.google.com/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-indigo-600 hover:underline"
-              >
-                Google AI Studio
-              </a>
-              .
-            </p>
-          </div>
-        </div>
-      </div>
-
       <div className="space-y-6">
         <h3 className="text-sm font-bold text-ink-primary uppercase tracking-widest flex items-center gap-2">
           Target Job Details
