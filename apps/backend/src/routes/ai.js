@@ -132,10 +132,15 @@ router.post('/tailor', [
 // GET /api/ai/tailor/status/:id — poll status of a tailoring job
 router.get('/tailor/status/:id', async (req, res) => {
   try {
+    const userRow = await database.get('SELECT id FROM users WHERE uuid = ?', [req.headers['x-user-id']]);
+    if (!userRow) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
     const row = await database.get(
-      `SELECT uuid, status, error_message, before_score, after_score, updated_at
-       FROM tailored_resumes WHERE uuid = ?`,
-      [req.params.id]
+      `SELECT tr.uuid, tr.status, tr.error_message, tr.before_score, tr.after_score, tr.updated_at
+       FROM tailored_resumes tr
+       JOIN base_resumes br ON tr.base_resume_id = br.id
+       WHERE tr.uuid = ? AND br.user_id = ?`,
+      [req.params.id, userRow.id]
     );
     if (!row) return res.status(404).json({ success: false, message: 'Tailor job not found' });
 
