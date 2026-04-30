@@ -42,13 +42,19 @@ class TailoredResume {
     return await TailoredResume.findByUuid(uuid);
   }
 
-  static async findByUuid(uuid) {
+  static async findByUuid(uuid, userId = null) {
+    const params = [uuid];
+    let userClause = '';
+    if (userId !== null && userId !== undefined) {
+      userClause = ' AND br.user_id = ?';
+      params.push(userId);
+    }
     const tailoredResume = await database.get(`
-      SELECT tr.*, br.uuid as base_resume_uuid 
+      SELECT tr.*, br.uuid as base_resume_uuid
       FROM tailored_resumes tr
       JOIN base_resumes br ON tr.base_resume_id = br.id
-      WHERE tr.uuid = ?
-    `, [uuid]);
+      WHERE tr.uuid = ?${userClause}
+    `, params);
 
     if (!tailoredResume) return null;
 
@@ -60,22 +66,33 @@ class TailoredResume {
         company: tailoredResume.company,
         description: tailoredResume.job_description
       },
-      tailoredData: JSON.parse(tailoredResume.tailored_data),
+      tailoredData: JSON.parse(tailoredResume.tailored_data || '{}'),
+      status: tailoredResume.status || 'COMPLETED',
+      errorMessage: tailoredResume.error_message ?? null,
+      beforeScore: tailoredResume.before_score ?? null,
+      afterScore: tailoredResume.after_score ?? null,
+      diff: tailoredResume.diff ? JSON.parse(tailoredResume.diff) : null,
       createdAt: tailoredResume.created_at,
       updatedAt: tailoredResume.updated_at
     };
   }
 
-  static async findByBaseResumeId(baseResumeUuid) {
-    // Get the internal ID first
+  static async findByBaseResumeId(baseResumeUuid, userId = null) {
+    // Get the internal ID first (scoped to user if provided)
+    const params = [baseResumeUuid];
+    let userClause = '';
+    if (userId !== null && userId !== undefined) {
+      userClause = ' AND user_id = ?';
+      params.push(userId);
+    }
     const baseResume = await database.get(`
-      SELECT id FROM base_resumes WHERE uuid = ?
-    `, [baseResumeUuid]);
+      SELECT id FROM base_resumes WHERE uuid = ?${userClause}
+    `, params);
 
     if (!baseResume) return [];
 
     const tailoredResumes = await database.all(`
-      SELECT tr.*, br.uuid as base_resume_uuid 
+      SELECT tr.*, br.uuid as base_resume_uuid
       FROM tailored_resumes tr
       JOIN base_resumes br ON tr.base_resume_id = br.id
       WHERE tr.base_resume_id = ?
@@ -90,19 +107,30 @@ class TailoredResume {
         company: tr.company,
         description: tr.job_description
       },
-      tailoredData: JSON.parse(tr.tailored_data),
+      tailoredData: JSON.parse(tr.tailored_data || '{}'),
+      status: tr.status || 'COMPLETED',
+      errorMessage: tr.error_message ?? null,
+      beforeScore: tr.before_score ?? null,
+      afterScore: tr.after_score ?? null,
+      diff: tr.diff ? JSON.parse(tr.diff) : null,
       createdAt: tr.created_at,
       updatedAt: tr.updated_at
     }));
   }
 
-  static async findAll() {
+  static async findAll(userId = null) {
+    const params = [];
+    let userClause = '';
+    if (userId !== null && userId !== undefined) {
+      userClause = ' WHERE br.user_id = ?';
+      params.push(userId);
+    }
     const tailoredResumes = await database.all(`
-      SELECT tr.*, br.uuid as base_resume_uuid 
+      SELECT tr.*, br.uuid as base_resume_uuid
       FROM tailored_resumes tr
-      JOIN base_resumes br ON tr.base_resume_id = br.id
+      JOIN base_resumes br ON tr.base_resume_id = br.id${userClause}
       ORDER BY tr.created_at DESC
-    `);
+    `, params);
 
     return tailoredResumes.map(tr => ({
       id: tr.uuid,
@@ -112,7 +140,12 @@ class TailoredResume {
         company: tr.company,
         description: tr.job_description
       },
-      tailoredData: JSON.parse(tr.tailored_data),
+      tailoredData: JSON.parse(tr.tailored_data || '{}'),
+      status: tr.status || 'COMPLETED',
+      errorMessage: tr.error_message ?? null,
+      beforeScore: tr.before_score ?? null,
+      afterScore: tr.after_score ?? null,
+      diff: tr.diff ? JSON.parse(tr.diff) : null,
       createdAt: tr.created_at,
       updatedAt: tr.updated_at
     }));
@@ -152,11 +185,19 @@ class TailoredResume {
     return await TailoredResume.findByUuid(uuid);
   }
 
-  static async delete(uuid) {
+  static async delete(uuid, userId = null) {
+    if (userId !== null && userId !== undefined) {
+      const result = await database.run(`
+        DELETE FROM tailored_resumes
+        WHERE uuid = ? AND base_resume_id IN (
+          SELECT id FROM base_resumes WHERE user_id = ?
+        )
+      `, [uuid, userId]);
+      return result.changes > 0;
+    }
     const result = await database.run(`
       DELETE FROM tailored_resumes WHERE uuid = ?
     `, [uuid]);
-
     return result.changes > 0;
   }
 }

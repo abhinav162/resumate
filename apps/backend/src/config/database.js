@@ -1,98 +1,58 @@
-import sqlite3 from 'sqlite3';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { createClient } from '@libsql/client';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Use environment variable if set, otherwise fallback to default path
-const dbPath = process.env.DB_PATH || join(__dirname, '../../data/resumate.db');
-
-// Enable verbose mode for debugging
-sqlite3.verbose();
-
 class Database {
   constructor() {
-    this.db = null;
+    this.client = null;
   }
 
   async connect() {
-    return new Promise((resolve, reject) => {
-      this.db = new sqlite3.Database(dbPath, (err) => {
-        if (err) {
-          console.error('Error connecting to SQLite database:', err.message);
-          reject(err);
-        } else {
-          console.log('Connected to SQLite database');
-          // Enable foreign keys
-          this.db.run('PRAGMA foreign_keys = ON');
-          resolve();
-        }
-      });
-    });
+    // Turso cloud URL takes priority; fall back to local file for development
+    const url = process.env.TURSO_DATABASE_URL || 'file:./data/resumate.db';
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+
+    this.client = createClient({ url, authToken });
+
+    // Enable foreign key enforcement (SQLite default is OFF)
+    await this.client.execute('PRAGMA foreign_keys = ON');
+
+    console.log(`Connected to database: ${url.startsWith('libsql://') ? 'Turso cloud' : url}`);
   }
 
   async close() {
-    return new Promise((resolve, reject) => {
-      if (this.db) {
-        this.db.close((err) => {
-          if (err) {
-            reject(err);
-          } else {
-            console.log('Database connection closed');
-            resolve();
-          }
-        });
-      } else {
-        resolve();
-      }
-    });
+    if (this.client) {
+      this.client.close();
+      this.client = null;
+      console.log('Database connection closed');
+    }
   }
 
-  // Helper method to run queries with promise
-  run(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, function(err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({ id: this.lastID, changes: this.changes });
-        }
-      });
-    });
+  // For INSERT / UPDATE / DELETE — returns { id, lastID, changes } to match previous API
+  async run(sql, params = []) {
+    const result = await this.client.execute({ sql, args: params });
+    return {
+      id: Number(result.lastInsertRowid),
+      lastID: Number(result.lastInsertRowid),
+      changes: result.rowsAffected,
+    };
   }
 
-  // Helper method to get a single row
-  get(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
-    });
+  // For SELECT — returns single row object or null
+  async get(sql, params = []) {
+    const result = await this.client.execute({ sql, args: params });
+    return result.rows[0] ?? null;
   }
 
-  // Helper method to get all rows
-  all(sql, params = []) {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows);
-        }
-      });
-    });
+  // For SELECT — returns array of row objects
+  async all(sql, params = []) {
+    const result = await this.client.execute({ sql, args: params });
+    return result.rows;
   }
 }
 
-// Singleton instance
+// Singleton instance shared across the app
 const database = new Database();
 
 export default database;
