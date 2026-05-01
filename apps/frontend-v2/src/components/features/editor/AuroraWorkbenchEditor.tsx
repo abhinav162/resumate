@@ -839,6 +839,28 @@ function ResponsivePreviewCanvas({ resumeData }: { resumeData: any }) {
 
 // -- Preview Mock --
 function ResumePreviewMock({ resumeData }: { resumeData: any }) {
+  const contact = resumeData.contact || {};
+  const URL_LABEL_THRESHOLD = 30;
+  const linkLabel = (url: string, fallback: string) =>
+    url.length > URL_LABEL_THRESHOLD ? fallback : url;
+
+  const contactLinks: Array<{ href: string; label: string }> = [];
+  if (contact.email) {
+    contactLinks.push({ href: `mailto:${contact.email}`, label: contact.email });
+  }
+  if (contact.phone) {
+    contactLinks.push({ href: `tel:${contact.phone}`, label: contact.phone });
+  }
+  if (contact.linkedin) {
+    contactLinks.push({ href: contact.linkedin, label: linkLabel(contact.linkedin, "LinkedIn") });
+  }
+  if (contact.github) {
+    contactLinks.push({ href: contact.github, label: linkLabel(contact.github, "GitHub") });
+  }
+  if (contact.website) {
+    contactLinks.push({ href: contact.website, label: linkLabel(contact.website, "Portfolio") });
+  }
+
   return (
     <div className="p-12 h-full flex flex-col text-gray-800">
       <header className="border-b-2 border-gray-900 pb-6 mb-8">
@@ -850,6 +872,21 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
           <span>•</span>
           <span>{resumeData.contact.location || "Location"}</span>
         </div>
+        {contactLinks.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+            {contactLinks.map((c, i) => (
+              <a
+                key={i}
+                href={c.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-gray-900 break-all"
+              >
+                {c.label}
+              </a>
+            ))}
+          </div>
+        )}
       </header>
 
       <div className="space-y-8">
@@ -862,6 +899,17 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
               "Click editor sections to start building your resume..."}
           </p>
         </section>
+
+        {(resumeData.skills ?? []).length > 0 && (
+          <section>
+            <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
+              Skills
+            </h3>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              {(resumeData.skills as string[]).join(", ")}
+            </p>
+          </section>
+        )}
 
         <section>
           <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
@@ -909,15 +957,42 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
                 const bullets = Array.isArray(proj.description)
                   ? proj.description.filter(Boolean)
                   : [];
+                const projectLinks: Array<{ href: string; label: string }> = [];
+                if (proj.url) {
+                  projectLinks.push({
+                    href: proj.url,
+                    label: proj.url.length > URL_LABEL_THRESHOLD ? "Live" : proj.url,
+                  });
+                }
+                if (proj.repoUrl) {
+                  projectLinks.push({
+                    href: proj.repoUrl,
+                    label: proj.repoUrl.length > URL_LABEL_THRESHOLD ? "Repo" : proj.repoUrl,
+                  });
+                }
                 return (
                   <div key={i}>
                     <div className="flex justify-between items-baseline mb-1 gap-4">
                       <h4 className="font-bold text-gray-900 text-base break-words">
                         {proj.name || "Project"}
                       </h4>
-                      <span className="text-xs font-mono text-gray-500 whitespace-nowrap break-all">
-                        {proj.url || proj.repoUrl || ""}
-                      </span>
+                      {projectLinks.length > 0 && (
+                        <span className="text-xs font-mono text-gray-500 whitespace-nowrap break-all flex gap-2">
+                          {projectLinks.map((l, idx) => (
+                            <span key={idx} className="flex items-center gap-2">
+                              {idx > 0 && <span className="text-gray-300">|</span>}
+                              <a
+                                href={l.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:text-gray-900"
+                              >
+                                {l.label}
+                              </a>
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </div>
                     {bullets.length > 0 && (
                       <ul className="text-sm text-gray-700 leading-relaxed list-disc pl-5 space-y-1 break-words">
