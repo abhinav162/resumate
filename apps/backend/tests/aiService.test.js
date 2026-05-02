@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 describe('aiService', () => {
   it('exports scoreResume, tailorResume, parseResumeText functions', async () => {
-    process.env.GEMINI_API_KEY = 'test-key';
+    process.env.BIFROST_URL = 'https://bifrost.test';
+    process.env.BIFROST_VIRTUAL_KEY = 'sk-bf-test';
     const { scoreResume, tailorResume, parseResumeText } = await import('../src/services/aiService.js');
     assert.equal(typeof scoreResume, 'function');
     assert.equal(typeof tailorResume, 'function');
