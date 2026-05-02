@@ -3,7 +3,7 @@ import { body } from 'express-validator';
 import { v4 as uuidv4 } from 'uuid';
 import database from '../config/database.js';
 import { Resume } from '../models/Resume.js';
-import { TailoredResume } from '../models/TailoredResume.js';
+import TailoredResume from '../models/TailoredResume.js';
 import { scoreResume, tailorResume } from '../services/aiService.js';
 import { deductCredits } from '../services/creditService.js';
 import { requireCredits } from '../middleware/requireCredits.js';
