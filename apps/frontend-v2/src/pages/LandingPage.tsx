@@ -104,9 +104,9 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-3 gap-6">
             {[
-              { name: 'Starter', credits: 20, price: '$10', popular: false },
-              { name: 'Pro', credits: 50, price: '$20', popular: true },
-              { name: 'Max', credits: 120, price: '$40', popular: false },
+              { name: 'Starter', credits: 20, price: '₹399', popular: false },
+              { name: 'Pro', credits: 50, price: '₹799', popular: true },
+              { name: 'Max', credits: 120, price: '₹1499', popular: false },
             ].map(pack => (
               <div key={pack.name} className={`border rounded-xl p-6 space-y-4 ${pack.popular ? 'border-indigo-300 ring-1 ring-indigo-200 bg-white' : 'border-paper-border bg-paper-bg'}`}>
                 {pack.popular && <span className="text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">Most Popular</span>}

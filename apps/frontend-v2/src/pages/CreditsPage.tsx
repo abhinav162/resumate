@@ -1,31 +1,105 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { useCredits } from '../contexts/CreditContext';
-import { creditsApi } from '../lib/api';
+import { creditsApi, type CreditPack } from '../lib/api';
+import { loadRazorpayCheckout } from '../lib/razorpay';
 
-type Pack = { id: string; name: string; credits: number; priceUsd: number; popular: boolean };
+type FlashState =
+  | { kind: 'idle' }
+  | { kind: 'success'; credits: number }
+  | { kind: 'cancelled' }
+  | { kind: 'error'; message: string };
+
+const POLL_INTERVAL_MS = 1000;
+const POLL_MAX_MS = 12_000;
+
+async function pollUntilCreditsIncrease(
+  startBalance: number | null,
+  refresh: () => Promise<void>,
+  fetchBalance: () => Promise<number>,
+): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < POLL_MAX_MS) {
+    await refresh();
+    try {
+      const current = await fetchBalance();
+      if (startBalance == null || current > startBalance) return true;
+    } catch {
+      // ignore transient errors and keep polling
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+  return false;
+}
 
 export default function CreditsPage() {
-  const [packs, setPacks] = useState<Pack[]>([]);
+  const [packs, setPacks] = useState<CreditPack[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
+  const [flash, setFlash] = useState<FlashState>({ kind: 'idle' });
   const { balance, refresh } = useCredits();
-  const [params] = useSearchParams();
+  const { user } = useUser();
 
   useEffect(() => {
-    creditsApi.getPacks().then(setPacks);
-    if (params.get('success')) refresh();
-  }, [params, refresh]);
+    creditsApi.getPacks().then(setPacks).catch((err) => {
+      console.error('Failed to load credit packs:', err);
+    });
+  }, []);
 
-  async function handleBuy(packId: string) {
-    setLoading(packId);
+  async function handleBuy(pack: CreditPack) {
+    setLoading(pack.id);
+    setFlash({ kind: 'idle' });
+
     try {
-      const { url } = await creditsApi.createCheckout(packId);
-      window.location.href = url;
-    } finally {
+      const session = await creditsApi.createCheckout(pack.id);
+      const Razorpay = await loadRazorpayCheckout();
+      const balanceBefore = balance;
+
+      const rzp = new Razorpay({
+        key: session.keyId,
+        amount: session.amount,
+        currency: session.currency,
+        order_id: session.orderId,
+        name: 'Resumate',
+        description: `${pack.name} pack — ${pack.credits} credits`,
+        prefill: {
+          email: user?.primaryEmailAddress?.emailAddress,
+          name: user?.fullName ?? undefined,
+        },
+        notes: { packId: pack.id },
+        theme: { color: '#4f46e5' },
+        modal: {
+          ondismiss: () => {
+            setLoading(null);
+            setFlash({ kind: 'cancelled' });
+          },
+        },
+        handler: async () => {
+          // Modal closed after payment captured. Webhook will grant credits within
+          // a few seconds — poll for the balance bump so we can confirm.
+          const credited = await pollUntilCreditsIncrease(
+            balanceBefore,
+            refresh,
+            async () => (await creditsApi.getBalance()).balance,
+          );
+          setLoading(null);
+          if (credited) {
+            setFlash({ kind: 'success', credits: pack.credits });
+          } else {
+            setFlash({
+              kind: 'error',
+              message:
+                'Payment captured, but credits have not appeared yet. Refresh in a moment — if the balance still hasn’t updated, contact support.',
+            });
+          }
+        },
+      });
+      rzp.open();
+    } catch (err: any) {
       setLoading(null);
+      setFlash({ kind: 'error', message: err?.message ?? 'Checkout failed to start' });
     }
   }
 
@@ -39,9 +113,19 @@ export default function CreditsPage() {
         </p>
       </div>
 
-      {params.get('success') && (
+      {flash.kind === 'success' && (
         <div className="bg-success-bg border border-success-border rounded-lg px-4 py-3 text-success-text text-sm font-medium">
-          ✓ Credits added successfully!
+          ✓ {flash.credits} credits added successfully!
+        </div>
+      )}
+      {flash.kind === 'cancelled' && (
+        <div className="bg-paper-bg border border-paper-border rounded-lg px-4 py-3 text-ink-secondary text-sm">
+          Checkout cancelled — no charge was made.
+        </div>
+      )}
+      {flash.kind === 'error' && (
+        <div className="bg-error-bg border border-error-border rounded-lg px-4 py-3 text-error-text text-sm">
+          {flash.message}
         </div>
       )}
 
@@ -73,12 +157,12 @@ export default function CreditsPage() {
                 <span className="text-sm font-normal text-ink-muted ml-1">credits</span>
               </p>
             </div>
-            <p className="text-2xl font-heading font-bold text-indigo-600">${pack.priceUsd}</p>
+            <p className="text-2xl font-heading font-bold text-indigo-600">₹{pack.priceInr}</p>
             <Button
               className="w-full"
               variant={pack.popular ? 'primary' : 'secondary'}
               loading={loading === pack.id}
-              onClick={() => handleBuy(pack.id)}
+              onClick={() => handleBuy(pack)}
             >
               Buy {pack.name}
             </Button>
