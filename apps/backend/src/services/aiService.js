@@ -1,4 +1,4 @@
-const MODEL = 'gemini-3.1-pro-preview';
+const MODEL = 'gpt-5.4-mini';
 
 function getBifrostConfig() {
   const url = process.env.BIFROST_URL;
