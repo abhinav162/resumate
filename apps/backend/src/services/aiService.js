@@ -1,78 +1,61 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+const MODEL = 'gpt-5.4-mini';
 
-// Primary model + fallback when primary is overloaded
-// gemini-3.1-pro: latest top-tier reasoning for resume scoring/tailoring
-// gemini-3-flash: fast 3-gen fallback if pro is overloaded
-const PRIMARY_MODEL = 'gemini-3.1-pro-preview';
-const FALLBACK_MODEL = 'gemini-3-flash-preview';
-
-function getModel(modelName = PRIMARY_MODEL) {
-  if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  return genAI.getGenerativeModel({
-    model: modelName,
-    generationConfig: { responseMimeType: 'application/json' },
-  });
+function getBifrostConfig() {
+  const url = process.env.BIFROST_URL;
+  const key = process.env.BIFROST_VIRTUAL_KEY;
+  if (!url) throw new Error('BIFROST_URL is not set');
+  if (!key) throw new Error('BIFROST_VIRTUAL_KEY is not set');
+  return { url: url.replace(/\/$/, ''), key };
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function isRetryableError(err) {
-  // Gemini returns 503 when overloaded, 429 when rate-limited, 500 for transient errors
-  const status = err?.status ?? err?.response?.status;
-  if (status === 429 || status === 500 || status === 503) return true;
-  // Fallback: check the message text
-  const msg = (err?.message ?? '').toLowerCase();
-  return msg.includes('overloaded') || msg.includes('high demand') || msg.includes('rate limit') || msg.includes('try again');
-}
-
-function isOverloadedError(err) {
-  const status = err?.status ?? err?.response?.status;
+function isOverloadedStatus(status, message) {
   if (status === 503) return true;
-  const msg = (err?.message ?? '').toLowerCase();
+  const msg = (message ?? '').toLowerCase();
   return msg.includes('overloaded') || msg.includes('high demand');
 }
 
-/**
- * Call Gemini with retry + fallback-model strategy.
- * - Retries the same model up to 2 times with exponential backoff (1s, 2s) on transient errors
- * - If primary model is still overloaded, falls back to FALLBACK_MODEL for one more attempt
- * - Throws a tagged error with .status = 503 if all attempts fail due to overload
- */
-async function generateWithRetry(prompt, { maxAttempts = 3 } = {}) {
-  let lastError;
+async function bifrostGenerate(prompt) {
+  const { url, key } = getBifrostConfig();
 
-  // Attempts 1 & 2: primary model with exponential backoff
-  for (let attempt = 1; attempt <= maxAttempts - 1; attempt++) {
-    try {
-      const model = getModel(PRIMARY_MODEL);
-      const result = await model.generateContent(prompt);
-      return result.response.text();
-    } catch (err) {
-      lastError = err;
-      if (!isRetryableError(err)) throw err;
-      const delay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s
-      console.warn(`Gemini ${PRIMARY_MODEL} attempt ${attempt} failed (${err.status ?? '?'}). Retrying in ${delay}ms.`);
-      await sleep(delay);
-    }
+  let response;
+  try {
+    response = await fetch(`${url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+      }),
+    });
+  } catch (err) {
+    const e = new Error(`Bifrost network error: ${err.message}`);
+    e.cause = err;
+    throw e;
   }
 
-  // Final attempt: fallback model
-  try {
-    console.warn(`Gemini ${PRIMARY_MODEL} exhausted retries. Falling back to ${FALLBACK_MODEL}.`);
-    const model = getModel(FALLBACK_MODEL);
-    const result = await model.generateContent(prompt);
-    return result.response.text();
-  } catch (err) {
-    // Tag the error so routes can return 503 instead of 500
-    if (isOverloadedError(err) || isOverloadedError(lastError)) {
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => '');
+    if (isOverloadedStatus(response.status, bodyText)) {
       const e = new Error('AI service is temporarily overloaded. Please try again in a moment.');
       e.status = 503;
       e.code = 'AI_OVERLOADED';
       throw e;
     }
-    throw err;
+    const e = new Error(`Bifrost request failed (${response.status}): ${bodyText.slice(0, 500)}`);
+    e.status = response.status;
+    throw e;
   }
+
+  const data = await response.json();
+  const text = data?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string') {
+    throw new Error('Bifrost response missing choices[0].message.content');
+  }
+  return text;
 }
 
 function parseJsonResponse(text) {
@@ -80,12 +63,8 @@ function parseJsonResponse(text) {
   try {
     return JSON.parse(cleaned);
   } catch (firstError) {
-    // Fix common LLM JSON issues:
-    // 1. Missing closing } between array elements: ]\n,\n{ → ]},\n{
     cleaned = cleaned.replace(/\]\s*,\s*\{/g, ']},\n{');
-    // 2. Trailing commas before } or ]
     cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
-    // 3. Double/extra commas between elements
     cleaned = cleaned.replace(/,\s*,/g, ',');
     try {
       return JSON.parse(cleaned);
@@ -113,7 +92,7 @@ Return ONLY valid JSON with this structure:
   "skills": []
 }`;
 
-  const text = await generateWithRetry(prompt);
+  const text = await bifrostGenerate(prompt);
   return parseJsonResponse(text);
 }
 
@@ -140,12 +119,11 @@ bulletId format:
 - "summary-0-0" for summary
 - "skills-0-0" for skills section`;
 
-  const text = await generateWithRetry(prompt);
+  const text = await bifrostGenerate(prompt);
   return parseJsonResponse(text);
 }
 
 export async function tailorResume(resumeData, jobTitle, company, jobDescription) {
-  // Score before tailoring
   const beforeScoreData = await scoreResume(resumeData);
   const beforeScore = beforeScoreData.score;
 
@@ -177,10 +155,9 @@ Return ONLY valid JSON with two keys:
   ]
 }`;
 
-  const text = await generateWithRetry(prompt);
+  const text = await bifrostGenerate(prompt);
   const parsed = parseJsonResponse(text);
 
-  // Score after tailoring
   const afterScoreData = await scoreResume(parsed.tailoredResume);
   const afterScore = afterScoreData.score;
 
