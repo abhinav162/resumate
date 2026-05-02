@@ -3,6 +3,7 @@ import { body } from 'express-validator';
 import { v4 as uuidv4 } from 'uuid';
 import database from '../config/database.js';
 import { Resume } from '../models/Resume.js';
+import TailoredResume from '../models/TailoredResume.js';
 import { scoreResume, tailorResume } from '../services/aiService.js';
 import { deductCredits } from '../services/creditService.js';
 import { requireCredits } from '../middleware/requireCredits.js';
@@ -17,17 +18,29 @@ router.post('/score/:resumeId', requireCredits(CREDIT_COSTS.RESUME_SCORE), async
     const userRow = await database.get('SELECT id FROM users WHERE uuid = ?', [req.headers['x-user-id']]);
     if (!userRow) return res.status(401).json({ success: false, message: 'User not found' });
 
-    const resume = await Resume.findByUuid(req.params.resumeId);
-    if (!resume) return res.status(404).json({ success: false, message: 'Resume not found' });
+    let resumeForScoring = await Resume.findByUuid(req.params.resumeId);
+    let tailored = null;
+    if (!resumeForScoring) {
+      tailored = await TailoredResume.findByUuid(req.params.resumeId, userRow.id);
+      if (!tailored) return res.status(404).json({ success: false, message: 'Resume not found' });
+      resumeForScoring = tailored.tailoredData;
+    }
 
-    const scoreReport = await scoreResume(resume);
+    const scoreReport = await scoreResume(resumeForScoring);
 
-    const dbResume = await database.get('SELECT id FROM base_resumes WHERE uuid = ?', [req.params.resumeId]);
-    if (dbResume) {
+    if (tailored) {
       await database.run(
-        "UPDATE base_resumes SET score = ?, suggestions = ?, updated_at = datetime('now') WHERE id = ?",
-        [scoreReport.score, JSON.stringify(scoreReport.suggestions), dbResume.id]
+        "UPDATE tailored_resumes SET after_score = ?, updated_at = datetime('now') WHERE uuid = ?",
+        [scoreReport.score, req.params.resumeId]
       );
+    } else {
+      const dbResume = await database.get('SELECT id FROM base_resumes WHERE uuid = ?', [req.params.resumeId]);
+      if (dbResume) {
+        await database.run(
+          "UPDATE base_resumes SET score = ?, suggestions = ?, updated_at = datetime('now') WHERE id = ?",
+          [scoreReport.score, JSON.stringify(scoreReport.suggestions), dbResume.id]
+        );
+      }
     }
 
     await deductCredits(userRow.id, CREDIT_COSTS.RESUME_SCORE);
