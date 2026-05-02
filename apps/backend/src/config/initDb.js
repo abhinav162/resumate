@@ -24,9 +24,6 @@ async function initializeDatabase() {
 
     // Create tables
     await createTables();
-    
-    // Create default data
-    await createDefaultData();
 
     console.log('Database initialized successfully');
   } catch (error) {
@@ -143,6 +140,15 @@ async function createTables() {
     )
   `);
 
+  // Webhook idempotency — payment-gateway events we've already processed
+  await database.run(`
+    CREATE TABLE IF NOT EXISTS processed_payment_events (
+      event_id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL,
+      processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Create indexes for better performance
   await database.run('CREATE INDEX IF NOT EXISTS idx_base_resumes_user_id ON base_resumes(user_id)');
   await database.run('CREATE INDEX IF NOT EXISTS idx_experiences_resume_id ON experiences(resume_id)');
@@ -169,22 +175,6 @@ async function createTables() {
   // Do NOT reset credits here — it would undo legitimate credit spending.
 
   console.log('All tables created successfully');
-}
-
-async function createDefaultData() {
-  // Create default user if it doesn't exist
-  const existingUser = await database.get(`
-    SELECT id FROM users WHERE uuid = ?
-  `, ['default-user']);
-
-  if (!existingUser) {
-    await database.run(`
-      INSERT INTO users (uuid, email) VALUES (?, ?)
-    `, ['default-user', 'default@resumate.local']);
-    console.log('Default user created successfully');
-  } else {
-    console.log('Default user already exists');
-  }
 }
 
 // Run initialization if this file is executed directly

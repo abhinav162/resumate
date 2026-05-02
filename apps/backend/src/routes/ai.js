@@ -5,7 +5,7 @@ import database from '../config/database.js';
 import { Resume } from '../models/Resume.js';
 import TailoredResume from '../models/TailoredResume.js';
 import { scoreResume, tailorResume } from '../services/aiService.js';
-import { deductCredits } from '../services/creditService.js';
+import { deductCredits, grantCredits } from '../services/creditService.js';
 import { requireCredits } from '../middleware/requireCredits.js';
 import { CREDIT_COSTS } from '../config/credits.config.js';
 import { handleValidationErrors } from '../middleware/errorHelpers.js';
@@ -48,7 +48,9 @@ router.post('/score/:resumeId', requireCredits(CREDIT_COSTS.RESUME_SCORE), async
     res.json({ success: true, data: scoreReport });
   } catch (error) {
     console.error('Error scoring resume:', error);
-    const status = error.status === 503 ? 503 : 500;
+    let status = 500;
+    if (error.status === 503) status = 503;
+    else if (error.code === 'INSUFFICIENT_CREDITS') status = 402;
     res.status(status).json({
       success: false,
       code: error.code,
@@ -60,7 +62,8 @@ router.post('/score/:resumeId', requireCredits(CREDIT_COSTS.RESUME_SCORE), async
 /**
  * Background worker for tailoring a resume.
  * Updates the tailored_resumes row through PENDING → IN_PROGRESS → COMPLETED/FAILED.
- * Credits are deducted only on success.
+ * Credits are reserved (deducted) at queue time by the route handler — this worker
+ * only refunds them if the job fails.
  */
 async function processTailorJob({ tailoredUuid, resumeData, jobTitle, company, jobDescription, userId }) {
   try {
@@ -80,7 +83,6 @@ async function processTailorJob({ tailoredUuid, resumeData, jobTitle, company, j
       [JSON.stringify(tailoredResume), beforeScore, afterScore, JSON.stringify(diff), tailoredUuid]
     );
 
-    await deductCredits(userId, CREDIT_COSTS.RESUME_TAILOR);
     console.log(`Tailor job ${tailoredUuid} completed`);
   } catch (error) {
     console.error(`Tailor job ${tailoredUuid} failed:`, error);
@@ -91,6 +93,11 @@ async function processTailorJob({ tailoredUuid, resumeData, jobTitle, company, j
       `UPDATE tailored_resumes SET status='FAILED', error_message=?, updated_at=datetime('now') WHERE uuid=?`,
       [message, tailoredUuid]
     ).catch(() => {});
+
+    // Refund the credits that were reserved at queue time.
+    await grantCredits(userId, CREDIT_COSTS.RESUME_TAILOR).catch((err) => {
+      console.error(`Failed to refund credits for job ${tailoredUuid}:`, err);
+    });
   }
 }
 
@@ -111,6 +118,22 @@ router.post('/tailor', [
 
     const dbResume = await database.get('SELECT id FROM base_resumes WHERE uuid = ?', [resumeId]);
     if (!dbResume) return res.status(404).json({ success: false, message: 'Base resume not found' });
+
+    // Reserve credits up front — atomic compare-and-swap. Closes the double-click race
+    // where two PENDING jobs could pass the requireCredits gate before either deducts.
+    // The worker refunds in the FAILED branch; success is a no-op (already deducted).
+    try {
+      await deductCredits(userRow.id, CREDIT_COSTS.RESUME_TAILOR);
+    } catch (err) {
+      if (err.code === 'INSUFFICIENT_CREDITS') {
+        return res.status(402).json({
+          success: false,
+          code: 'INSUFFICIENT_CREDITS',
+          message: err.message,
+        });
+      }
+      throw err;
+    }
 
     // Create the job row in PENDING state. We store the job_description right away so the
     // listing UI can show context even while the AI is still working.
