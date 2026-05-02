@@ -12,7 +12,7 @@ import resumesRouter from "./routes/resumes.js";
 import tailoredResumesRouter from "./routes/tailored-resumes.js";
 import aiRouter from "./routes/ai.js";
 import uploadsRouter from "./routes/uploads.js";
-import creditsRouter from "./routes/credits.js";
+import creditsRouter, { razorpayWebhookHandler } from "./routes/credits.js";
 import testRouter from "./routes/test.js";
 import { ensureUserExists } from "./middleware/ensureUser.js";
 
@@ -46,6 +46,14 @@ app.use(limiter);
 
 // Logging
 app.use(morgan("combined"));
+
+// Razorpay webhook MUST be mounted before express.json() so req.body stays a raw Buffer
+// for HMAC signature verification. Do not move this below the JSON parser.
+app.post(
+  "/api/credits/webhook",
+  express.raw({ type: "application/json" }),
+  razorpayWebhookHandler
+);
 
 // Body parsing middleware
 app.use(express.json({ limit: "10mb" }));
