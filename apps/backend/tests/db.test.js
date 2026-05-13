@@ -6,6 +6,7 @@ import { initializeDatabase } from '../src/config/initDb.js';
 describe('database schema', () => {
   before(async () => {
     process.env.DB_PATH = ':memory:';
+    await database.close(); // Ensure fresh connection for test isolation
     await initializeDatabase();
   });
 

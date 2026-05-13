@@ -9,8 +9,8 @@ class Database {
   }
 
   async connect() {
-    // Turso cloud URL takes priority; fall back to local file for development
-    const url = process.env.TURSO_DATABASE_URL || 'file:./data/resumate.db';
+    // Turso cloud URL takes priority; fall back to DB_PATH or local file for development
+    const url = process.env.TURSO_DATABASE_URL || process.env.DB_PATH || 'file:./data/resumate.db';
     const authToken = process.env.TURSO_AUTH_TOKEN;
 
     this.client = createClient({ url, authToken });
