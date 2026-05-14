@@ -10,18 +10,17 @@ export async function getCredits(userId) {
 }
 
 export async function deductCredits(userId, amount) {
-  const row = await database.get(
-    'SELECT credits FROM users WHERE id = ?',
-    [userId]
+  const result = await database.run(
+    "UPDATE users SET credits = credits - ?, updated_at = datetime('now') WHERE id = ? AND credits >= ?",
+    [amount, userId, amount]
   );
-  if (!row) throw new Error('User not found');
-  if (row.credits < amount) throw new Error('Insufficient credits');
-
-  await database.run(
-    "UPDATE users SET credits = credits - ?, updated_at = datetime('now') WHERE id = ?",
-    [amount, userId]
-  );
-  return row.credits - amount;
+  if (result.changes === 0) {
+    const err = new Error('Insufficient credits');
+    err.code = 'INSUFFICIENT_CREDITS';
+    throw err;
+  }
+  const row = await database.get('SELECT credits FROM users WHERE id = ?', [userId]);
+  return row.credits;
 }
 
 export async function grantCredits(userId, amount) {

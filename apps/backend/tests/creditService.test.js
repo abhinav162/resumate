@@ -9,6 +9,7 @@ describe('creditService', () => {
 
   before(async () => {
     process.env.DB_PATH = ':memory:';
+    await database.close(); // Ensure fresh connection for test isolation
     await initializeDatabase();
     const result = await database.run(
       "INSERT INTO users (uuid, email, credits, created_at, updated_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))",

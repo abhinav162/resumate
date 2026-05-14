@@ -243,16 +243,33 @@ export const aiApi = {
 /**
  * Credits methods
  */
+export type CreditPack = {
+  id: string;
+  name: string;
+  credits: number;
+  priceInr: number;
+  currency: string;
+  popular: boolean;
+};
+
+export type RazorpayCheckoutSession = {
+  orderId: string;
+  amount: number;       // paise
+  currency: string;     // 'INR'
+  keyId: string;        // rzp_test_*  / rzp_live_*
+  packId: string;
+};
+
 export const creditsApi = {
   getBalance: async (): Promise<{ balance: number }> => {
     const response = await api.get('/credits/balance');
     return response.data.data;
   },
-  getPacks: async () => {
+  getPacks: async (): Promise<CreditPack[]> => {
     const response = await api.get('/credits/packs');
     return response.data.data;
   },
-  createCheckout: async (packId: string): Promise<{ url: string }> => {
+  createCheckout: async (packId: string): Promise<RazorpayCheckoutSession> => {
     const response = await api.post('/credits/checkout', { packId });
     return response.data.data;
   },

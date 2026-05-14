@@ -1,28 +1,31 @@
 export const SIGNUP_CREDITS = 5;
 
+// Razorpay amounts are in paise (₹1 = 100 paise).
 export const CREDIT_PACKS = [
   {
     id: 'starter',
     name: 'Starter',
     credits: 20,
-    priceUsd: 10,
-    stripePriceId: process.env.STRIPE_PRICE_STARTER,
+    priceInr: 399,
+    amountPaise: 39900,
     popular: false,
   },
   {
     id: 'pro',
     name: 'Pro',
     credits: 50,
-    priceUsd: 20,
-    stripePriceId: process.env.STRIPE_PRICE_PRO,
+    priceInr: 799,
+    amountPaise: 79900,
     popular: true,
   },
   {
     id: 'max',
     name: 'Max',
     credits: 120,
-    priceUsd: 40,
-    stripePriceId: process.env.STRIPE_PRICE_MAX,
+    priceInr: 1499,
+    amountPaise: 149900,
     popular: false,
   },
 ];
+
+export const CURRENCY = 'INR';

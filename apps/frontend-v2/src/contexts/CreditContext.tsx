@@ -20,8 +20,8 @@ export function CreditProvider({ children }: { children: ReactNode }) {
     try {
       const data = await creditsApi.getBalance();
       setBalance(data.balance);
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.error('Failed to fetch credit balance:', err);
     } finally {
       setLoading(false);
     }
@@ -39,7 +39,8 @@ export function CreditProvider({ children }: { children: ReactNode }) {
         const token = await getToken();
         setAuthHeaders(token, userId);
         await refresh();
-      } catch {
+      } catch (err) {
+        console.error('CreditContext init failed:', err);
         setLoading(false);
       }
     };
