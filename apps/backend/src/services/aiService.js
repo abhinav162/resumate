@@ -60,6 +60,12 @@ async function bifrostGenerate(prompt) {
 
 function parseJsonResponse(text) {
   let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
+  // Normalize Python literals to JSON equivalents
+  cleaned = cleaned.replace(/:\s*None\s*([,}\]])/g, ': null$1');
+  cleaned = cleaned.replace(/:\s*True\s*([,}\]])/g, ': true$1');
+  cleaned = cleaned.replace(/:\s*False\s*([,}\]])/g, ': false$1');
+
   try {
     return JSON.parse(cleaned);
   } catch (firstError) {
