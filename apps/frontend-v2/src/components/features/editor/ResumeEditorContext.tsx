@@ -6,8 +6,9 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { resumesApi, tailoredResumesApi } from "../../../lib/api";
 import { useCredits } from "../../../contexts/CreditContext";
+import { useResume, useCreateResume, useUpdateResume, useScoreResume } from "../../../hooks/useResumes";
+import { useTailoredEditorData, useSaveTailoredEditorData } from "../../../hooks/useTailoredResumes";
 import type { ResumeData } from "../../../types";
 
 export type Suggestion = {
@@ -88,7 +89,6 @@ export const ResumeEditorProvider: React.FC<{
       skills: [],
     },
   );
-  const [isLoading, setIsLoading] = useState(!!resumeId && !initialData);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [score, setScore] = useState<number | null>(null);
@@ -98,36 +98,54 @@ export const ResumeEditorProvider: React.FC<{
   const currentResumeId = useRef<string | undefined>(resumeId);
   const { refresh: refreshCredits } = useCredits();
 
+  // Cached loaders — only one is enabled depending on editor mode. Loading from
+  // a query means an already-cached resume (e.g. opened recently) appears
+  // instantly instead of refetching.
+  const wantsFetch = !!resumeId && !initialData;
+  const baseQuery = useResume(wantsFetch && mode === 'base' ? resumeId : undefined);
+  const tailoredQuery = useTailoredEditorData(wantsFetch && mode === 'tailored' ? resumeId : undefined);
+
+  // Mutations (stable mutateAsync refs) — these invalidate the shared resume
+  // caches so the dashboard/list reflect edits.
+  const { mutateAsync: createResumeAsync } = useCreateResume();
+  const { mutateAsync: updateResumeAsync } = useUpdateResume();
+  const { mutateAsync: saveTailoredAsync } = useSaveTailoredEditorData();
+  const { mutateAsync: scoreResumeAsync } = useScoreResume();
+
   // Sync ref with prop
   useEffect(() => {
     currentResumeId.current = resumeId;
   }, [resumeId]);
 
-  // Fetch initial data if ID is provided. Two clean paths — no fallback hacks.
+  // Seed the editable draft from the query exactly once per resumeId. Guarding
+  // on seededRef means a background refetch (e.g. on window focus) never
+  // clobbers in-progress edits.
+  const seededRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (resumeId && !initialData) {
-      const fetchResume = async () => {
-        setIsLoading(true);
-        try {
-          if (mode === 'tailored') {
-            const { data, jobDetails, baseResumeId } = await tailoredResumesApi.getEditorData(resumeId);
-            setResumeData({ ...data, projects: data.projects ?? [] });
-            setTailoredMeta({ ...jobDetails, baseResumeId });
-          } else {
-            const data = await resumesApi.getResume(resumeId);
-            setResumeData({ ...data, projects: data.projects ?? [] });
-            setTailoredMeta(null);
-          }
-          isDirty.current = false;
-        } catch (error) {
-          console.error("Failed to fetch resume:", error);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchResume();
+    if (!wantsFetch || seededRef.current === resumeId) return;
+    if (mode === 'tailored') {
+      if (tailoredQuery.data) {
+        const { data, jobDetails, baseResumeId } = tailoredQuery.data;
+        setResumeData({ ...data, projects: data.projects ?? [] });
+        setTailoredMeta({ ...jobDetails, baseResumeId });
+        isDirty.current = false;
+        seededRef.current = resumeId;
+      }
+    } else if (baseQuery.data) {
+      setResumeData({ ...baseQuery.data, projects: baseQuery.data.projects ?? [] });
+      setTailoredMeta(null);
+      isDirty.current = false;
+      seededRef.current = resumeId;
     }
-  }, [resumeId, initialData, mode]);
+  }, [wantsFetch, resumeId, mode, baseQuery.data, tailoredQuery.data]);
+
+  // Stay loading until the active query has resolved (or errored), so the editor
+  // never renders with the default draft while the real resume is still loading.
+  // The draft itself is seeded one render later by the effect above; since the
+  // form fields (including the title) are controlled, that one-render gap is
+  // invisible.
+  const activeQuery = mode === 'tailored' ? tailoredQuery : baseQuery;
+  const isLoading = wantsFetch && !activeQuery.data && !activeQuery.isError;
 
   // Save function — routes to base or tailored endpoint based on editor mode
   const saveResume = useCallback(async () => {
@@ -140,12 +158,12 @@ export const ResumeEditorProvider: React.FC<{
       if (mode === 'tailored') {
         // Tailored editor never creates new rows — the row exists once /tailor returns.
         if (currentResumeId.current) {
-          await tailoredResumesApi.saveEditorData(currentResumeId.current, resumeData);
+          await saveTailoredAsync({ id: currentResumeId.current, data: resumeData });
         }
       } else if (currentResumeId.current) {
-        await resumesApi.updateResume(currentResumeId.current, resumeData);
+        await updateResumeAsync({ id: currentResumeId.current, data: resumeData });
       } else {
-        const created = await resumesApi.createResume(resumeData);
+        const created = await createResumeAsync(resumeData);
         currentResumeId.current = created.id;
         finalId = created.id;
       }
@@ -159,7 +177,7 @@ export const ResumeEditorProvider: React.FC<{
     } finally {
       setIsSaving(false);
     }
-  }, [resumeData, mode]);
+  }, [resumeData, mode, saveTailoredAsync, updateResumeAsync, createResumeAsync]);
 
   // Debounced save using useEffect
   useEffect(() => {
@@ -208,9 +226,10 @@ export const ResumeEditorProvider: React.FC<{
     if (!resumeId) return;
     setScoring(true);
     try {
-      const result = await resumesApi.scoreResume(resumeId);
+      const result = await scoreResumeAsync(resumeId);
       setScore(result.score);
       setSuggestions(result.suggestions ?? []);
+      // Scoring spends a credit — refresh the cached balance.
       await refreshCredits();
     } finally {
       setScoring(false);

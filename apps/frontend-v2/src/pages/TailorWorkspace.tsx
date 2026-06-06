@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
 import { RequiresCredits } from '../components/ui/RequiresCredits';
-import { aiApi, resumesApi, tailoredResumesApi } from '../lib/api';
 import type { TailorStatus } from '../lib/api';
-import { useCredits } from '../contexts/CreditContext';
+import type { TailoredResume } from '../types';
+import { useResumes } from '../hooks/useResumes';
+import { useTailorResume, useTailorStatus } from '../hooks/useTailor';
+import { useTailoredResume } from '../hooks/useTailoredResumes';
 import { CREDIT_COSTS } from '../config/pricing';
 
 type TailorResult = {
@@ -16,9 +18,16 @@ type TailorResult = {
   afterScore: number;
 };
 
+// The tailored-resume detail endpoint returns these extra fields beyond the
+// stored row; they aren't part of the persisted TailoredResume type.
+type FullTailored = TailoredResume & {
+  diff?: TailorResult['diff'];
+  beforeScore?: number;
+  afterScore?: number;
+};
+
 type ResumeOption = { id: string; name: string };
 
-const POLL_INTERVAL_MS = 3000;
 const STATUS_LABEL: Record<TailorStatus, string> = {
   PENDING: 'Queued — waiting to start',
   IN_PROGRESS: 'AI is tailoring your resume...',
@@ -29,90 +38,60 @@ const STATUS_LABEL: Record<TailorStatus, string> = {
 export default function TailorWorkspace() {
   const [searchParams] = useSearchParams();
   const [resumeId, setResumeId] = useState(searchParams.get('resumeId') ?? '');
-  const [resumes, setResumes] = useState<ResumeOption[]>([]);
-  const [resumesLoading, setResumesLoading] = useState(true);
   const [jobTitle, setJobTitle] = useState('');
   const [company, setCompany] = useState('');
   const [jobDescription, setJobDescription] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [jobStatus, setJobStatus] = useState<TailorStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<TailorResult | null>(null);
-  const pollTimer = useRef<number | null>(null);
-  const { refresh } = useCredits();
+  // The job id is the only piece of local state the tailoring flow needs —
+  // everything else (status, diff, scores) is derived from cached queries.
+  const [tailoredResumeId, setTailoredResumeId] = useState<string | null>(null);
 
-  useEffect(() => {
-    resumesApi.getAll().then((data) => {
-      setResumes(data.map((r: any) => ({ id: r.id, name: r.name || 'Untitled' })));
-    }).catch(() => {}).finally(() => setResumesLoading(false));
-  }, []);
+  const { data: resumeData, isLoading: resumesLoading } = useResumes();
+  const resumes: ResumeOption[] = (resumeData ?? []).map((r: { id: string; name?: string }) => ({ id: r.id, name: r.name || 'Untitled' }));
 
-  // Cleanup any in-flight poll on unmount
-  useEffect(() => {
-    return () => {
-      if (pollTimer.current) window.clearTimeout(pollTimer.current);
-    };
-  }, []);
+  const tailorMutation = useTailorResume();
+  // Declarative polling — stops itself on COMPLETED/FAILED and refreshes credits.
+  const { data: status, error: statusError } = useTailorStatus(tailoredResumeId ?? undefined);
 
-  function stopPolling() {
-    if (pollTimer.current) {
-      window.clearTimeout(pollTimer.current);
-      pollTimer.current = null;
-    }
-  }
+  // Live poll value, falling back to the mutation's initial response before
+  // the first poll lands.
+  const jobStatus: TailorStatus | null = status?.status ?? tailorMutation.data?.status ?? null;
+  const completed = jobStatus === 'COMPLETED';
 
-  async function pollUntilDone(tailoredResumeId: string) {
-    try {
-      const status = await aiApi.getTailorStatus(tailoredResumeId);
-      setJobStatus(status.status);
+  // Once completed, load the full tailored resume (diff + before/after scores).
+  const { data: fullTailored } = useTailoredResume(completed ? tailoredResumeId ?? undefined : undefined);
+  const full = fullTailored as FullTailored | undefined;
 
-      if (status.status === 'COMPLETED') {
-        // Fetch the full tailored resume (with diff) from the dedicated endpoint
-        const full = await tailoredResumesApi.getTailoredResume(tailoredResumeId);
-        const fullAny = full as any;
-        setResult({
-          tailoredResumeId,
-          diff: fullAny.diff ?? [],
-          beforeScore: fullAny.beforeScore ?? status.beforeScore ?? 0,
-          afterScore: fullAny.afterScore ?? status.afterScore ?? 0,
-        });
-        await refresh();
-        stopPolling();
-        return;
+  const result: TailorResult | null = completed && full && tailoredResumeId
+    ? {
+        tailoredResumeId,
+        diff: full.diff ?? [],
+        beforeScore: full.beforeScore ?? status?.beforeScore ?? 0,
+        afterScore: full.afterScore ?? status?.afterScore ?? 0,
       }
+    : null;
 
-      if (status.status === 'FAILED') {
-        setError(status.errorMessage ?? 'Tailoring failed. Please try again.');
-        stopPolling();
-        return;
-      }
+  const error: string | null = tailorMutation.error
+    ? (((tailorMutation.error as { response?: { data?: { message?: string } } })?.response?.data?.message) ?? 'Could not start tailoring. Please try again.')
+    : jobStatus === 'FAILED'
+      ? (status?.errorMessage ?? 'Tailoring failed. Please try again.')
+      : statusError
+        ? 'Lost connection while checking status. Please refresh.'
+        : null;
 
-      // Still PENDING or IN_PROGRESS — schedule next poll
-      pollTimer.current = window.setTimeout(() => pollUntilDone(tailoredResumeId), POLL_INTERVAL_MS);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Lost connection while checking status. Please refresh.');
-      stopPolling();
-    }
+  const submitting = tailorMutation.isPending;
+  // Keep the working state until the full result has loaded, to avoid an
+  // idle-screen flash between COMPLETED and the diff arriving.
+  const finalizing = completed && !full;
+  const isWorking = jobStatus === 'PENDING' || jobStatus === 'IN_PROGRESS' || submitting || finalizing;
+
+  function handleTailor() {
+    setTailoredResumeId(null);
+    tailorMutation.reset();
+    tailorMutation.mutate(
+      { resumeId, jobTitle, company, jobDescription },
+      { onSuccess: (data) => setTailoredResumeId(data.tailoredResumeId) },
+    );
   }
-
-  async function handleTailor() {
-    setSubmitting(true);
-    setError(null);
-    setResult(null);
-    setJobStatus(null);
-    try {
-      const data = await aiApi.tailorResume({ resumeId, jobTitle, company, jobDescription });
-      setJobStatus(data.status);
-      // Start polling for completion
-      pollUntilDone(data.tailoredResumeId);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Could not start tailoring. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  const isWorking = jobStatus === 'PENDING' || jobStatus === 'IN_PROGRESS' || submitting;
 
   return (
     <div className="flex h-screen bg-paper-bg">

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { useCredits } from '../contexts/CreditContext';
 import { creditsApi, type CreditPack } from '../lib/api';
+import { useCreditPacks, useCreateCheckout } from '../hooks/useCreditsApi';
 import { loadRazorpayCheckout } from '../lib/razorpay';
 
 type FlashState =
@@ -36,24 +37,19 @@ async function pollUntilCreditsIncrease(
 }
 
 export default function CreditsPage() {
-  const [packs, setPacks] = useState<CreditPack[]>([]);
+  const { data: packs = [] } = useCreditPacks();
   const [loading, setLoading] = useState<string | null>(null);
   const [flash, setFlash] = useState<FlashState>({ kind: 'idle' });
   const { balance, refresh } = useCredits();
   const { user } = useUser();
-
-  useEffect(() => {
-    creditsApi.getPacks().then(setPacks).catch((err) => {
-      console.error('Failed to load credit packs:', err);
-    });
-  }, []);
+  const checkout = useCreateCheckout();
 
   async function handleBuy(pack: CreditPack) {
     setLoading(pack.id);
     setFlash({ kind: 'idle' });
 
     try {
-      const session = await creditsApi.createCheckout(pack.id);
+      const session = await checkout.mutateAsync(pack.id);
       const Razorpay = await loadRazorpayCheckout();
       const balanceBefore = balance;
 
@@ -97,9 +93,9 @@ export default function CreditsPage() {
         },
       });
       rzp.open();
-    } catch (err: any) {
+    } catch (err) {
       setLoading(null);
-      setFlash({ kind: 'error', message: err?.message ?? 'Checkout failed to start' });
+      setFlash({ kind: 'error', message: (err as { message?: string })?.message ?? 'Checkout failed to start' });
     }
   }
 

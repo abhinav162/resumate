@@ -1,40 +1,34 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
-import { resumesApi, setAuthHeaders } from '../lib/api';
+import { useResumes, useDeleteResume } from '../hooks/useResumes';
 
-type Resume = { id: string; name: string; score: number | null; tailoredCount?: number; updated_at: string };
+type Resume = { id: string; name: string; score: number | null; tailoredCount?: number; updatedAt?: string };
 
 export default function Dashboard() {
-  const [resumes, setResumes] = useState<Resume[]>([]);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const { isLoaded, isSignedIn, getToken, userId } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (!isSignedIn) {
-      setLoading(false);
-      return;
-    }
-    const fetchResumes = async () => {
-      try {
-        const token = await getToken();
-        setAuthHeaders(token, userId);
-        const data = await resumesApi.getAll();
-        setResumes(data);
-      } catch {
-        // silently fail
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchResumes();
-  }, [isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auth headers are injected by the axios request interceptor; we only gate
+  // the query so it doesn't fire before Clerk is ready / the user is signed in.
+  const { data, isLoading } = useResumes({ enabled: isLoaded && isSignedIn });
+  const resumes = (data ?? []) as Resume[];
+  const loading = isLoaded && isSignedIn && isLoading;
+
+  const deleteResume = useDeleteResume();
+
+  function handleDelete(id: string, name: string) {
+    if (!confirm(`Delete "${name}"? This also removes its tailored copies and cannot be undone.`)) return;
+    deleteResume.mutate(id, {
+      onError: (err) => {
+        alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not delete resume.');
+      },
+    });
+  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -66,16 +60,32 @@ export default function Dashboard() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="font-heading font-semibold text-ink-primary">{resume.name}</p>
-                <p className="text-xs text-ink-muted mt-0.5">Updated {new Date(resume.updated_at).toLocaleDateString()}</p>
+                {resume.updatedAt && (
+                  <p className="text-xs text-ink-muted mt-0.5">Updated {new Date(resume.updatedAt).toLocaleDateString()}</p>
+                )}
               </div>
               {resume.score !== null && resume.score !== undefined && <ScorePill score={resume.score} />}
             </div>
             {resume.tailoredCount !== undefined && resume.tailoredCount > 0 && (
               <Badge variant="indigo">{resume.tailoredCount} tailored {resume.tailoredCount === 1 ? 'copy' : 'copies'}</Badge>
             )}
-            <div className="flex gap-2 pt-1">
+            <div className="flex items-center gap-2 pt-1">
               <Button size="sm" variant="secondary" onClick={() => navigate(`/editor/${resume.id}`)}>Edit</Button>
               <Button size="sm" variant="ghost" onClick={() => navigate(`/tailor?resumeId=${resume.id}`)}>Tailor →</Button>
+              {(() => {
+                const isDeleting = deleteResume.isPending && deleteResume.variables === resume.id;
+                return (
+                  <button
+                    onClick={() => handleDelete(resume.id, resume.name)}
+                    disabled={isDeleting}
+                    className="ml-auto p-2 text-ink-muted hover:text-danger-text rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete resume"
+                    aria-label="Delete resume"
+                  >
+                    {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                  </button>
+                );
+              })()}
             </div>
           </Card>
         ))}
