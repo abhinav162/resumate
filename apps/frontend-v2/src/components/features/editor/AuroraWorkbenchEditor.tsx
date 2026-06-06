@@ -55,6 +55,7 @@ function AuroraWorkbenchInner() {
     mode,
     tailoredMeta,
     resumeData,
+    updateField,
     isSaving,
     lastSaved,
     isLoading,
@@ -124,6 +125,7 @@ function AuroraWorkbenchInner() {
   return (
     <EditorLayout
       title={resumeData.title}
+      onTitleChange={(v) => updateField('title', v)}
       onExport={handleExport}
       isExporting={isExporting}
       actions={

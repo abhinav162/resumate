@@ -139,8 +139,13 @@ export const ResumeEditorProvider: React.FC<{
     }
   }, [wantsFetch, resumeId, mode, baseQuery.data, tailoredQuery.data]);
 
-  const isLoading = wantsFetch && seededRef.current !== resumeId &&
-    (mode === 'tailored' ? tailoredQuery.isLoading : baseQuery.isLoading);
+  // Stay loading until the active query has resolved (or errored), so the editor
+  // never renders with the default draft while the real resume is still loading.
+  // The draft itself is seeded one render later by the effect above; since the
+  // form fields (including the title) are controlled, that one-render gap is
+  // invisible.
+  const activeQuery = mode === 'tailored' ? tailoredQuery : baseQuery;
+  const isLoading = wantsFetch && !activeQuery.data && !activeQuery.isError;
 
   // Save function — routes to base or tailored endpoint based on editor mode
   const saveResume = useCallback(async () => {
