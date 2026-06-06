@@ -184,15 +184,19 @@ const router = createBrowserRouter([
 
 import { useAuth } from "@clerk/clerk-react";
 import { useEffect } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { setAuthHeaders } from "./lib/api";
+import { queryClient } from "./lib/queryClient";
 import { CreditProvider } from "./contexts/CreditContext";
 
 export default function AppRouter() {
   return (
     <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/" signInFallbackRedirectUrl="/dashboard" signUpFallbackRedirectUrl="/dashboard">
-      <AuthInitializer>
-        <RouterProvider router={router} />
-      </AuthInitializer>
+      <QueryClientProvider client={queryClient}>
+        <AuthInitializer>
+          <RouterProvider router={router} />
+        </AuthInitializer>
+      </QueryClientProvider>
     </ClerkProvider>
   );
 }
