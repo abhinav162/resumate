@@ -56,6 +56,8 @@ export function useDeleteResume() {
     mutationFn: (id: string) => resumesApi.deleteResume(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.resumes.all });
+      // Deleting a base resume cascades to its tailored copies.
+      qc.invalidateQueries({ queryKey: ['tailored-resumes'] });
     },
   });
 }
