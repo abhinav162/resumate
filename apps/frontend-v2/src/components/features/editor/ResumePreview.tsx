@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import type { ResumeData } from "../../../types";
 
 /**
  * Reusable A4 resume preview. Renders the resume at full A4 size and visually
@@ -6,7 +7,7 @@ import { useLayoutEffect, useRef, useState } from "react";
  * the editor so other surfaces (e.g. the tailor combined view) can show a live
  * preview of the same resumeData shape.
  */
-export function ResponsivePreviewCanvas({ resumeData }: { resumeData: any }) {
+export function ResponsivePreviewCanvas({ resumeData }: { resumeData: ResumeData }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
@@ -55,7 +56,7 @@ export function ResponsivePreviewCanvas({ resumeData }: { resumeData: any }) {
 }
 
 // -- Preview Mock --
-function ResumePreviewMock({ resumeData }: { resumeData: any }) {
+function ResumePreviewMock({ resumeData }: { resumeData: ResumeData }) {
   const contact = resumeData.contact || {};
   const URL_LABEL_THRESHOLD = 30;
   const linkLabel = (url: string, fallback: string) =>
@@ -133,7 +134,7 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
             Experience
           </h3>
           <div className="space-y-6">
-            {resumeData.experience.map((exp: any, i: number) => {
+            {resumeData.experience.map((exp, i) => {
               const bullets = (exp.description || "")
                 .split("\n")
                 .map((s: string) => s.trim())
@@ -170,7 +171,7 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
               Projects
             </h3>
             <div className="space-y-6">
-              {(resumeData.projects ?? []).map((proj: any, i: number) => {
+              {(resumeData.projects ?? []).map((proj, i) => {
                 const bullets = Array.isArray(proj.description)
                   ? proj.description.filter(Boolean)
                   : [];
@@ -229,7 +230,7 @@ function ResumePreviewMock({ resumeData }: { resumeData: any }) {
           <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
             Education
           </h3>
-          {resumeData.education.map((edu: any, i: number) => (
+          {resumeData.education.map((edu, i) => (
             <div key={i} className="flex justify-between">
               <div>
                 <div className="font-bold text-gray-900">
