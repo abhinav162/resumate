@@ -6,6 +6,7 @@ import { Button } from "../components/ui/Button";
 interface EditorLayoutProps {
   children: ReactNode;
   title?: string;
+  onTitleChange?: (value: string) => void;
   actions?: ReactNode;
   onExport?: () => Promise<void>;
   isExporting?: boolean;
@@ -14,6 +15,7 @@ interface EditorLayoutProps {
 export function EditorLayout({
   children,
   title = "Untitled Resume",
+  onTitleChange,
   actions,
   onExport,
   isExporting = false,
@@ -35,7 +37,11 @@ export function EditorLayout({
             <span className="text-ink-secondary text-xs">/</span>
             <input
               type="text"
-              defaultValue={title}
+              value={title}
+              onChange={(e) => onTitleChange?.(e.target.value)}
+              readOnly={!onTitleChange}
+              placeholder="Untitled Resume"
+              aria-label="Resume name"
               className="bg-transparent border-none p-0 text-sm focus:ring-0 text-ink-primary font-medium w-48 placeholder:text-ink-secondary"
             />
           </div>
