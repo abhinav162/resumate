@@ -332,7 +332,7 @@ export default function TailorWorkspace() {
                       onClick={handleRescore}
                       loading={scoring}
                     >
-                      <RotateCw size={14} className={scoring ? 'animate-spin' : ''} />
+                      {!scoring && <RotateCw size={14} />}
                       Re-score — {CREDIT_COSTS.RESUME_RESCORE} credit
                     </Button>
                   </RequiresCredits>
