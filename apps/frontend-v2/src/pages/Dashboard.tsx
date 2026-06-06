@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { ScorePill } from '../components/ui/ScorePill';
@@ -72,15 +72,20 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 pt-1">
               <Button size="sm" variant="secondary" onClick={() => navigate(`/editor/${resume.id}`)}>Edit</Button>
               <Button size="sm" variant="ghost" onClick={() => navigate(`/tailor?resumeId=${resume.id}`)}>Tailor →</Button>
-              <button
-                onClick={() => handleDelete(resume.id, resume.name)}
-                disabled={deleteResume.isPending && deleteResume.variables === resume.id}
-                className="ml-auto p-2 text-ink-muted hover:text-danger-text rounded transition-colors disabled:opacity-50"
-                title="Delete resume"
-                aria-label="Delete resume"
-              >
-                <Trash2 size={16} />
-              </button>
+              {(() => {
+                const isDeleting = deleteResume.isPending && deleteResume.variables === resume.id;
+                return (
+                  <button
+                    onClick={() => handleDelete(resume.id, resume.name)}
+                    disabled={isDeleting}
+                    className="ml-auto p-2 text-ink-muted hover:text-danger-text rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete resume"
+                    aria-label="Delete resume"
+                  >
+                    {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                  </button>
+                );
+              })()}
             </div>
           </Card>
         ))}

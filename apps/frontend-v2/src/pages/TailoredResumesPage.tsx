@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Layers, Trash2, RefreshCw } from 'lucide-react';
+import { Layers, Trash2, RefreshCw, Loader2 } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { Button } from '../components/ui/Button';
 import { ScorePill } from '../components/ui/ScorePill';
@@ -155,10 +155,14 @@ export default function TailoredResumesPage() {
                 </Button>
                 <button
                   onClick={() => handleDelete(item.id)}
-                  className="p-2 text-ink-muted hover:text-danger-text rounded transition-colors"
+                  disabled={deleteMutation.isPending && deleteMutation.variables === item.id}
+                  className="p-2 text-ink-muted hover:text-danger-text rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Delete"
+                  aria-label="Delete tailored resume"
                 >
-                  <Trash2 size={16} />
+                  {deleteMutation.isPending && deleteMutation.variables === item.id
+                    ? <Loader2 size={16} className="animate-spin" />
+                    : <Trash2 size={16} />}
                 </button>
               </div>
             </div>
