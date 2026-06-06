@@ -7,7 +7,7 @@ import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
 import { useResumes, useDeleteResume } from '../hooks/useResumes';
 
-type Resume = { id: string; name: string; score: number | null; tailoredCount?: number; updated_at: string };
+type Resume = { id: string; name: string; score: number | null; tailoredCount?: number; updatedAt?: string };
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -60,7 +60,9 @@ export default function Dashboard() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="font-heading font-semibold text-ink-primary">{resume.name}</p>
-                <p className="text-xs text-ink-muted mt-0.5">Updated {new Date(resume.updated_at).toLocaleDateString()}</p>
+                {resume.updatedAt && (
+                  <p className="text-xs text-ink-muted mt-0.5">Updated {new Date(resume.updatedAt).toLocaleDateString()}</p>
+                )}
               </div>
               {resume.score !== null && resume.score !== undefined && <ScorePill score={resume.score} />}
             </div>
