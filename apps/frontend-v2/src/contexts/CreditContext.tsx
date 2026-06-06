@@ -1,7 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { creditsApi, setAuthHeaders } from '../lib/api';
+import { useCreditBalance } from '../hooks/useCreditsApi';
 
 interface CreditContextType {
   balance: number | null;
@@ -11,43 +11,27 @@ interface CreditContextType {
 
 const CreditContext = createContext<CreditContextType>({ balance: null, loading: true, refresh: async () => {} });
 
+/**
+ * Thin wrapper over the cached credit-balance query. Kept as a context so the
+ * many existing `useCredits()` callers don't need to change, while the actual
+ * fetching/caching/invalidation is owned by React Query. The axios request
+ * interceptor injects auth, so no manual token syncing is needed here.
+ */
 export function CreditProvider({ children }: { children: ReactNode }) {
-  const [balance, setBalance] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const { isLoaded, isSignedIn, getToken, userId } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
+  const enabled = isLoaded && isSignedIn;
 
-  const refresh = useCallback(async () => {
-    try {
-      const data = await creditsApi.getBalance();
-      setBalance(data.balance);
-    } catch (err) {
-      console.error('Failed to fetch credit balance:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data, isLoading, refetch } = useCreditBalance(enabled);
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (!isSignedIn) {
-      setLoading(false);
-      return;
-    }
-    // Ensure auth headers are set before the first balance fetch
-    const init = async () => {
-      try {
-        const token = await getToken();
-        setAuthHeaders(token, userId);
-        await refresh();
-      } catch (err) {
-        console.error('CreditContext init failed:', err);
-        setLoading(false);
-      }
-    };
-    init();
-  }, [isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  const value: CreditContextType = {
+    balance: data ?? null,
+    loading: enabled ? isLoading : false,
+    refresh: async () => {
+      await refetch();
+    },
+  };
 
-  return <CreditContext.Provider value={{ balance, loading, refresh }}>{children}</CreditContext.Provider>;
+  return <CreditContext.Provider value={value}>{children}</CreditContext.Provider>;
 }
 
 export const useCredits = () => useContext(CreditContext);

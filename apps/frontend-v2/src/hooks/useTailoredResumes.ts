@@ -7,10 +7,21 @@ import type { ResumeData, TailoredResume } from '../types';
  * Tailored-resume queries & mutations.
  */
 
+const LIST_POLL_INTERVAL_MS = 5000;
+
 export function useTailoredResumes(baseResumeId?: string) {
   return useQuery({
     queryKey: queryKeys.tailoredResumes.list(baseResumeId),
     queryFn: () => tailoredResumesApi.getTailoredResumes(baseResumeId),
+    // Auto-refresh while any tailoring job is still in flight; stop once all
+    // jobs have reached a terminal state.
+    refetchInterval: (query) => {
+      const items = (query.state.data ?? []) as Array<{ status?: string }>;
+      const hasInflight = items.some(
+        (i) => i.status === 'PENDING' || i.status === 'IN_PROGRESS',
+      );
+      return hasInflight ? LIST_POLL_INTERVAL_MS : false;
+    },
   });
 }
 
