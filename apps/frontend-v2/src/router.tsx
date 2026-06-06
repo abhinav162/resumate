@@ -182,35 +182,20 @@ const router = createBrowserRouter([
   },
 ]);
 
-import { useAuth } from "@clerk/clerk-react";
-import { useEffect } from "react";
-import { setAuthHeaders } from "./lib/api";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./lib/queryClient";
 import { CreditProvider } from "./contexts/CreditContext";
 
 export default function AppRouter() {
+  // Auth headers are injected per-request by the axios interceptor (reading the
+  // live Clerk session), so no separate auth-sync step is needed here.
   return (
     <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/" signInFallbackRedirectUrl="/dashboard" signUpFallbackRedirectUrl="/dashboard">
-      <AuthInitializer>
-        <RouterProvider router={router} />
-      </AuthInitializer>
+      <QueryClientProvider client={queryClient}>
+        <CreditProvider>
+          <RouterProvider router={router} />
+        </CreditProvider>
+      </QueryClientProvider>
     </ClerkProvider>
   );
-}
-
-function AuthInitializer({ children }: { children: React.ReactNode }) {
-  const { getToken, userId } = useAuth();
-
-  useEffect(() => {
-    const syncAuth = async () => {
-      try {
-        const token = await getToken();
-        setAuthHeaders(token, userId);
-      } catch (err) {
-        console.error("Failed to sync auth token", err);
-      }
-    };
-    syncAuth();
-  }, [getToken, userId]);
-
-  return <CreditProvider>{children}</CreditProvider>;
 }

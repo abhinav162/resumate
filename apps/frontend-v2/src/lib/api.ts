@@ -9,22 +9,6 @@ const api = axios.create({
   },
 });
 
-// Helper to set auth headers dynamically
-// This is called from the App/Layout level where Clerk context is available
-export const setAuthHeaders = (token: string | null | undefined, userId: string | null | undefined) => {
-  if (token) {
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  } else {
-    delete api.defaults.headers.common['Authorization'];
-  }
-
-  if (userId) {
-    api.defaults.headers.common['x-user-id'] = userId;
-  } else {
-    delete api.defaults.headers.common['x-user-id'];
-  }
-};
-
 // Request interceptor — inject auth headers from Clerk global on every request.
 // This avoids the race condition where components fetch before AuthInitializer
 // finishes its async getToken() call.

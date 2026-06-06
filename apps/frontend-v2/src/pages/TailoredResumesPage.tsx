@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layers, Trash2, RefreshCw } from 'lucide-react';
+import type { ComponentProps } from 'react';
 import { Button } from '../components/ui/Button';
 import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
-import { tailoredResumesApi } from '../lib/api';
 import type { TailorStatus } from '../lib/api';
+import { useTailoredResumes, useDeleteTailoredResume } from '../hooks/useTailoredResumes';
 
 type TailoredItem = {
   id: string;
@@ -18,7 +18,9 @@ type TailoredItem = {
   updatedAt: string;
 };
 
-const STATUS_STYLES: Record<TailorStatus, { variant: any; label: string }> = {
+type BadgeVariant = ComponentProps<typeof Badge>['variant'];
+
+const STATUS_STYLES: Record<TailorStatus, { variant: BadgeVariant; label: string }> = {
   PENDING: { variant: 'default', label: 'Queued' },
   IN_PROGRESS: { variant: 'default', label: 'In progress' },
   COMPLETED: { variant: 'success', label: 'Completed' },
@@ -40,58 +42,25 @@ function formatDate(iso: string) {
 
 export default function TailoredResumesPage() {
   const navigate = useNavigate();
-  const [items, setItems] = useState<TailoredItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const pollTimer = useRef<number | null>(null);
+  // The hook owns the in-flight polling and shared cache; the page just reads.
+  const { data, isLoading, isFetching, error: queryError, refetch } = useTailoredResumes();
+  const deleteMutation = useDeleteTailoredResume();
 
-  async function load() {
-    try {
-      const data = await tailoredResumesApi.getTailoredResumes();
-      setItems(data as any);
-      setError(null);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Failed to load tailored resumes.');
-    } finally {
-      setLoading(false);
-    }
-  }
+  // The list endpoint returns the richer status-bearing shape (status, scores,
+  // errorMessage) beyond the persisted TailoredResume type.
+  const items = (data ?? []) as unknown as TailoredItem[];
+  const loading = isLoading;
+  const error = queryError
+    ? ((queryError as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to load tailored resumes.')
+    : null;
 
-  // Initial load + cleanup
-  useEffect(() => {
-    load();
-    return () => {
-      if (pollTimer.current) window.clearTimeout(pollTimer.current);
-    };
-  }, []);
-
-  // Auto-refresh every 5 seconds while any job is still in flight
-  useEffect(() => {
-    const hasInflight = items.some(i => i.status === 'PENDING' || i.status === 'IN_PROGRESS');
-    if (!hasInflight) {
-      if (pollTimer.current) {
-        window.clearTimeout(pollTimer.current);
-        pollTimer.current = null;
-      }
-      return;
-    }
-    pollTimer.current = window.setTimeout(load, 5000);
-    return () => {
-      if (pollTimer.current) {
-        window.clearTimeout(pollTimer.current);
-        pollTimer.current = null;
-      }
-    };
-  }, [items]);
-
-  async function handleDelete(id: string) {
+  function handleDelete(id: string) {
     if (!confirm('Delete this tailored resume? This cannot be undone.')) return;
-    try {
-      await tailoredResumesApi.deleteTailoredResume(id);
-      setItems(prev => prev.filter(i => i.id !== id));
-    } catch (err: any) {
-      alert(err?.response?.data?.message ?? 'Could not delete tailored resume.');
-    }
+    deleteMutation.mutate(id, {
+      onError: (err) => {
+        alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not delete tailored resume.');
+      },
+    });
   }
 
   return (
@@ -106,8 +75,8 @@ export default function TailoredResumesPage() {
             All resumes you've tailored for specific job descriptions.
           </p>
         </div>
-        <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+        <Button variant="secondary" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
           Refresh
         </Button>
       </div>

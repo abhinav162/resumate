@@ -2,23 +2,21 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { UploadDropzone } from '../components/features/upload/UploadDropzone';
-import { resumesApi } from '../lib/api';
+import { useUploadPdf } from '../hooks/useResumes';
 
 export default function UploadPage() {
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  // Upload invalidates the resumes cache so the dashboard shows the new resume.
+  const upload = useUploadPdf();
 
   async function handleFile(file: File) {
-    setLoading(true);
     setError(null);
     try {
-      const { resumeId } = await resumesApi.uploadPdf(file);
+      const { resumeId } = await upload.mutateAsync(file);
       navigate(`/editor/${resumeId}`);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Upload failed. Please try again.');
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      setError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Upload failed. Please try again.');
     }
   }
 
@@ -47,7 +45,7 @@ export default function UploadPage() {
             </p>
           </div>
 
-          <UploadDropzone onFile={handleFile} loading={loading} />
+          <UploadDropzone onFile={handleFile} loading={upload.isPending} />
 
           {error && (
             <p className="text-sm text-danger-text bg-danger-bg border border-danger-border rounded-lg px-4 py-2">
