@@ -16,9 +16,9 @@ export const queryClient = new QueryClient({
       staleTime: 30_000,
       gcTime: 5 * 60_000,
       refetchOnWindowFocus: true,
-      retry: (failureCount, error: any) => {
+      retry: (failureCount, error) => {
         // Don't retry client errors (auth, validation, not-found).
-        const status = error?.response?.status;
+        const status = (error as { response?: { status?: number } })?.response?.status;
         if (status && status >= 400 && status < 500) return false;
         return failureCount < 1;
       },

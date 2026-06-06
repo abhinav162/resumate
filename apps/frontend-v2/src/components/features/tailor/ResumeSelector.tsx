@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
 import { FileText, Plus } from "lucide-react";
 import { clsx } from "clsx";
 import { motion } from "framer-motion";
-import api from "../../../lib/api";
+import { useResumes } from "../../../hooks/useResumes";
 
 interface Resume {
   id: string;
@@ -16,24 +15,9 @@ interface ResumeSelectorProps {
 }
 
 export function ResumeSelector({ selectedId, onSelect }: ResumeSelectorProps) {
-  const [resumes, setResumes] = useState<Resume[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchResumes = async () => {
-      try {
-        const response = await api.get("/resumes");
-        if (response.data.success) {
-          setResumes(response.data.data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch resumes", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchResumes();
-  }, []);
+  // Shared cache with the Dashboard / Tailor workspace — no duplicate fetch.
+  const { data, isLoading: loading } = useResumes();
+  const resumes = (data ?? []) as Resume[];
 
   return (
     <div className="w-full">

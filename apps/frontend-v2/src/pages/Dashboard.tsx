@@ -1,40 +1,22 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
-import { resumesApi, setAuthHeaders } from '../lib/api';
+import { useResumes } from '../hooks/useResumes';
 
 type Resume = { id: string; name: string; score: number | null; tailoredCount?: number; updated_at: string };
 
 export default function Dashboard() {
-  const [resumes, setResumes] = useState<Resume[]>([]);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const { isLoaded, isSignedIn, getToken, userId } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (!isSignedIn) {
-      setLoading(false);
-      return;
-    }
-    const fetchResumes = async () => {
-      try {
-        const token = await getToken();
-        setAuthHeaders(token, userId);
-        const data = await resumesApi.getAll();
-        setResumes(data);
-      } catch {
-        // silently fail
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchResumes();
-  }, [isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auth headers are injected by the axios request interceptor; we only gate
+  // the query so it doesn't fire before Clerk is ready / the user is signed in.
+  const { data, isLoading } = useResumes({ enabled: isLoaded && isSignedIn });
+  const resumes = (data ?? []) as Resume[];
+  const loading = isLoaded && isSignedIn && isLoading;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">

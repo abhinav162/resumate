@@ -11,10 +11,11 @@ import type { ResumeData } from '../types';
  */
 
 /** Raw list shape used by dashboard cards (id/name/score/...). */
-export function useResumes() {
+export function useResumes(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.resumes.all,
     queryFn: resumesApi.getAll,
+    enabled: options?.enabled ?? true,
   });
 }
 
