@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
@@ -8,6 +8,8 @@ import { ScorePill } from "../../ui/ScorePill";
 import { Badge } from "../../ui/Badge";
 import { RequiresCredits } from "../../ui/RequiresCredits";
 import { ResumeEditorProvider, useResumeEditor } from "./ResumeEditorContext";
+import { ResponsivePreviewCanvas } from "./ResumePreview";
+import { SortableList } from "./SortableList";
 import { generateLatexPdf } from "../../../services/latexService";
 import {
   User,
@@ -404,40 +406,52 @@ function EducationForm() {
 
   return (
     <div className="space-y-6">
-      {resumeData.education.map((edu: any, i: number) => (
-        <div
-          key={i}
-          className="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
-        >
-          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
-            <button
-              onClick={() => removeListItem("education", i)}
-              className="text-ink-muted hover:text-red-400 p-1"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 gap-3 mb-3">
-            <DenseInput
-              label="School / University"
-              value={edu.school}
-              onChange={(e: any) => handleUpdate(i, "school", e.target.value)}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <DenseInput
-                label="Degree"
-                value={edu.degree}
-                onChange={(e: any) => handleUpdate(i, "degree", e.target.value)}
-              />
-              <DenseInput
-                label="Year"
-                value={edu.year}
-                onChange={(e: any) => handleUpdate(i, "year", e.target.value)}
-              />
+      <SortableList
+        items={resumeData.education}
+        onReorder={(next) => updateField("education", next)}
+        className="space-y-6"
+        itemClassName="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
+        renderItem={(edu, i, handle) => (
+          <>
+            <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
+              <button
+                {...handle}
+                style={{ touchAction: "none" }}
+                className="text-ink-muted hover:text-ink-primary p-1 cursor-grab active:cursor-grabbing"
+                title="Drag to reorder"
+                aria-label="Drag to reorder position"
+              >
+                <GripVertical size={14} />
+              </button>
+              <button
+                onClick={() => removeListItem("education", i)}
+                className="text-ink-muted hover:text-red-400 p-1"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
-          </div>
-        </div>
-      ))}
+            <div className="grid grid-cols-1 gap-3 mb-3">
+              <DenseInput
+                label="School / University"
+                value={edu.school}
+                onChange={(e: any) => handleUpdate(i, "school", e.target.value)}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <DenseInput
+                  label="Degree"
+                  value={edu.degree}
+                  onChange={(e: any) => handleUpdate(i, "degree", e.target.value)}
+                />
+                <DenseInput
+                  label="Year"
+                  value={edu.year}
+                  onChange={(e: any) => handleUpdate(i, "year", e.target.value)}
+                />
+              </div>
+            </div>
+          </>
+        )}
+      />
       <Button
         variant="secondary"
         onClick={() =>
@@ -589,63 +603,72 @@ function ExperienceForm() {
 
   return (
     <div className="space-y-6">
-      {resumeData.experience.map((exp: any, i: number) => (
-        <div
-          key={i}
-          className="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
-        >
-          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
-            <button className="text-ink-muted hover:text-ink-primary p-1">
-              <GripVertical size={14} />
-            </button>
-            <button
-              onClick={() => removeListItem("experience", i)}
-              className="text-ink-muted hover:text-red-400 p-1"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+      <SortableList
+        items={resumeData.experience}
+        onReorder={(next) => updateField("experience", next)}
+        className="space-y-6"
+        itemClassName="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
+        renderItem={(exp, i, handle) => (
+          <>
+            <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
+              <button
+                {...handle}
+                style={{ touchAction: "none" }}
+                className="text-ink-muted hover:text-ink-primary p-1 cursor-grab active:cursor-grabbing"
+                title="Drag to reorder"
+                aria-label="Drag to reorder position"
+              >
+                <GripVertical size={14} />
+              </button>
+              <button
+                onClick={() => removeListItem("experience", i)}
+                className="text-ink-muted hover:text-red-400 p-1"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
 
-          <div className="grid grid-cols-1 gap-3 mb-3">
+            <div className="grid grid-cols-1 gap-3 mb-3">
+              <DenseInput
+                label="Role Title"
+                value={exp.role}
+                onChange={(e: any) => handleUpdate(i, "role", e.target.value)}
+              />
+              <DenseInput
+                label="Company"
+                value={exp.company}
+                onChange={(e: any) => handleUpdate(i, "company", e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <DenseInput
+                label="Start Date"
+                value={exp.startDate}
+                onChange={(e: any) =>
+                  handleUpdate(i, "startDate", e.target.value)
+                }
+              />
+              <DenseInput
+                label="End Date"
+                value={exp.endDate}
+                onChange={(e: any) => handleUpdate(i, "endDate", e.target.value)}
+              />
+            </div>
             <DenseInput
-              label="Role Title"
-              value={exp.role}
-              onChange={(e: any) => handleUpdate(i, "role", e.target.value)}
-            />
-            <DenseInput
-              label="Company"
-              value={exp.company}
-              onChange={(e: any) => handleUpdate(i, "company", e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <DenseInput
-              label="Start Date"
-              value={exp.startDate}
+              label="Description (one bullet per line)"
+              isTextArea
+              value={exp.description}
               onChange={(e: any) =>
-                handleUpdate(i, "startDate", e.target.value)
+                handleUpdate(i, "description", e.target.value)
               }
+              placeholder={"Engineered an AI Copilot feature...\nDesigned a distributed email rotation system..."}
             />
-            <DenseInput
-              label="End Date"
-              value={exp.endDate}
-              onChange={(e: any) => handleUpdate(i, "endDate", e.target.value)}
-            />
-          </div>
-          <DenseInput
-            label="Description (one bullet per line)"
-            isTextArea
-            value={exp.description}
-            onChange={(e: any) =>
-              handleUpdate(i, "description", e.target.value)
-            }
-            placeholder={"Engineered an AI Copilot feature...\nDesigned a distributed email rotation system..."}
-          />
-          <p className="text-[10px] text-ink-muted italic mt-2 px-1">
-            Each new line becomes a bullet point in the preview and final PDF.
-          </p>
-        </div>
-      ))}
+            <p className="text-[10px] text-ink-muted italic mt-2 px-1">
+              Each new line becomes a bullet point in the preview and final PDF.
+            </p>
+          </>
+        )}
+      />
       <Button
         variant="secondary"
         onClick={() =>
@@ -682,69 +705,78 @@ function ProjectsForm() {
 
   return (
     <div className="space-y-6">
-      {projects.map((proj: any, i: number) => {
-        const bullets = Array.isArray(proj.description)
-          ? proj.description
-          : [];
-        return (
-          <div
-            key={i}
-            className="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
-          >
-            <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
-              <button className="text-ink-muted hover:text-ink-primary p-1">
-                <GripVertical size={14} />
-              </button>
-              <button
-                onClick={() => removeListItem("projects", i)}
-                className="text-ink-muted hover:text-red-400 p-1"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
+      <SortableList
+        items={projects}
+        onReorder={(next) => updateField("projects", next)}
+        className="space-y-6"
+        itemClassName="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
+        renderItem={(proj, i, handle) => {
+          const bullets = Array.isArray(proj.description)
+            ? proj.description
+            : [];
+          return (
+            <>
+              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
+                <button
+                  {...handle}
+                  style={{ touchAction: "none" }}
+                  className="text-ink-muted hover:text-ink-primary p-1 cursor-grab active:cursor-grabbing"
+                  title="Drag to reorder"
+                  aria-label="Drag to reorder position"
+                >
+                  <GripVertical size={14} />
+                </button>
+                <button
+                  onClick={() => removeListItem("projects", i)}
+                  className="text-ink-muted hover:text-red-400 p-1"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
 
-            <div className="grid grid-cols-1 gap-3 mb-3">
+              <div className="grid grid-cols-1 gap-3 mb-3">
+                <DenseInput
+                  label="Project Name"
+                  value={proj.name || ""}
+                  onChange={(e: any) => handleUpdate(i, "name", e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <DenseInput
+                  label="Live URL"
+                  value={proj.url || ""}
+                  onChange={(e: any) => handleUpdate(i, "url", e.target.value)}
+                  placeholder="https://example.com"
+                />
+                <DenseInput
+                  label="Repo URL"
+                  value={proj.repoUrl || ""}
+                  onChange={(e: any) =>
+                    handleUpdate(i, "repoUrl", e.target.value)
+                  }
+                  placeholder="https://github.com/..."
+                />
+              </div>
               <DenseInput
-                label="Project Name"
-                value={proj.name || ""}
-                onChange={(e: any) => handleUpdate(i, "name", e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <DenseInput
-                label="Live URL"
-                value={proj.url || ""}
-                onChange={(e: any) => handleUpdate(i, "url", e.target.value)}
-                placeholder="https://example.com"
-              />
-              <DenseInput
-                label="Repo URL"
-                value={proj.repoUrl || ""}
+                label="Description (one bullet per line)"
+                isTextArea
+                value={bullets.join("\n")}
                 onChange={(e: any) =>
-                  handleUpdate(i, "repoUrl", e.target.value)
+                  handleUpdate(
+                    i,
+                    "description",
+                    e.target.value.split("\n"),
+                  )
                 }
-                placeholder="https://github.com/..."
+                placeholder={"Built a real-time collaboration engine...\nReduced p95 latency from 400ms to 80ms..."}
               />
-            </div>
-            <DenseInput
-              label="Description (one bullet per line)"
-              isTextArea
-              value={bullets.join("\n")}
-              onChange={(e: any) =>
-                handleUpdate(
-                  i,
-                  "description",
-                  e.target.value.split("\n"),
-                )
-              }
-              placeholder={"Built a real-time collaboration engine...\nReduced p95 latency from 400ms to 80ms..."}
-            />
-            <p className="text-[10px] text-ink-muted italic mt-2 px-1">
-              Each new line becomes a bullet point in the preview and final PDF.
-            </p>
-          </div>
-        );
-      })}
+              <p className="text-[10px] text-ink-muted italic mt-2 px-1">
+                Each new line becomes a bullet point in the preview and final PDF.
+              </p>
+            </>
+          );
+        }}
+      />
       <Button
         variant="secondary"
         onClick={() =>
@@ -786,249 +818,6 @@ function DenseInput({ label, isTextArea, className, ...props }: any) {
           {...props}
         />
       )}
-    </div>
-  );
-}
-
-// -- Responsive preview canvas that auto-scales the A4 paper to fit the container --
-function ResponsivePreviewCanvas({ resumeData }: { resumeData: any }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
-  // 210mm at 96dpi ≈ 793.7px. Recompute whenever the container resizes so the paper always fits.
-  useLayoutEffect(() => {
-    const PAPER_WIDTH_PX = 794;
-    const HORIZONTAL_PADDING = 64; // p-8 = 2rem each side
-    const compute = () => {
-      const el = containerRef.current;
-      if (!el) return;
-      const available = el.clientWidth - HORIZONTAL_PADDING;
-      const next = Math.min(1, Math.max(0.45, available / PAPER_WIDTH_PX));
-      setScale(next);
-    };
-    compute();
-    const ro = new ResizeObserver(compute);
-    if (containerRef.current) ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, []);
-
-  return (
-    <div
-      ref={containerRef}
-      className="flex-1 overflow-auto p-8 flex justify-center custom-scrollbar bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100"
-    >
-      {/* Outer wrapper is sized to match the scaled paper so flex layout and scrollbars behave correctly */}
-      <div
-        className="flex-shrink-0"
-        style={{ width: `${210 * scale}mm`, height: `${297 * scale}mm` }}
-      >
-        {/* The "Paper" renders at full A4 size, visually shrunk via transform */}
-        <div
-          className="bg-white text-black shadow-2xl overflow-hidden transition-transform duration-150"
-          style={{
-            width: "210mm",
-            minHeight: "297mm",
-            transform: `scale(${scale})`,
-            transformOrigin: "top left",
-          }}
-        >
-          <ResumePreviewMock resumeData={resumeData} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// -- Preview Mock --
-function ResumePreviewMock({ resumeData }: { resumeData: any }) {
-  const contact = resumeData.contact || {};
-  const URL_LABEL_THRESHOLD = 30;
-  const linkLabel = (url: string, fallback: string) =>
-    url.length > URL_LABEL_THRESHOLD ? fallback : url;
-
-  const contactLinks: Array<{ href: string; label: string }> = [];
-  if (contact.email) {
-    contactLinks.push({ href: `mailto:${contact.email}`, label: contact.email });
-  }
-  if (contact.phone) {
-    contactLinks.push({ href: `tel:${contact.phone}`, label: contact.phone });
-  }
-  if (contact.linkedin) {
-    contactLinks.push({ href: contact.linkedin, label: linkLabel(contact.linkedin, "LinkedIn") });
-  }
-  if (contact.github) {
-    contactLinks.push({ href: contact.github, label: linkLabel(contact.github, "GitHub") });
-  }
-  if (contact.website) {
-    contactLinks.push({ href: contact.website, label: linkLabel(contact.website, "Portfolio") });
-  }
-
-  return (
-    <div className="p-12 h-full flex flex-col text-gray-800">
-      <header className="border-b-2 border-gray-900 pb-6 mb-8">
-        <h1 className="text-5xl font-heading font-bold text-gray-900 mb-3 uppercase tracking-tight">
-          {resumeData.contact.fullName || "Your Name"}
-        </h1>
-        <div className="flex gap-4 text-sm font-medium tracking-wide text-gray-600 uppercase">
-          <span>{resumeData.contact.role || "Target Role"}</span>
-          <span>•</span>
-          <span>{resumeData.contact.location || "Location"}</span>
-        </div>
-        {contactLinks.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
-            {contactLinks.map((c, i) => (
-              <a
-                key={i}
-                href={c.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-gray-900 break-all"
-              >
-                {c.label}
-              </a>
-            ))}
-          </div>
-        )}
-      </header>
-
-      <div className="space-y-8">
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
-            Professional Summary
-          </h3>
-          <p className="text-gray-700 leading-relaxed text-sm text-justify">
-            {resumeData.summary ||
-              "Click editor sections to start building your resume..."}
-          </p>
-        </section>
-
-        {(resumeData.skills ?? []).length > 0 && (
-          <section>
-            <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
-              Skills
-            </h3>
-            <p className="text-sm text-gray-700 leading-relaxed">
-              {(resumeData.skills as string[]).join(", ")}
-            </p>
-          </section>
-        )}
-
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
-            Experience
-          </h3>
-          <div className="space-y-6">
-            {resumeData.experience.map((exp: any, i: number) => {
-              const bullets = (exp.description || "")
-                .split("\n")
-                .map((s: string) => s.trim())
-                .filter(Boolean);
-              return (
-                <div key={i}>
-                  <div className="flex justify-between items-baseline mb-1 gap-4">
-                    <h4 className="font-bold text-gray-900 text-base break-words">
-                      {exp.role || "Position"}
-                    </h4>
-                    <span className="text-xs font-mono text-gray-500 whitespace-nowrap">
-                      {exp.startDate} – {exp.endDate}
-                    </span>
-                  </div>
-                  <div className="text-sm font-medium text-gray-600 mb-2 break-words">
-                    {exp.company || "Company"}
-                  </div>
-                  {bullets.length > 0 && (
-                    <ul className="text-sm text-gray-700 leading-relaxed list-disc pl-5 space-y-1 break-words">
-                      {bullets.map((b: string, idx: number) => (
-                        <li key={idx}>{b}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {(resumeData.projects ?? []).length > 0 && (
-          <section>
-            <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
-              Projects
-            </h3>
-            <div className="space-y-6">
-              {(resumeData.projects ?? []).map((proj: any, i: number) => {
-                const bullets = Array.isArray(proj.description)
-                  ? proj.description.filter(Boolean)
-                  : [];
-                const projectLinks: Array<{ href: string; label: string }> = [];
-                if (proj.url) {
-                  projectLinks.push({
-                    href: proj.url,
-                    label: proj.url.length > URL_LABEL_THRESHOLD ? "Live" : proj.url,
-                  });
-                }
-                if (proj.repoUrl) {
-                  projectLinks.push({
-                    href: proj.repoUrl,
-                    label: proj.repoUrl.length > URL_LABEL_THRESHOLD ? "Repo" : proj.repoUrl,
-                  });
-                }
-                return (
-                  <div key={i}>
-                    <div className="flex justify-between items-baseline mb-1 gap-4">
-                      <h4 className="font-bold text-gray-900 text-base break-words">
-                        {proj.name || "Project"}
-                      </h4>
-                      {projectLinks.length > 0 && (
-                        <span className="text-xs font-mono text-gray-500 whitespace-nowrap break-all flex gap-2">
-                          {projectLinks.map((l, idx) => (
-                            <span key={idx} className="flex items-center gap-2">
-                              {idx > 0 && <span className="text-gray-300">|</span>}
-                              <a
-                                href={l.href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="hover:text-gray-900"
-                              >
-                                {l.label}
-                              </a>
-                            </span>
-                          ))}
-                        </span>
-                      )}
-                    </div>
-                    {bullets.length > 0 && (
-                      <ul className="text-sm text-gray-700 leading-relaxed list-disc pl-5 space-y-1 break-words">
-                        {bullets.map((b: string, idx: number) => (
-                          <li key={idx}>{b}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-widest border-b border-gray-200 pb-2 mb-4 text-gray-900">
-            Education
-          </h3>
-          {resumeData.education.map((edu: any, i: number) => (
-            <div key={i} className="flex justify-between">
-              <div>
-                <div className="font-bold text-gray-900">
-                  {edu.school || "School"}
-                </div>
-                <div className="text-sm text-gray-600">
-                  {edu.degree || "Degree"}
-                </div>
-              </div>
-              <div className="text-xs font-mono text-gray-500">{edu.year}</div>
-            </div>
-          ))}
-        </section>
-      </div>
     </div>
   );
 }
