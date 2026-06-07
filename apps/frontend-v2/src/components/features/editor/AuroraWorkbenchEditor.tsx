@@ -9,6 +9,7 @@ import { Badge } from "../../ui/Badge";
 import { RequiresCredits } from "../../ui/RequiresCredits";
 import { ResumeEditorProvider, useResumeEditor } from "./ResumeEditorContext";
 import { ResponsivePreviewCanvas } from "./ResumePreview";
+import { SortableList } from "./SortableList";
 import { generateLatexPdf } from "../../../services/latexService";
 import {
   User,
@@ -405,40 +406,52 @@ function EducationForm() {
 
   return (
     <div className="space-y-6">
-      {resumeData.education.map((edu: any, i: number) => (
-        <div
-          key={i}
-          className="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
-        >
-          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
-            <button
-              onClick={() => removeListItem("education", i)}
-              className="text-ink-muted hover:text-red-400 p-1"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 gap-3 mb-3">
-            <DenseInput
-              label="School / University"
-              value={edu.school}
-              onChange={(e: any) => handleUpdate(i, "school", e.target.value)}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <DenseInput
-                label="Degree"
-                value={edu.degree}
-                onChange={(e: any) => handleUpdate(i, "degree", e.target.value)}
-              />
-              <DenseInput
-                label="Year"
-                value={edu.year}
-                onChange={(e: any) => handleUpdate(i, "year", e.target.value)}
-              />
+      <SortableList
+        items={resumeData.education}
+        onReorder={(next) => updateField("education", next)}
+        className="space-y-6"
+        itemClassName="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
+        renderItem={(edu, i, handle) => (
+          <>
+            <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
+              <button
+                {...handle}
+                style={{ touchAction: "none" }}
+                className="text-ink-muted hover:text-ink-primary p-1 cursor-grab active:cursor-grabbing"
+                title="Drag to reorder"
+                aria-label="Drag to reorder position"
+              >
+                <GripVertical size={14} />
+              </button>
+              <button
+                onClick={() => removeListItem("education", i)}
+                className="text-ink-muted hover:text-red-400 p-1"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
-          </div>
-        </div>
-      ))}
+            <div className="grid grid-cols-1 gap-3 mb-3">
+              <DenseInput
+                label="School / University"
+                value={edu.school}
+                onChange={(e: any) => handleUpdate(i, "school", e.target.value)}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <DenseInput
+                  label="Degree"
+                  value={edu.degree}
+                  onChange={(e: any) => handleUpdate(i, "degree", e.target.value)}
+                />
+                <DenseInput
+                  label="Year"
+                  value={edu.year}
+                  onChange={(e: any) => handleUpdate(i, "year", e.target.value)}
+                />
+              </div>
+            </div>
+          </>
+        )}
+      />
       <Button
         variant="secondary"
         onClick={() =>
@@ -590,63 +603,72 @@ function ExperienceForm() {
 
   return (
     <div className="space-y-6">
-      {resumeData.experience.map((exp: any, i: number) => (
-        <div
-          key={i}
-          className="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
-        >
-          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
-            <button className="text-ink-muted hover:text-ink-primary p-1">
-              <GripVertical size={14} />
-            </button>
-            <button
-              onClick={() => removeListItem("experience", i)}
-              className="text-ink-muted hover:text-red-400 p-1"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+      <SortableList
+        items={resumeData.experience}
+        onReorder={(next) => updateField("experience", next)}
+        className="space-y-6"
+        itemClassName="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
+        renderItem={(exp, i, handle) => (
+          <>
+            <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
+              <button
+                {...handle}
+                style={{ touchAction: "none" }}
+                className="text-ink-muted hover:text-ink-primary p-1 cursor-grab active:cursor-grabbing"
+                title="Drag to reorder"
+                aria-label="Drag to reorder position"
+              >
+                <GripVertical size={14} />
+              </button>
+              <button
+                onClick={() => removeListItem("experience", i)}
+                className="text-ink-muted hover:text-red-400 p-1"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
 
-          <div className="grid grid-cols-1 gap-3 mb-3">
+            <div className="grid grid-cols-1 gap-3 mb-3">
+              <DenseInput
+                label="Role Title"
+                value={exp.role}
+                onChange={(e: any) => handleUpdate(i, "role", e.target.value)}
+              />
+              <DenseInput
+                label="Company"
+                value={exp.company}
+                onChange={(e: any) => handleUpdate(i, "company", e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <DenseInput
+                label="Start Date"
+                value={exp.startDate}
+                onChange={(e: any) =>
+                  handleUpdate(i, "startDate", e.target.value)
+                }
+              />
+              <DenseInput
+                label="End Date"
+                value={exp.endDate}
+                onChange={(e: any) => handleUpdate(i, "endDate", e.target.value)}
+              />
+            </div>
             <DenseInput
-              label="Role Title"
-              value={exp.role}
-              onChange={(e: any) => handleUpdate(i, "role", e.target.value)}
-            />
-            <DenseInput
-              label="Company"
-              value={exp.company}
-              onChange={(e: any) => handleUpdate(i, "company", e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <DenseInput
-              label="Start Date"
-              value={exp.startDate}
+              label="Description (one bullet per line)"
+              isTextArea
+              value={exp.description}
               onChange={(e: any) =>
-                handleUpdate(i, "startDate", e.target.value)
+                handleUpdate(i, "description", e.target.value)
               }
+              placeholder={"Engineered an AI Copilot feature...\nDesigned a distributed email rotation system..."}
             />
-            <DenseInput
-              label="End Date"
-              value={exp.endDate}
-              onChange={(e: any) => handleUpdate(i, "endDate", e.target.value)}
-            />
-          </div>
-          <DenseInput
-            label="Description (one bullet per line)"
-            isTextArea
-            value={exp.description}
-            onChange={(e: any) =>
-              handleUpdate(i, "description", e.target.value)
-            }
-            placeholder={"Engineered an AI Copilot feature...\nDesigned a distributed email rotation system..."}
-          />
-          <p className="text-[10px] text-ink-muted italic mt-2 px-1">
-            Each new line becomes a bullet point in the preview and final PDF.
-          </p>
-        </div>
-      ))}
+            <p className="text-[10px] text-ink-muted italic mt-2 px-1">
+              Each new line becomes a bullet point in the preview and final PDF.
+            </p>
+          </>
+        )}
+      />
       <Button
         variant="secondary"
         onClick={() =>
@@ -683,69 +705,78 @@ function ProjectsForm() {
 
   return (
     <div className="space-y-6">
-      {projects.map((proj: any, i: number) => {
-        const bullets = Array.isArray(proj.description)
-          ? proj.description
-          : [];
-        return (
-          <div
-            key={i}
-            className="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
-          >
-            <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
-              <button className="text-ink-muted hover:text-ink-primary p-1">
-                <GripVertical size={14} />
-              </button>
-              <button
-                onClick={() => removeListItem("projects", i)}
-                className="text-ink-muted hover:text-red-400 p-1"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
+      <SortableList
+        items={projects}
+        onReorder={(next) => updateField("projects", next)}
+        className="space-y-6"
+        itemClassName="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
+        renderItem={(proj, i, handle) => {
+          const bullets = Array.isArray(proj.description)
+            ? proj.description
+            : [];
+          return (
+            <>
+              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
+                <button
+                  {...handle}
+                  style={{ touchAction: "none" }}
+                  className="text-ink-muted hover:text-ink-primary p-1 cursor-grab active:cursor-grabbing"
+                  title="Drag to reorder"
+                  aria-label="Drag to reorder position"
+                >
+                  <GripVertical size={14} />
+                </button>
+                <button
+                  onClick={() => removeListItem("projects", i)}
+                  className="text-ink-muted hover:text-red-400 p-1"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
 
-            <div className="grid grid-cols-1 gap-3 mb-3">
+              <div className="grid grid-cols-1 gap-3 mb-3">
+                <DenseInput
+                  label="Project Name"
+                  value={proj.name || ""}
+                  onChange={(e: any) => handleUpdate(i, "name", e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <DenseInput
+                  label="Live URL"
+                  value={proj.url || ""}
+                  onChange={(e: any) => handleUpdate(i, "url", e.target.value)}
+                  placeholder="https://example.com"
+                />
+                <DenseInput
+                  label="Repo URL"
+                  value={proj.repoUrl || ""}
+                  onChange={(e: any) =>
+                    handleUpdate(i, "repoUrl", e.target.value)
+                  }
+                  placeholder="https://github.com/..."
+                />
+              </div>
               <DenseInput
-                label="Project Name"
-                value={proj.name || ""}
-                onChange={(e: any) => handleUpdate(i, "name", e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <DenseInput
-                label="Live URL"
-                value={proj.url || ""}
-                onChange={(e: any) => handleUpdate(i, "url", e.target.value)}
-                placeholder="https://example.com"
-              />
-              <DenseInput
-                label="Repo URL"
-                value={proj.repoUrl || ""}
+                label="Description (one bullet per line)"
+                isTextArea
+                value={bullets.join("\n")}
                 onChange={(e: any) =>
-                  handleUpdate(i, "repoUrl", e.target.value)
+                  handleUpdate(
+                    i,
+                    "description",
+                    e.target.value.split("\n"),
+                  )
                 }
-                placeholder="https://github.com/..."
+                placeholder={"Built a real-time collaboration engine...\nReduced p95 latency from 400ms to 80ms..."}
               />
-            </div>
-            <DenseInput
-              label="Description (one bullet per line)"
-              isTextArea
-              value={bullets.join("\n")}
-              onChange={(e: any) =>
-                handleUpdate(
-                  i,
-                  "description",
-                  e.target.value.split("\n"),
-                )
-              }
-              placeholder={"Built a real-time collaboration engine...\nReduced p95 latency from 400ms to 80ms..."}
-            />
-            <p className="text-[10px] text-ink-muted italic mt-2 px-1">
-              Each new line becomes a bullet point in the preview and final PDF.
-            </p>
-          </div>
-        );
-      })}
+              <p className="text-[10px] text-ink-muted italic mt-2 px-1">
+                Each new line becomes a bullet point in the preview and final PDF.
+              </p>
+            </>
+          );
+        }}
+      />
       <Button
         variant="secondary"
         onClick={() =>
