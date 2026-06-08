@@ -10,6 +10,7 @@ import { useCredits } from "../../../contexts/CreditContext";
 import { useResume, useCreateResume, useUpdateResume, useScoreResume } from "../../../hooks/useResumes";
 import { useTailoredEditorData, useSaveTailoredEditorData } from "../../../hooks/useTailoredResumes";
 import type { ResumeData } from "../../../types";
+import type { ScoreBreakdown } from "../../../lib/api";
 
 export type Suggestion = {
   bulletId: string;
@@ -41,6 +42,7 @@ interface ResumeEditorContextType {
   saveResume: () => Promise<string | undefined>;
   setResumeData: React.Dispatch<React.SetStateAction<ResumeData>>;
   score: number | null;
+  breakdown: ScoreBreakdown | null;
   suggestions: Suggestion[];
   scoring: boolean;
   triggerScore: () => Promise<void>;
@@ -92,6 +94,7 @@ export const ResumeEditorProvider: React.FC<{
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [score, setScore] = useState<number | null>(null);
+  const [breakdown, setBreakdown] = useState<ScoreBreakdown | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [scoring, setScoring] = useState(false);
   const isDirty = useRef(false);
@@ -225,9 +228,11 @@ export const ResumeEditorProvider: React.FC<{
   const triggerScore = async () => {
     if (!resumeId) return;
     setScoring(true);
+    setBreakdown(null);
     try {
       const result = await scoreResumeAsync(resumeId);
       setScore(result.score);
+      setBreakdown(result.breakdown ?? null);
       setSuggestions(result.suggestions ?? []);
       // Scoring spends a credit — refresh the cached balance.
       await refreshCredits();
@@ -293,6 +298,7 @@ export const ResumeEditorProvider: React.FC<{
     saveResume,
     setResumeData,
     score,
+    breakdown,
     suggestions,
     scoring,
     triggerScore,
