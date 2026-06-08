@@ -287,5 +287,6 @@ Return ONLY valid JSON with two keys:
     beforeScore,
     afterScore,
     afterBreakdown: afterScoreData.breakdown ?? null,
+    jdKeywords,
   };
 }

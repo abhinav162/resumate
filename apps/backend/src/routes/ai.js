@@ -110,15 +110,16 @@ async function processTailorJob({ tailoredUuid, resumeData, jobTitle, company, j
       [tailoredUuid]
     );
 
-    const { tailoredResume, diff, beforeScore, afterScore, afterBreakdown } = await tailorResume(
+    const { tailoredResume, diff, beforeScore, afterScore, afterBreakdown, jdKeywords } = await tailorResume(
       resumeData, jobTitle, company, jobDescription
     );
 
     // Persist the after-score breakdown + content hash so an immediate re-score
     // of the freshly tailored resume is served free from the score cache.
+    // jd_keywords powers the "missing keywords" panel.
     await database.run(
       `UPDATE tailored_resumes
-         SET tailored_data=?, before_score=?, after_score=?, diff=?, score_breakdown=?, score_hash=?, status='COMPLETED', updated_at=datetime('now')
+         SET tailored_data=?, before_score=?, after_score=?, diff=?, score_breakdown=?, score_hash=?, jd_keywords=?, status='COMPLETED', updated_at=datetime('now')
        WHERE uuid=?`,
       [
         JSON.stringify(tailoredResume),
@@ -127,6 +128,7 @@ async function processTailorJob({ tailoredUuid, resumeData, jobTitle, company, j
         JSON.stringify(diff),
         afterBreakdown ? JSON.stringify(afterBreakdown) : null,
         contentHash(tailoredResume),
+        jdKeywords && jdKeywords.length ? JSON.stringify(jdKeywords) : null,
         tailoredUuid,
       ]
     );

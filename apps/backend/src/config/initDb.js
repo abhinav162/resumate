@@ -172,6 +172,10 @@ async function createTables() {
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN score_breakdown TEXT`).catch(() => {});
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN score_hash TEXT`).catch(() => {});
 
+  // M1.2 keyword coverage: JD keywords extracted at tailor time (JSON array),
+  // used by the "missing keywords" panel.
+  await database.run(`ALTER TABLE tailored_resumes ADD COLUMN jd_keywords TEXT`).catch(() => {});
+
   // Reset any IN_PROGRESS / PENDING rows orphaned by a server restart
   await database.run(
     `UPDATE tailored_resumes SET status='FAILED', error_message='Server restarted during tailoring' WHERE status IN ('PENDING','IN_PROGRESS')`

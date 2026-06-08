@@ -20,6 +20,7 @@ import {
   selectionSignature,
   type TailorDiffItem,
 } from '../lib/tailorSelection';
+import { keywordCoverage, resumeToText } from '../lib/keywordMatch';
 
 // The tailored-resume detail endpoint returns these extra fields beyond the
 // stored row; they aren't part of the persisted TailoredResume type.
@@ -27,6 +28,7 @@ type FullTailored = TailoredResume & {
   diff?: TailorDiffItem[];
   beforeScore?: number;
   afterScore?: number;
+  jdKeywords?: string[] | null;
 };
 
 type ResumeOption = { id: string; name: string };
@@ -87,6 +89,14 @@ export default function TailorWorkspace() {
     if (!editorData?.data) return null;
     return applySelection(editorData.data, diff, discarded);
   }, [editorData, diff, discarded]);
+
+  // Live JD keyword coverage of the current selection. Recomputes instantly as
+  // changes are kept/discarded (the backend keyword extraction is reused).
+  const jdKeywords = useMemo(() => full?.jdKeywords ?? [], [full]);
+  const coverage = useMemo(
+    () => (previewData && jdKeywords.length ? keywordCoverage(resumeToText(previewData), jdKeywords) : null),
+    [previewData, jdKeywords],
+  );
 
   // Score shown in the header. With no discards it's the confirmed after-score;
   // once the user toggles, we show a free estimate (or a confirmed re-score if
@@ -338,6 +348,37 @@ export default function TailorWorkspace() {
                   </RequiresCredits>
                 )}
               </div>
+
+              {/* JD keyword coverage */}
+              {coverage && (
+                <div className="bg-paper-bg border border-paper-border rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-ink-secondary">JD Keywords</p>
+                    <Badge variant={coverage.missing.length === 0 ? 'success' : 'warning'}>
+                      {coverage.matched.length}/{coverage.matched.length + coverage.missing.length} covered
+                    </Badge>
+                  </div>
+                  {coverage.missing.length === 0 ? (
+                    <p className="text-xs text-success-text">All JD keywords are present in your resume. 🎉</p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-ink-muted mb-2">
+                        Missing — consider adding these (with real evidence):
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {coverage.missing.map((kw) => (
+                          <span
+                            key={kw}
+                            className="text-xs px-2 py-0.5 rounded-full border border-warning-border bg-warning-bg text-warning-text"
+                          >
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* What changed */}
               <div className="space-y-3">
