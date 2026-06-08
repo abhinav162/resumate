@@ -8,6 +8,7 @@ import { ScorePill } from "../../ui/ScorePill";
 import { Badge } from "../../ui/Badge";
 import { RequiresCredits } from "../../ui/RequiresCredits";
 import { ResumeEditorProvider, useResumeEditor } from "./ResumeEditorContext";
+import { ScoreBreakdown } from "./ScoreBreakdown";
 import { ResponsivePreviewCanvas } from "./ResumePreview";
 import { SortableList } from "./SortableList";
 import { generateLatexPdf } from "../../../services/latexService";
@@ -63,6 +64,7 @@ function AuroraWorkbenchInner() {
     isLoading,
     saveResume,
     score,
+    breakdown,
     suggestions,
     scoring,
     triggerScore,
@@ -337,6 +339,8 @@ function AuroraWorkbenchInner() {
           <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">AI Suggestions</span>
           {score !== null && <ScorePill score={score} size="sm" />}
         </div>
+
+        {score !== null && <ScoreBreakdown breakdown={breakdown} />}
 
         {scoring && (
           <div className="text-sm text-ink-secondary flex items-center gap-2">

@@ -72,6 +72,7 @@ class TailoredResume {
       beforeScore: tailoredResume.before_score ?? null,
       afterScore: tailoredResume.after_score ?? null,
       diff: tailoredResume.diff ? JSON.parse(tailoredResume.diff) : null,
+      jdKeywords: tailoredResume.jd_keywords ? JSON.parse(tailoredResume.jd_keywords) : null,
       createdAt: tailoredResume.created_at,
       updatedAt: tailoredResume.updated_at
     };

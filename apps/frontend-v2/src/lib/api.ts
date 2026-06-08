@@ -1,6 +1,20 @@
 import axios from 'axios';
 import type { ResumeData, TailoredResume, ApiResponse } from '../types';
 
+/**
+ * Per-dimension rubric scores returned by the /ai/score endpoint.
+ * Each value is 0-100. `keywordMatch` is present only when scored against a JD.
+ */
+export type ScoreBreakdown = {
+  metrics: number;
+  verbs: number;
+  readability: number;
+  formatting: number;
+  impact: number;
+  clarity: number;
+  keywordMatch?: number;
+};
+
 // Create a standard axios instance
 const api = axios.create({
   baseURL: (window as any).ENV?.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:4300/api',
@@ -114,7 +128,15 @@ export const resumesApi = {
     await api.delete(`/resumes/${id}`);
   },
 
-  scoreResume: async (resumeId: string): Promise<{ score: number; issues: any[]; suggestions: any[] }> => {
+  scoreResume: async (
+    resumeId: string,
+  ): Promise<{
+    score: number;
+    issues: any[];
+    suggestions: any[];
+    breakdown?: ScoreBreakdown | null;
+    cached?: boolean;
+  }> => {
     const response = await api.post(`/ai/score/${resumeId}`);
     return response.data.data;
   },
