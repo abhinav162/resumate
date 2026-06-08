@@ -54,10 +54,20 @@ function toBackendPayload(resumeData: any) {
     payload.contact = { ...resumeData.contact, name: resumeData.contact.fullName };
   }
   if (resumeData.experience) {
-    payload.experience = resumeData.experience.map((exp: any) => ({
-      ...exp,
-      responsibilities: exp.responsibilities || (exp.description ? exp.description.split('\n').filter(Boolean) : []),
-    }));
+    payload.experience = resumeData.experience.map((exp: any) => {
+      // `description` (a newline-joined string) is what the editor edits and what
+      // accepted suggestions modify — it is the source of truth. Always derive
+      // `responsibilities` from it; the previously loaded `responsibilities`
+      // array is stale after any edit, so preferring it dropped the changes.
+      const { description, ...rest } = exp;
+      return {
+        ...rest,
+        responsibilities:
+          typeof description === 'string'
+            ? description.split('\n').map((s: string) => s.trim()).filter(Boolean)
+            : exp.responsibilities || [],
+      };
+    });
   }
   if (resumeData.education) {
     payload.education = resumeData.education.map((edu: any) => ({
