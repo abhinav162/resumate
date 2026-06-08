@@ -129,6 +129,34 @@ class Resume {
       UPDATE base_resumes SET ${updates.join(', ')} WHERE uuid = ?
     `, values);
 
+    // Persist child sections (experience / education / projects) when provided.
+    // The editor sends the full arrays on every save, so we replace the rows
+    // wholesale — this mirrors create and is why accepted edits/reorders survive
+    // a reload. Sections omitted from updateData are left untouched.
+    if (updateData.experience || updateData.education || updateData.projects) {
+      const row = await database.get('SELECT id FROM base_resumes WHERE uuid = ?', [uuid]);
+      if (row) {
+        if (updateData.experience) {
+          await database.run('DELETE FROM experiences WHERE resume_id = ?', [row.id]);
+          await Promise.all(updateData.experience.map((exp, index) =>
+            Experience.create({ ...exp, resumeId: row.id, displayOrder: index })
+          ));
+        }
+        if (updateData.education) {
+          await database.run('DELETE FROM education WHERE resume_id = ?', [row.id]);
+          await Promise.all(updateData.education.map((edu, index) =>
+            Education.create({ ...edu, resumeId: row.id, displayOrder: index })
+          ));
+        }
+        if (updateData.projects) {
+          await database.run('DELETE FROM projects WHERE resume_id = ?', [row.id]);
+          await Promise.all(updateData.projects.map((proj, index) =>
+            Project.create({ ...proj, resumeId: row.id, displayOrder: index })
+          ));
+        }
+      }
+    }
+
     return await Resume.findByUuid(uuid);
   }
 
@@ -165,11 +193,11 @@ class Experience {
     `, [
       uuid,
       expData.resumeId,
-      expData.role,
-      expData.company,
-      expData.location,
-      expData.startDate,
-      expData.endDate,
+      expData.role ?? '',
+      expData.company ?? '',
+      expData.location ?? null,
+      expData.startDate ?? null,
+      expData.endDate ?? null,
       responsibilitiesJson,
       expData.displayOrder || 0
     ]);
@@ -204,11 +232,11 @@ class Education {
     `, [
       uuid,
       eduData.resumeId,
-      eduData.degree,
-      eduData.institution,
-      eduData.location,
-      eduData.graduationDate,
-      eduData.gpa,
+      eduData.degree ?? '',
+      eduData.institution ?? '',
+      eduData.location ?? null,
+      eduData.graduationDate ?? null,
+      eduData.gpa ?? null,
       eduData.displayOrder || 0
     ]);
 
@@ -242,9 +270,9 @@ class Project {
     `, [
       uuid,
       projData.resumeId,
-      projData.name,
-      projData.url,
-      projData.repoUrl,
+      projData.name ?? '',
+      projData.url ?? null,
+      projData.repoUrl ?? null,
       descriptionJson,
       projData.displayOrder || 0
     ]);
