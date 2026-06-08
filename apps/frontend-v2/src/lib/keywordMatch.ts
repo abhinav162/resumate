@@ -9,17 +9,65 @@ import type { ResumeData } from '../types';
  * keywordMatch value.
  */
 
+// Keep in sync with apps/backend/src/lib/scoring/keywords.js.
 const SYNONYMS: Record<string, string[]> = {
-  kubernetes: ['k8s'],
+  // Languages
   javascript: ['js'],
   typescript: ['ts'],
-  postgresql: ['postgres', 'psql'],
+  python: ['py'],
+  golang: ['go', 'go lang'],
+  'c++': ['cpp', 'cplusplus'],
+  'c#': ['csharp', 'c sharp'],
+  '.net': ['dotnet', 'dot net'],
+  // Frontend
   react: ['react.js', 'reactjs'],
+  'react native': ['react-native', 'reactnative'],
+  'next.js': ['nextjs', 'next js'],
+  'vue.js': ['vue', 'vuejs'],
+  angular: ['angular.js', 'angularjs'],
+  'tailwind css': ['tailwind', 'tailwindcss'],
+  // Backend frameworks / runtimes
   'node.js': ['node', 'nodejs'],
-  'ci/cd': ['cicd', 'ci cd'],
+  'express.js': ['express', 'expressjs'],
+  'ruby on rails': ['rails', 'ror'],
+  'spring boot': ['springboot'],
+  // Data stores
+  postgresql: ['postgres', 'psql'],
+  mongodb: ['mongo'],
+  elasticsearch: ['elastic search'],
+  dynamodb: ['dynamo'],
+  // Messaging / streaming
+  kafka: ['apache kafka'],
+  rabbitmq: ['rabbit mq'],
+  // Cloud
   'amazon web services': ['aws'],
-  golang: ['go'],
+  'google cloud platform': ['gcp', 'google cloud'],
+  'microsoft azure': ['azure'],
+  // DevOps / infra
+  kubernetes: ['k8s', 'kube'],
+  docker: ['dockerized'],
   'github actions': ['gh actions'],
+  'gitlab ci': ['gitlab-ci'],
+  'ci/cd': ['cicd', 'ci cd'],
+  // APIs
+  'rest api': ['rest', 'restful', 'restful api'],
+  graphql: ['gql'],
+  websockets: ['websocket'],
+  // Data / ML / AI
+  'machine learning': ['ml'],
+  'deep learning': ['dl'],
+  'artificial intelligence': ['ai'],
+  'natural language processing': ['nlp'],
+  'large language models': ['llm', 'llms'],
+  'computer vision': ['cv'],
+  pytorch: ['torch'],
+  'scikit-learn': ['sklearn', 'scikit learn'],
+  'apache spark': ['spark', 'pyspark'],
+  'apache airflow': ['airflow'],
+  'power bi': ['powerbi'],
+  // Practices / architecture
+  microservices: ['micro services', 'microservice'],
+  'test-driven development': ['tdd'],
 };
 
 const ALIAS_TO_CANONICAL: Record<string, string> = (() => {
