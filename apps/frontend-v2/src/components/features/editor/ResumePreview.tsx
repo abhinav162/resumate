@@ -135,8 +135,7 @@ function ResumePreviewMock({ resumeData }: { resumeData: ResumeData }) {
           </h3>
           <div className="space-y-6">
             {resumeData.experience.map((exp, i) => {
-              const bullets = (exp.description || "")
-                .split("\n")
+              const bullets = (Array.isArray(exp.responsibilities) ? exp.responsibilities : [])
                 .map((s: string) => s.trim())
                 .filter(Boolean);
               return (

@@ -122,8 +122,7 @@ export class ExperienceGenerator {
         const sortedExperiences = this.sortExperiencesByDate(experiences);
         
         const experienceFormatted = sortedExperiences.map(exp => {
-            // Split description by newlines to form items
-            const responsibilities = exp.description.split('\n').filter(r => r.trim());
+            const responsibilities = (Array.isArray(exp.responsibilities) ? exp.responsibilities : []).filter(r => r.trim());
             
             return `
 \\textbf{${escapeLatex(exp.role)}} \\\\ ${escapeLatex(exp.company)} \\hfill ${escapeLatex(exp.startDate)} -- ${escapeLatex(exp.endDate)}

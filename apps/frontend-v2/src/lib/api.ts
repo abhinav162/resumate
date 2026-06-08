@@ -54,10 +54,17 @@ function toBackendPayload(resumeData: any) {
     payload.contact = { ...resumeData.contact, name: resumeData.contact.fullName };
   }
   if (resumeData.experience) {
-    payload.experience = resumeData.experience.map((exp: any) => ({
-      ...exp,
-      responsibilities: exp.responsibilities || (exp.description ? exp.description.split('\n').filter(Boolean) : []),
-    }));
+    payload.experience = resumeData.experience.map((exp: any) => {
+      // The editor holds bullets as the `responsibilities` array (the backend's
+      // shape). Drop any legacy `description` string; trim/filter empties on save.
+      const { description, ...rest } = exp;
+      const responsibilities = Array.isArray(exp.responsibilities)
+        ? exp.responsibilities.map((s: string) => s.trim()).filter(Boolean)
+        : typeof description === 'string'
+          ? description.split('\n').map((s: string) => s.trim()).filter(Boolean)
+          : [];
+      return { ...rest, responsibilities };
+    });
   }
   if (resumeData.education) {
     payload.education = resumeData.education.map((edu: any) => ({
@@ -80,7 +87,11 @@ function fromBackendPayload(r: any): ResumeData {
     },
     experience: (r.experience || []).map((exp: any) => ({
       ...exp,
-      description: exp.description || (exp.responsibilities || []).join('\n'),
+      responsibilities: Array.isArray(exp.responsibilities)
+        ? exp.responsibilities
+        : typeof exp.description === 'string'
+          ? exp.description.split('\n').filter(Boolean)
+          : [],
     })),
     education: (r.education || []).map((edu: any) => ({
       ...edu,

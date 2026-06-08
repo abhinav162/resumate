@@ -255,14 +255,14 @@ export const ResumeEditorProvider: React.FC<{
       const updated = { ...prev };
       if (sectionType === 'experience' && updated.experience?.[sectionIdx]) {
         const exp = { ...updated.experience[sectionIdx] };
-        // Frontend stores description as a newline-joined string; split, replace, rejoin
-        const bullets = (exp.description || '').split('\n').filter(Boolean);
+        // Bullets are stored as the `responsibilities` array.
+        const bullets = Array.isArray(exp.responsibilities) ? [...exp.responsibilities] : [];
         if (bulletIdx < bullets.length) {
           bullets[bulletIdx] = s.rewrite;
         } else {
           bullets.push(s.rewrite);
         }
-        exp.description = bullets.join('\n');
+        exp.responsibilities = bullets;
         updated.experience = updated.experience.map((e: any, i: number) => i === sectionIdx ? exp : e);
       } else if (sectionType === 'projects' && updated.projects?.[sectionIdx]) {
         const proj = { ...updated.projects[sectionIdx] };
