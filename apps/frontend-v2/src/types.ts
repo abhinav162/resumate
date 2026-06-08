@@ -13,11 +13,13 @@ export interface ResumeData {
   };
   summary: string;
   experience: Array<{
+    id?: string;
     company: string;
     role: string;
+    location?: string;
     startDate: string;
     endDate: string;
-    description: string;
+    responsibilities: string[];
   }>;
   education: Array<{
     school: string;

@@ -11,6 +11,8 @@ import { ResumeEditorProvider, useResumeEditor } from "./ResumeEditorContext";
 import { ScoreBreakdown } from "./ScoreBreakdown";
 import { ResponsivePreviewCanvas } from "./ResumePreview";
 import { SortableList } from "./SortableList";
+import { BulletListEditor } from "./BulletListEditor";
+import { SkillsTagInput } from "./SkillsTagInput";
 import { generateLatexPdf } from "../../../services/latexService";
 import {
   User,
@@ -479,23 +481,16 @@ function SkillsForm() {
     <div className="space-y-4">
       <div className="p-4 bg-paper-surface border border-paper-border rounded-lg">
         <label className="block text-[10px] font-mono text-ink-muted mb-3 uppercase tracking-wider">
-          Technical Skills (Comma Separated)
+          Technical Skills
         </label>
-        <textarea
-          className="w-full bg-paper-bg border border-paper-border rounded px-3 py-2 text-ink-primary text-sm focus:outline-none focus:border-indigo-400 transition-all min-h-[150px] resize-y"
-          value={resumeData.skills.join(", ")}
-          onChange={(e) =>
-            updateField(
-              "skills",
-              e.target.value.split(",").map((s) => s.trim()),
-            )
-          }
-          placeholder="React, TypeScript, Node.js..."
+        <SkillsTagInput
+          value={resumeData.skills ?? []}
+          onChange={(next) => updateField("skills", next)}
+          placeholder="Type a skill and press Enter"
         />
       </div>
       <p className="text-[10px] text-ink-muted italic px-2">
-        Separate skills with commas. They will be formatted automatically in the
-        preview.
+        Press Enter or comma to add. Drag chips to reorder, click × to remove.
       </p>
     </div>
   );
@@ -658,17 +653,17 @@ function ExperienceForm() {
                 onChange={(e: any) => handleUpdate(i, "endDate", e.target.value)}
               />
             </div>
-            <DenseInput
-              label="Description (one bullet per line)"
-              isTextArea
-              value={exp.description}
-              onChange={(e: any) =>
-                handleUpdate(i, "description", e.target.value)
-              }
-              placeholder={"Engineered an AI Copilot feature...\nDesigned a distributed email rotation system..."}
+            <label className="block text-[10px] font-mono text-ink-muted mb-1.5 uppercase tracking-wider">
+              Responsibilities
+            </label>
+            <BulletListEditor
+              value={Array.isArray(exp.responsibilities) ? exp.responsibilities : []}
+              onChange={(next) => handleUpdate(i, "responsibilities", next)}
+              placeholder="Reduced p95 latency 40% by introducing a Redis cache..."
+              addLabel="Add bullet"
             />
             <p className="text-[10px] text-ink-muted italic mt-2 px-1">
-              Each new line becomes a bullet point in the preview and final PDF.
+              Each bullet becomes a line item in the preview and final PDF.
             </p>
           </>
         )}
@@ -681,7 +676,7 @@ function ExperienceForm() {
             role: "",
             startDate: "",
             endDate: "",
-            description: "",
+            responsibilities: [],
           })
         }
         className="w-full border-dashed border-paper-border text-ink-secondary hover:text-indigo-600 hover:border-indigo-400 py-6 flex flex-col gap-1 h-auto"
@@ -715,9 +710,6 @@ function ProjectsForm() {
         className="space-y-6"
         itemClassName="group relative border border-paper-border bg-paper-surface rounded-lg p-4 hover:border-paper-border-strong transition-colors"
         renderItem={(proj, i, handle) => {
-          const bullets = Array.isArray(proj.description)
-            ? proj.description
-            : [];
           return (
             <>
               <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
@@ -761,21 +753,17 @@ function ProjectsForm() {
                   placeholder="https://github.com/..."
                 />
               </div>
-              <DenseInput
-                label="Description (one bullet per line)"
-                isTextArea
-                value={bullets.join("\n")}
-                onChange={(e: any) =>
-                  handleUpdate(
-                    i,
-                    "description",
-                    e.target.value.split("\n"),
-                  )
-                }
-                placeholder={"Built a real-time collaboration engine...\nReduced p95 latency from 400ms to 80ms..."}
+              <label className="block text-[10px] font-mono text-ink-muted mb-1.5 uppercase tracking-wider">
+                Description
+              </label>
+              <BulletListEditor
+                value={Array.isArray(proj.description) ? proj.description : []}
+                onChange={(next) => handleUpdate(i, "description", next)}
+                placeholder="Built a real-time collaboration engine..."
+                addLabel="Add bullet"
               />
               <p className="text-[10px] text-ink-muted italic mt-2 px-1">
-                Each new line becomes a bullet point in the preview and final PDF.
+                Each bullet becomes a line item in the preview and final PDF.
               </p>
             </>
           );

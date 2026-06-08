@@ -141,6 +141,50 @@ content is unchanged (fixes roadmap limitation #4).
 
 ---
 
+## M1.5 — Array-backed bullet & skill editor
+
+**Goal:** edit experience/project bullets and skills as real arrays with
+per-item add / remove / drag-reorder, instead of a single newline/comma
+`<textarea>`. This is also the proper fix for the save-persistence bugs: the
+`description`(string) ↔ `responsibilities`(array) round-trip was the root cause,
+so making the editor array-native removes that whole class of bug.
+
+**Subtasks**
+- New reusable components:
+  - `BulletListEditor` — list of single-line bullet inputs, each with a drag
+    handle (reusing `SortableList`) + delete, plus "Add bullet". Generic over
+    `string[]` (`value` / `onChange`).
+  - `SkillsTagInput` — chip/tag input: type-to-add (Enter or comma), click-× to
+    remove, drag to reorder, case-insensitive de-dupe.
+- Model change: editor experience bullets become `responsibilities: string[]`
+  (matching the backend), dropping the `description` string. Projects already use
+  `description: string[]`; skills already `string[]`.
+- Update every consumer of the old experience `description` string: `types.ts`,
+  `api.ts` (to/fromBackendPayload — array passthrough, no join/split),
+  `ResumePreview`, `ResumeEditorContext.acceptSuggestion`, `tailorSelection`
+  (keep/discard), `keywordMatch.resumeToText`, and the LaTeX/PDF generator.
+- Wire `BulletListEditor` into the Experience + Projects forms and
+  `SkillsTagInput` into the Skills form.
+
+**Algorithm (save path, now lossless)**
+```
+load:  backend responsibilities[] ──(fromBackendPayload, identity)──▶ editor responsibilities[]
+edit:  BulletListEditor mutates the array directly (no string join/split)
+save:  editor responsibilities[] ──(toBackendPayload, trim+filter empties)──▶ backend responsibilities[]
+```
+No intermediate string means an edited/reordered/accepted bullet can no longer be
+dropped by a stale conversion.
+
+**Verification**
+- [ ] Add / edit / delete / reorder a bullet → reflected in preview and persists
+      across reload.
+- [ ] Accept an AI suggestion → the edited bullet survives a reload.
+- [ ] Skills: add (Enter/comma), remove (×), reorder (drag), de-dupe; persists.
+- [ ] PDF/LaTeX export renders bullets from the array.
+- [ ] `tsc`, `eslint` (no new `any`), `vite build` all clean.
+
+---
+
 ## M2 — GitHub integration MVP
 
 **Goal:** connect GitHub, derive a grounded tech/skills profile and importable

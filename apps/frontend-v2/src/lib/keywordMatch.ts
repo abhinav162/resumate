@@ -134,7 +134,8 @@ export function resumeToText(data: ResumeData): string {
   if (data.summary) parts.push(data.summary);
   if (data.skills?.length) parts.push(data.skills.join(' '));
   for (const exp of data.experience ?? []) {
-    parts.push(exp.role || '', exp.company || '', exp.description || '');
+    parts.push(exp.role || '', exp.company || '');
+    if (Array.isArray(exp.responsibilities)) parts.push(exp.responsibilities.join(' '));
   }
   for (const proj of data.projects ?? []) {
     parts.push(proj.name || '');
