@@ -5,15 +5,19 @@ import database from '../config/database.js';
 import { Resume } from '../models/Resume.js';
 import TailoredResume from '../models/TailoredResume.js';
 import { scoreResume, tailorResume } from '../services/aiService.js';
-import { deductCredits, grantCredits } from '../services/creditService.js';
+import { deductCredits, grantCredits, getCredits } from '../services/creditService.js';
 import { requireCredits } from '../middleware/requireCredits.js';
 import { CREDIT_COSTS } from '../config/credits.config.js';
 import { handleValidationErrors } from '../middleware/errorHelpers.js';
+import { contentHash } from '../lib/scoring/hash.js';
 
 const router = express.Router();
 
-// POST /api/ai/score/:resumeId — score a stored resume (costs 1 credit)
-router.post('/score/:resumeId', requireCredits(CREDIT_COSTS.RESUME_SCORE), async (req, res) => {
+// POST /api/ai/score/:resumeId — score a stored resume.
+// Costs 1 credit, BUT a re-score of unchanged content is served from cache for
+// free (no LLM call, no deduction). The credit gate lives inside the handler so
+// a cache hit succeeds even at a zero balance.
+router.post('/score/:resumeId', async (req, res) => {
   try {
     const userRow = await database.get('SELECT id FROM users WHERE uuid = ?', [req.headers['x-user-id']]);
     if (!userRow) return res.status(401).json({ success: false, message: 'User not found' });
@@ -26,19 +30,53 @@ router.post('/score/:resumeId', requireCredits(CREDIT_COSTS.RESUME_SCORE), async
       resumeForScoring = tailored.tailoredData;
     }
 
+    const hash = contentHash(resumeForScoring);
+
+    // Load the existing cached score (if any) for this resume.
+    const cachedRow = tailored
+      ? await database.get('SELECT after_score AS score, score_hash, score_breakdown FROM tailored_resumes WHERE uuid = ?', [req.params.resumeId])
+      : await database.get('SELECT score, score_hash, score_breakdown, suggestions FROM base_resumes WHERE uuid = ?', [req.params.resumeId]);
+
+    // Cache hit — content unchanged since the last score. Free, no LLM.
+    if (cachedRow && cachedRow.score != null && cachedRow.score_hash === hash) {
+      return res.json({
+        success: true,
+        data: {
+          score: cachedRow.score,
+          breakdown: cachedRow.score_breakdown ? JSON.parse(cachedRow.score_breakdown) : null,
+          issues: [],
+          suggestions: cachedRow.suggestions ? JSON.parse(cachedRow.suggestions) : [],
+          cached: true,
+        },
+      });
+    }
+
+    // Real compute — require + charge a credit.
+    const balance = await getCredits(userRow.id);
+    if (balance < CREDIT_COSTS.RESUME_SCORE) {
+      return res.status(402).json({
+        success: false,
+        code: 'INSUFFICIENT_CREDITS',
+        message: `This action requires ${CREDIT_COSTS.RESUME_SCORE} credit. You have ${balance}.`,
+        required: CREDIT_COSTS.RESUME_SCORE,
+        balance,
+      });
+    }
+
     const scoreReport = await scoreResume(resumeForScoring);
+    const breakdownJson = scoreReport.breakdown ? JSON.stringify(scoreReport.breakdown) : null;
 
     if (tailored) {
       await database.run(
-        "UPDATE tailored_resumes SET after_score = ?, updated_at = datetime('now') WHERE uuid = ?",
-        [scoreReport.score, req.params.resumeId]
+        "UPDATE tailored_resumes SET after_score = ?, score_breakdown = ?, score_hash = ?, updated_at = datetime('now') WHERE uuid = ?",
+        [scoreReport.score, breakdownJson, hash, req.params.resumeId]
       );
     } else {
       const dbResume = await database.get('SELECT id FROM base_resumes WHERE uuid = ?', [req.params.resumeId]);
       if (dbResume) {
         await database.run(
-          "UPDATE base_resumes SET score = ?, suggestions = ?, updated_at = datetime('now') WHERE id = ?",
-          [scoreReport.score, JSON.stringify(scoreReport.suggestions), dbResume.id]
+          "UPDATE base_resumes SET score = ?, suggestions = ?, score_breakdown = ?, score_hash = ?, updated_at = datetime('now') WHERE id = ?",
+          [scoreReport.score, JSON.stringify(scoreReport.suggestions), breakdownJson, hash, dbResume.id]
         );
       }
     }
@@ -72,15 +110,25 @@ async function processTailorJob({ tailoredUuid, resumeData, jobTitle, company, j
       [tailoredUuid]
     );
 
-    const { tailoredResume, diff, beforeScore, afterScore } = await tailorResume(
+    const { tailoredResume, diff, beforeScore, afterScore, afterBreakdown } = await tailorResume(
       resumeData, jobTitle, company, jobDescription
     );
 
+    // Persist the after-score breakdown + content hash so an immediate re-score
+    // of the freshly tailored resume is served free from the score cache.
     await database.run(
       `UPDATE tailored_resumes
-         SET tailored_data=?, before_score=?, after_score=?, diff=?, status='COMPLETED', updated_at=datetime('now')
+         SET tailored_data=?, before_score=?, after_score=?, diff=?, score_breakdown=?, score_hash=?, status='COMPLETED', updated_at=datetime('now')
        WHERE uuid=?`,
-      [JSON.stringify(tailoredResume), beforeScore, afterScore, JSON.stringify(diff), tailoredUuid]
+      [
+        JSON.stringify(tailoredResume),
+        beforeScore,
+        afterScore,
+        JSON.stringify(diff),
+        afterBreakdown ? JSON.stringify(afterBreakdown) : null,
+        contentHash(tailoredResume),
+        tailoredUuid,
+      ]
     );
 
     console.log(`Tailor job ${tailoredUuid} completed`);

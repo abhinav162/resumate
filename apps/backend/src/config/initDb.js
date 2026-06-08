@@ -166,6 +166,12 @@ async function createTables() {
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN status TEXT DEFAULT 'COMPLETED'`).catch(() => {});
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN error_message TEXT`).catch(() => {});
 
+  // M1 scoring: per-section breakdown (JSON) + content hash for the score cache.
+  await database.run(`ALTER TABLE base_resumes ADD COLUMN score_breakdown TEXT`).catch(() => {});
+  await database.run(`ALTER TABLE base_resumes ADD COLUMN score_hash TEXT`).catch(() => {});
+  await database.run(`ALTER TABLE tailored_resumes ADD COLUMN score_breakdown TEXT`).catch(() => {});
+  await database.run(`ALTER TABLE tailored_resumes ADD COLUMN score_hash TEXT`).catch(() => {});
+
   // Reset any IN_PROGRESS / PENDING rows orphaned by a server restart
   await database.run(
     `UPDATE tailored_resumes SET status='FAILED', error_message='Server restarted during tailoring' WHERE status IN ('PENDING','IN_PROGRESS')`

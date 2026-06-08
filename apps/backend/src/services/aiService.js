@@ -1,3 +1,6 @@
+import { computeDeterministic, weightedComposite } from '../lib/scoring/rubric.js';
+import { keywordMatchScore } from '../lib/scoring/keywords.js';
+
 const MODEL = 'gpt-5.4-mini';
 
 function getBifrostConfig() {
@@ -14,8 +17,17 @@ function isOverloadedStatus(status, message) {
   return msg.includes('overloaded') || msg.includes('high demand');
 }
 
-async function bifrostGenerate(prompt) {
+async function bifrostGenerate(prompt, { temperature } = {}) {
   const { url, key } = getBifrostConfig();
+
+  const body = {
+    model: MODEL,
+    messages: [{ role: 'user', content: prompt }],
+    response_format: { type: 'json_object' },
+  };
+  // Deterministic calls (scoring, keyword extraction) pass temperature: 0 so the
+  // same input yields a reproducible result.
+  if (typeof temperature === 'number') body.temperature = temperature;
 
   let response;
   try {
@@ -25,11 +37,7 @@ async function bifrostGenerate(prompt) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${key}`,
       },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-      }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     const e = new Error(`Bifrost network error: ${err.message}`);
@@ -102,7 +110,32 @@ Return ONLY valid JSON with this structure:
   return parseJsonResponse(text);
 }
 
-export async function scoreResume(resumeData) {
+/**
+ * Extract the hard skills / tools / keywords a job description requires.
+ * Returns a normalized lowercase string[]. Deterministic (temperature 0) so the
+ * same JD yields the same keyword set (cacheable upstream by JD hash).
+ */
+export async function extractJdKeywords(jobDescription) {
+  if (!jobDescription || !jobDescription.trim()) return [];
+  const prompt = `Extract the hard skills, tools, technologies, and must-have keywords from this job description.
+
+Job Description:
+---
+${jobDescription}
+---
+
+Return ONLY valid JSON: { "keywords": ["lowercased keyword", ...] }
+Rules: only concrete skills/tools/technologies (e.g. "react", "kubernetes", "postgresql"), not soft skills or generic words. Lowercase. No duplicates. Max 30.`;
+
+  const text = await bifrostGenerate(prompt, { temperature: 0 });
+  const parsed = parseJsonResponse(text);
+  return Array.isArray(parsed.keywords) ? parsed.keywords : [];
+}
+
+/**
+ * Legacy single-call scorer (kept for fallback via SCORING_V2=false).
+ */
+async function scoreResumeLegacy(resumeData) {
   const prompt = `You are an ATS resume expert. Analyze this resume and return a JSON score report.
 
 Resume:
@@ -125,12 +158,93 @@ bulletId format:
 - "summary-0-0" for summary
 - "skills-0-0" for skills section`;
 
-  const text = await bifrostGenerate(prompt);
+  const text = await bifrostGenerate(prompt, { temperature: 0 });
   return parseJsonResponse(text);
 }
 
+/**
+ * Hybrid ATS scorer (SCORING_V2, default on).
+ *
+ * Combines deterministic, reproducible sub-scores (metrics density, action-verb
+ * variety, readability, formatting, and — when a JD is provided — keyword
+ * coverage) with an LLM qualitative pass (impact, clarity) and the model's
+ * bullet-level issues/suggestions. The pieces are blended via the rubric WEIGHTS
+ * into a single 0-100 `score`, with a `breakdown` for transparency.
+ *
+ * Backward compatible: still returns { score, issues, suggestions }.
+ *
+ * @param {object} resumeData
+ * @param {{ jobDescription?: string, jdKeywords?: string[] }} [opts]
+ */
+export async function scoreResume(resumeData, opts = {}) {
+  if (process.env.SCORING_V2 === 'false') {
+    return scoreResumeLegacy(resumeData);
+  }
+
+  // Deterministic sub-scores — no LLM.
+  const deterministic = computeDeterministic(resumeData);
+
+  // Optional JD keyword coverage. Accept pre-extracted keywords (so callers like
+  // tailoring can extract once and reuse), else extract from the JD if given.
+  let jdKeywords = opts.jdKeywords ?? null;
+  if (!jdKeywords && opts.jobDescription) {
+    jdKeywords = await extractJdKeywords(opts.jobDescription);
+  }
+  const keywordMatch = jdKeywords && jdKeywords.length
+    ? keywordMatchScore(resumeData, jdKeywords)
+    : null;
+
+  // LLM qualitative pass — impact/clarity + bullet-level issues/suggestions.
+  const prompt = `You are an ATS resume expert. Judge the QUALITY of this resume's writing and return a JSON report.
+
+Resume:
+${JSON.stringify(resumeData, null, 2)}
+
+Return ONLY valid JSON:
+{
+  "impact": <integer 0-100, how strongly bullets convey measurable impact/outcomes>,
+  "clarity": <integer 0-100, how clear, concise and professional the writing is>,
+  "issues": [
+    { "bulletId": "<sectionType>-<sectionIndex>-<bulletIndex>", "issueType": "weak_verb|no_metrics|vague|ats_keyword_missing", "severity": "warn|error", "original": "<original text>" }
+  ],
+  "suggestions": [
+    { "bulletId": "<same id>", "original": "<original>", "rewrite": "<improved version>", "issueType": "<same>", "severity": "<same>" }
+  ]
+}
+
+bulletId format:
+- "experience-<expIdx>-<bulletIdx>" → experience[expIdx].responsibilities[bulletIdx]
+- "projects-<projIdx>-<bulletIdx>" → projects[projIdx].description[bulletIdx]
+- "summary-0-0" for summary`;
+
+  const text = await bifrostGenerate(prompt, { temperature: 0 });
+  const parsed = parseJsonResponse(text);
+
+  const clamp = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+  const breakdown = {
+    metrics: deterministic.metrics,
+    verbs: deterministic.verbs,
+    readability: deterministic.readability,
+    formatting: deterministic.formatting,
+    impact: clamp(parsed.impact),
+    clarity: clamp(parsed.clarity),
+  };
+  if (keywordMatch !== null) breakdown.keywordMatch = keywordMatch;
+
+  return {
+    score: weightedComposite(breakdown),
+    breakdown,
+    issues: parsed.issues ?? [],
+    suggestions: parsed.suggestions ?? [],
+  };
+}
+
 export async function tailorResume(resumeData, jobTitle, company, jobDescription) {
-  const beforeScoreData = await scoreResume(resumeData);
+  // Extract JD keywords once and reuse for both before/after scoring so the
+  // keyword-coverage component is consistent and the delta is meaningful.
+  const jdKeywords = await extractJdKeywords(jobDescription);
+
+  const beforeScoreData = await scoreResume(resumeData, { jdKeywords });
   const beforeScore = beforeScoreData.score;
 
   const prompt = `You are an expert ATS resume optimizer. Tailor this resume for the target job using the RARe framework (Readability, Applicability, Remarkability).
@@ -164,7 +278,7 @@ Return ONLY valid JSON with two keys:
   const text = await bifrostGenerate(prompt);
   const parsed = parseJsonResponse(text);
 
-  const afterScoreData = await scoreResume(parsed.tailoredResume);
+  const afterScoreData = await scoreResume(parsed.tailoredResume, { jdKeywords });
   const afterScore = afterScoreData.score;
 
   return {
@@ -172,5 +286,6 @@ Return ONLY valid JSON with two keys:
     diff: parsed.diff,
     beforeScore,
     afterScore,
+    afterBreakdown: afterScoreData.breakdown ?? null,
   };
 }
