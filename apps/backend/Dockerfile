@@ -1,7 +1,9 @@
 # Base stage
 FROM node:20-slim AS base
 WORKDIR /app
-RUN npm install -g npm@latest
+# Pin to the latest npm major compatible with Node 20. npm@latest (12.x) now
+# requires Node >=22 and breaks the build with EBADENGINE on node:20-slim.
+RUN npm install -g npm@11
 
 # Builder stage
 FROM base AS builder
