@@ -36,6 +36,7 @@ These are the integration points every milestone builds on:
 |---|-----------|-----------|------|
 | **M1** | Scoring quick wins (rubric + JD keyword coverage + cache) | — | Low |
 | **M2** | GitHub integration MVP | M1 (keyword infra reused) | Med |
+| **M2.7** | GitHub project library (standalone analysis + add-to-resume) | M2 | Low |
 | **M3** | Tailoring robustness (schema validation, streaming, section re-tailor) | M1 | Med |
 | **M4** | Bigger bets (ATS simulation, embeddings match, eval harness) | M1–M3 | High |
 | **M5** | LinkedIn export parsing | M2 patterns | Med |
@@ -298,6 +299,81 @@ summarizeRepo(repo):
 - [ ] Tailoring with evidence present produces grounded bullets (manual eval) and
       does not fabricate beyond evidence (spot-check).
 - [ ] Feature flag off → tailoring behaves exactly as today.
+
+---
+
+## M2.7 — GitHub project library (standalone analysis)
+
+**Goal:** decouple repo analysis from the editor. Users analyze repos from a
+dedicated page and build a "verified project pool"; any resume can then pull
+from that pool. Cache/pricing accounting is shared with the editor flow.
+**Decisions (locked):** re-analysis of a *changed* repo is **free for now**
+(pricing hook added later) — only never-analyzed repos consume free slots or
+charge 0.2 · new page at `/github` linked from the dashboard connect card.
+
+### M2.7.1 — Pricing rule update (re-analysis free)
+
+**Subtasks**
+- `analyzeRepos`: chargeable set = repos whose `repo_id` has NO summary row at
+  all. A row with stale `pushed_at` re-summarizes (LLM runs) but is free and
+  does not consume a free slot or flip `counted_free`.
+- Keep the free-slot marking for genuinely new repos unchanged.
+
+**Algorithm (charge, revised):**
+```
+analyzeRepos(userId, repos):
+  newRepos   = repos with no github_repo_summaries row (any pushed_at)
+  changed    = repos with a row whose pushed_at differs      # re-analyzed FREE
+  freeLeft   = max(0, GITHUB_FREE_REPOS - count(counted_free=1))
+  freeNow    = min(freeLeft, newRepos.length)
+  chargeable = newRepos.length - freeNow
+  cost       = round2(chargeable * 0.2); deduct before any LLM call
+```
+
+**Verification**
+- [ ] Changed repo (stale `pushed_at`) re-analyzes with an LLM call but charges 0
+      and leaves `counted_free` counts untouched.
+- [ ] New repo beyond the free allowance still charges exactly 0.2.
+- [ ] Existing M2 tests updated to the new rule, suite green.
+
+### M2.7.2 — Summaries endpoint
+
+**Subtasks**
+- `GET /api/github/summaries` → stored library entries:
+  `[{ repoId, repoName, pushedAt, bullets, project, countedFree, createdAt, stale }]`
+  where `stale` = cached profile shows a newer `pushed_at` than the row.
+- No network, no LLM — reads `github_repo_summaries` (+ cached profile for `stale`).
+
+**Verification**
+- [ ] Returns only the requesting user's rows; empty array when none.
+- [ ] `stale` flips true after the cached profile shows a newer push.
+
+### M2.7.3 — `/github` page (library + repo browser)
+
+**Subtasks**
+- Route `/github`; dashboard connect card links to it ("Manage projects →").
+- Library section: analyzed repos with generated bullets; `stale` rows show a
+  "repo updated — re-analyze (free)" action.
+- Browser section: reuse the ranked repo list + analyze flow from the modal
+  (extract shared pieces from `GitHubImportModal` rather than duplicating).
+- **Add to resume:** per library entry, resume picker (existing resumes query) →
+  appends a project via the existing resume update mutation.
+
+**Verification**
+- [ ] Analyze from the page and from the editor modal share cache + allowance.
+- [ ] Add-to-resume appends an editable project; auto-save/PDF unaffected.
+- [ ] Page works when GitHub is connected but no repos analyzed yet (empty state).
+
+### M2.7.4 — Editor modal fast-path
+
+**Subtasks**
+- Already-analyzed (non-stale) repos selected alone → skip the analyze mutation,
+  fetch cached summaries, jump straight to preview.
+
+**Verification**
+- [ ] Cached-only selection reaches preview with zero LLM calls and no charge.
+- [ ] Mixed selection (cached + new) still goes through analyze and prices only
+      the new repos.
 
 ---
 
