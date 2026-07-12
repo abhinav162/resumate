@@ -13,6 +13,7 @@ import { ResponsivePreviewCanvas } from "./ResumePreview";
 import { SortableList } from "./SortableList";
 import { BulletListEditor } from "./BulletListEditor";
 import { SkillsTagInput } from "./SkillsTagInput";
+import { GitHubImportModal } from "../github/GitHubImportModal";
 import { generateLatexPdf } from "../../../services/latexService";
 import {
   User,
@@ -31,6 +32,7 @@ import {
   LayoutDashboard,
   Wand2,
   Sparkles,
+  Github,
 } from "lucide-react";
 // Paper light theme — no dark import needed
 
@@ -693,6 +695,7 @@ function ExperienceForm() {
 function ProjectsForm() {
   const { resumeData, updateField, addListItem, removeListItem } =
     useResumeEditor();
+  const [importOpen, setImportOpen] = useState(false);
 
   const projects = resumeData.projects ?? [];
 
@@ -769,23 +772,52 @@ function ProjectsForm() {
           );
         }}
       />
-      <Button
-        variant="secondary"
-        onClick={() =>
-          addListItem("projects", {
-            name: "",
-            url: "",
-            repoUrl: "",
-            description: [],
-          })
-        }
-        className="w-full border-dashed border-paper-border text-ink-secondary hover:text-indigo-600 hover:border-indigo-400 py-6 flex flex-col gap-1 h-auto"
-      >
-        <Plus size={20} />
-        <span className="text-xs font-bold uppercase tracking-wider">
-          Add Project
-        </span>
-      </Button>
+      <div className="grid grid-cols-2 gap-3">
+        <Button
+          variant="secondary"
+          onClick={() =>
+            addListItem("projects", {
+              name: "",
+              url: "",
+              repoUrl: "",
+              description: [],
+            })
+          }
+          className="border-dashed border-paper-border text-ink-secondary hover:text-indigo-600 hover:border-indigo-400 py-6 flex flex-col gap-1 h-auto"
+        >
+          <Plus size={20} />
+          <span className="text-xs font-bold uppercase tracking-wider">
+            Add Project
+          </span>
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => setImportOpen(true)}
+          className="border-dashed border-paper-border text-ink-secondary hover:text-indigo-600 hover:border-indigo-400 py-6 flex flex-col gap-1 h-auto"
+        >
+          <Github size={20} />
+          <span className="text-xs font-bold uppercase tracking-wider">
+            Import from GitHub
+          </span>
+        </Button>
+      </div>
+
+      <GitHubImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImport={(imported) => {
+          // Each drafted repo becomes an editable project entry; saving goes
+          // through the normal resume mutations (auto-save picks it up).
+          for (const p of imported) {
+            addListItem("projects", {
+              name: p.name,
+              url: p.url ?? "",
+              repoUrl: p.repoUrl ?? "",
+              description: p.description,
+            });
+          }
+        }}
+      />
     </div>
   );
 }

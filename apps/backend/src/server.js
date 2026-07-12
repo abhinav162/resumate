@@ -13,6 +13,7 @@ import tailoredResumesRouter from "./routes/tailored-resumes.js";
 import aiRouter from "./routes/ai.js";
 import uploadsRouter from "./routes/uploads.js";
 import creditsRouter, { razorpayWebhookHandler } from "./routes/credits.js";
+import githubRouter from "./routes/github.js";
 import testRouter from "./routes/test.js";
 import { ensureUserExists } from "./middleware/ensureUser.js";
 
@@ -73,6 +74,7 @@ app.use("/api/tailored-resumes", tailoredResumesRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/credits", creditsRouter);
+app.use("/api/github", githubRouter);
 
 // Dev/test-only routes — never mounted in production
 if (process.env.NODE_ENV !== "production") {

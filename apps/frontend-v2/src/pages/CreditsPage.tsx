@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { useCredits } from '../contexts/CreditContext';
+import { formatCredits } from '../lib/format';
 import { creditsApi, type CreditPack } from '../lib/api';
 import { useCreditPacks, useCreateCheckout } from '../hooks/useCreditsApi';
 import { loadRazorpayCheckout } from '../lib/razorpay';
@@ -105,7 +106,7 @@ export default function CreditsPage() {
         <h1 className="font-heading text-3xl font-bold text-ink-primary">Buy Credits</h1>
         <p className="text-ink-secondary mt-1">
           Current balance:{' '}
-          <span className="font-mono font-semibold">{balance ?? '–'}</span> credits
+          <span className="font-mono font-semibold">{formatCredits(balance)}</span> credits
         </p>
       </div>
 
@@ -130,6 +131,10 @@ export default function CreditsPage() {
         <p>
           • Score resume: 1 credit &nbsp;·&nbsp; Tailor to job: 2 credits &nbsp;·&nbsp;
           Download PDF: free
+        </p>
+        <p>
+          • GitHub repo analysis: first 10 repos free, then 0.2 credits per repo
+          (re-analyzing an unchanged repo is always free)
         </p>
       </div>
 

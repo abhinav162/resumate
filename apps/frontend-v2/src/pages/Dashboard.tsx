@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { Trash2, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -6,12 +6,21 @@ import { Card } from '../components/ui/Card';
 import { ScorePill } from '../components/ui/ScorePill';
 import { Badge } from '../components/ui/Badge';
 import { useResumes, useDeleteResume } from '../hooks/useResumes';
+import { GitHubConnectCard } from '../components/features/github/GitHubConnectCard';
 
 type Resume = { id: string; name: string; score: number | null; tailoredCount?: number; updatedAt?: string };
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { isLoaded, isSignedIn } = useAuth();
+
+  // The GitHub OAuth callback bounces back here with ?github=connected|error.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const githubResult = searchParams.get('github');
+  const dismissGithubFlash = () => {
+    searchParams.delete('github');
+    setSearchParams(searchParams, { replace: true });
+  };
 
   // Auth headers are injected by the axios request interceptor; we only gate
   // the query so it doesn't fire before Clerk is ready / the user is signed in.
@@ -36,6 +45,23 @@ export default function Dashboard() {
         <h1 className="font-heading text-2xl font-bold text-ink-primary">My Resumes</h1>
         <Button onClick={() => navigate('/upload')}>+ Upload Resume</Button>
       </div>
+
+      {githubResult === 'connected' && (
+        <div
+          className="bg-success-bg border border-success-border rounded-lg px-4 py-3 text-success-text text-sm font-medium cursor-pointer"
+          onClick={dismissGithubFlash}
+        >
+          ✓ GitHub connected! You can now import projects from your repositories.
+        </div>
+      )}
+      {githubResult === 'error' && (
+        <div
+          className="bg-warning-bg border border-warning-border rounded-lg px-4 py-3 text-warning-text text-sm font-medium cursor-pointer"
+          onClick={dismissGithubFlash}
+        >
+          GitHub connection failed. Please try again.
+        </div>
+      )}
 
       {loading && (
         <div className="grid grid-cols-2 gap-4">
@@ -100,6 +126,8 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <GitHubConnectCard />
     </div>
   );
 }
