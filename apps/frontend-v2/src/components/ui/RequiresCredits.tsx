@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { useCredits, formatCredits } from '../../contexts/CreditContext';
+import { useCredits } from '../../contexts/CreditContext';
+import { formatCredits } from '../../lib/format';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './Button';
 

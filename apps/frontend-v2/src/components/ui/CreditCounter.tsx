@@ -1,4 +1,5 @@
-import { useCredits, formatCredits } from '../../contexts/CreditContext';
+import { useCredits } from '../../contexts/CreditContext';
+import { formatCredits } from '../../lib/format';
 import { useNavigate } from 'react-router-dom';
 
 export function CreditCounter() {
