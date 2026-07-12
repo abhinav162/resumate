@@ -14,6 +14,8 @@ export function RepoPickerList({
   onToggle,
   freeRepoIds,
   freeReposLeft,
+  disabledIds,
+  disabledTag = 'in this resume',
 }: {
   repos: GithubRepo[];
   selectedIds: string[];
@@ -21,32 +23,42 @@ export function RepoPickerList({
   /** Repo ids that are always free to (re-)analyze — analyzed or in the library. */
   freeRepoIds: Set<string>;
   freeReposLeft: number;
+  /** Repo ids that cannot be selected (e.g. already in the open resume). */
+  disabledIds?: Set<string>;
+  /** Tag shown on disabled rows explaining why they can't be picked. */
+  disabledTag?: string;
 }) {
   const { priceLabel } = computeRepoPricing(selectedIds, freeRepoIds, freeReposLeft);
 
   return (
     <ul className="space-y-2">
       {repos.map((repo) => {
-        const selected = selectedIds.includes(repo.id);
+        const disabled = disabledIds?.has(repo.id) ?? false;
+        const selected = !disabled && selectedIds.includes(repo.id);
         return (
           <li key={repo.id}>
             <label
-              className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                selected
-                  ? 'border-indigo-400 bg-indigo-50'
-                  : 'border-paper-border hover:border-paper-border-strong'
+              className={`flex items-start gap-3 p-3 border rounded-lg transition-colors ${
+                disabled
+                  ? 'border-paper-border opacity-60 cursor-not-allowed'
+                  : selected
+                    ? 'border-indigo-400 bg-indigo-50 cursor-pointer'
+                    : 'border-paper-border hover:border-paper-border-strong cursor-pointer'
               }`}
             >
               <input
                 type="checkbox"
                 checked={selected}
+                disabled={disabled}
                 onChange={() => onToggle(repo.id)}
                 className="mt-1 accent-indigo-600"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm text-ink-primary truncate">{repo.name}</span>
-                  {freeRepoIds.has(repo.id) ? (
+                  {disabled ? (
+                    <Badge>{disabledTag}</Badge>
+                  ) : freeRepoIds.has(repo.id) ? (
                     <Badge variant="success">cached · free</Badge>
                   ) : (
                     selected && <Badge variant="indigo">{priceLabel(repo.id)}</Badge>

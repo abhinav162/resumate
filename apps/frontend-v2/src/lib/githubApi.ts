@@ -62,6 +62,8 @@ export type GithubSummaryEntry = {
   createdAt: string;
   /** True when the repo has new pushes since this entry was generated. */
   stale: boolean;
+  /** Resumes that already contain a project imported from this repo. */
+  inResumes: { id: string; name: string }[];
 };
 
 export type GithubReposResult = {

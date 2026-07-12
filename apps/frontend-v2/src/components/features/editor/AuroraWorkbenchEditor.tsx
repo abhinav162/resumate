@@ -699,6 +699,11 @@ function ProjectsForm() {
 
   const projects = resumeData.projects ?? [];
 
+  // Repos already imported into this resume — the modal marks them unselectable.
+  const existingRepoIds = projects
+    .map((p) => p.githubRepoId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+
   const handleUpdate = (index: number, field: string, value: any) => {
     const newProjects = [...projects];
     newProjects[index] = { ...newProjects[index], [field]: value };
@@ -716,6 +721,15 @@ function ProjectsForm() {
           return (
             <>
               <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
+                {proj.githubRepoId && (
+                  <span
+                    className="text-ink-muted p-1"
+                    title="Imported from GitHub"
+                    aria-label="Imported from GitHub"
+                  >
+                    <Github size={14} />
+                  </span>
+                )}
                 <button
                   {...handle}
                   style={{ touchAction: "none" }}
@@ -805,6 +819,7 @@ function ProjectsForm() {
       <GitHubImportModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
+        existingRepoIds={existingRepoIds}
         onImport={(imported) => {
           // Each drafted repo becomes an editable project entry; saving goes
           // through the normal resume mutations (auto-save picks it up).
@@ -814,6 +829,7 @@ function ProjectsForm() {
               url: p.url ?? "",
               repoUrl: p.repoUrl ?? "",
               description: p.description,
+              githubRepoId: p.githubRepoId,
             });
           }
         }}

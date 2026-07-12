@@ -246,6 +246,9 @@ function LibraryCard({
     },
   });
 
+  // Resumes that already contain this repo — shown as "Added" and not clickable.
+  const inResumeIds = new Set(entry.inResumes.map((r) => r.id));
+
   // Fetch the full resume, append the library project, and save it back.
   // The whole resume is sent (not just `projects`) so no fields are dropped.
   const handleAdd = async (resume: ResumeListItem) => {
@@ -261,10 +264,13 @@ function LibraryCard({
           url: entry.project.url,
           repoUrl: entry.project.repoUrl,
           description: entry.project.description,
+          githubRepoId: entry.repoId,
         },
       ];
       await updateResume.mutateAsync({ id: resume.id, data: { ...full, projects } });
       setAddedTo(resume.name);
+      // Refresh the usage map so this resume shows up as "Added" right away.
+      queryClient.invalidateQueries({ queryKey: ['github', 'summaries'] });
     } catch {
       setAddError(true);
     } finally {
@@ -296,6 +302,12 @@ function LibraryCard({
         ))}
       </ul>
 
+      {entry.inResumes.length > 0 && (
+        <p className="text-xs text-ink-muted">
+          In: {entry.inResumes.map((r) => r.name).join(', ')}
+        </p>
+      )}
+
       <div className="flex items-center gap-2 pt-1 flex-wrap">
         {entry.stale && (
           <Button
@@ -322,8 +334,8 @@ function LibraryCard({
               {adding ? 'Adding…' : 'Add to resume…'}
             </option>
             {resumes.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
+              <option key={r.id} value={r.id} disabled={inResumeIds.has(r.id)}>
+                {inResumeIds.has(r.id) ? `${r.name} · Added` : r.name}
               </option>
             ))}
           </select>
