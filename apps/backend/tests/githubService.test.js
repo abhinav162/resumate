@@ -11,6 +11,7 @@ import {
   fetchGithubProfile,
   summarizeRepo,
   analyzeRepos,
+  listSummaries,
 } from '../src/services/githubService.js';
 
 // ---------------------------------------------------------------------------
@@ -387,6 +388,7 @@ describe('githubService', () => {
       assert.equal(result.charged, 0);
       assert.equal(result.freeUsed, 10);
       assert.equal(result.freeLeft, 0);
+      assert.equal(result.reanalyzed, 0);
       assert.equal(result.summaries.length, 10);
       assert.equal(result.summaries[0].repoId, 'R_repo_1');
       assert.equal(result.summaries[0].repoName, 'repo-1');
@@ -401,7 +403,7 @@ describe('githubService', () => {
       assert.equal(credits.credits, 5, 'free repos must not charge');
     });
 
-    it('11th fresh repo charges exactly 0.2 and the REAL balance survives in users.credits', async () => {
+    it('11th new repo charges exactly 0.2 and the REAL balance survives in users.credits', async () => {
       const userId = await createUser(5);
       await connect(userId);
       await analyzeRepos(userId, Array.from({ length: 10 }, (_, i) => makeRepo(i + 1)));
@@ -411,6 +413,7 @@ describe('githubService', () => {
       assert.equal(result.charged, 0.2);
       assert.equal(result.freeUsed, 0);
       assert.equal(result.freeLeft, 0);
+      assert.equal(result.reanalyzed, 0, 'a brand-new repo is not a re-analysis');
 
       const row = await database.get('SELECT credits FROM users WHERE id = ?', [userId]);
       assert.equal(row.credits, 4.8, 'fractional balance must be stored, not truncated');
@@ -432,12 +435,82 @@ describe('githubService', () => {
       const result = await analyzeRepos(userId, [makeRepo(11)]);
 
       assert.equal(result.charged, 0);
+      assert.equal(result.reanalyzed, 0, 'unchanged repo is cached, not re-analyzed');
       assert.equal(result.summaries[0].cached, true);
       assert.equal(callsTo('bifrost.test'), 0);
       assert.equal(callsTo('/readme'), 0);
 
       const row = await database.get('SELECT credits FROM users WHERE id = ?', [userId]);
       assert.equal(row.credits, 4.8);
+    });
+
+    // M2.7.1 — re-analysis of a CHANGED repo is free (pricing hook later).
+    it('changed repo re-analyzes for free: LLM runs, no charge, counted_free untouched, reanalyzed=1', async () => {
+      const userId = await createUser(5);
+      await connect(userId);
+      // Analyze once: repo-1 is new, consumes a free slot (counted_free=1).
+      await analyzeRepos(userId, [makeRepo(1, '2026-07-01T00:00:00Z')]);
+      const freeBefore = await database.get(
+        'SELECT COUNT(*) AS n FROM github_repo_summaries WHERE user_id = ? AND counted_free = 1',
+        [userId]
+      );
+      assert.equal(Number(freeBefore.n), 1);
+
+      installFetchMock();
+      const result = await analyzeRepos(userId, [makeRepo(1, '2026-07-05T00:00:00Z')]);
+
+      assert.equal(callsTo('bifrost.test'), 1, 'changed repo must re-run the LLM');
+      assert.equal(result.charged, 0, 're-analysis is free');
+      assert.equal(result.freeUsed, 0, 're-analysis must not consume a free slot');
+      assert.equal(result.reanalyzed, 1);
+      assert.equal(result.summaries[0].cached, false);
+
+      const freeAfter = await database.get(
+        'SELECT COUNT(*) AS n FROM github_repo_summaries WHERE user_id = ? AND counted_free = 1',
+        [userId]
+      );
+      assert.equal(Number(freeAfter.n), Number(freeBefore.n), 'counted_free totals unchanged');
+      const row = await database.get(
+        'SELECT counted_free, pushed_at FROM github_repo_summaries WHERE user_id = ? AND repo_id = ?',
+        [userId, 'R_repo_1']
+      );
+      assert.equal(Number(row.counted_free), 1, 'existing counted_free value preserved');
+      assert.equal(row.pushed_at, '2026-07-05T00:00:00Z', 'summary row updated to the new push');
+
+      const credits = await database.get('SELECT credits FROM users WHERE id = ?', [userId]);
+      assert.equal(credits.credits, 5, 'no credits deducted for re-analysis');
+    });
+
+    it('a 0-credit user can re-analyze a changed repo but cannot add a new repo beyond the allowance', async () => {
+      const userId = await createUser(0);
+      await connect(userId);
+      // Exhaust the free allowance: 9 seeded rows + repo-1 with an old pushedAt.
+      for (let i = 0; i < 9; i++) {
+        await database.run(
+          `INSERT INTO github_repo_summaries (user_id, repo_id, repo_name, pushed_at, summary, counted_free)
+           VALUES (?, ?, ?, '2026-01-01T00:00:00Z', '{}', 1)`,
+          [userId, `R_seed_${i}`, `seed-${i}`]
+        );
+      }
+      await database.run(
+        `INSERT INTO github_repo_summaries (user_id, repo_id, repo_name, pushed_at, summary, counted_free)
+         VALUES (?, 'R_repo_1', 'repo-1', '2026-06-01T00:00:00Z', '{}', 1)`,
+        [userId]
+      );
+
+      // Changed repo → free re-analysis, no INSUFFICIENT_CREDITS.
+      const result = await analyzeRepos(userId, [makeRepo(1, '2026-07-05T00:00:00Z')]);
+      assert.equal(result.charged, 0);
+      assert.equal(result.reanalyzed, 1);
+      assert.equal(callsTo('bifrost.test'), 1);
+
+      // New repo beyond the allowance → still blocked at 0 credits.
+      installFetchMock();
+      await assert.rejects(analyzeRepos(userId, [makeRepo(50)]), (err) => {
+        assert.equal(err.code, 'INSUFFICIENT_CREDITS');
+        return true;
+      });
+      assert.equal(callsTo('bifrost.test'), 0, 'no LLM call when payment fails');
     });
 
     it('insufficient credits: throws before any LLM call and writes no summary row', async () => {
@@ -471,6 +544,87 @@ describe('githubService', () => {
         assert.equal(err.code, 'GITHUB_NOT_CONNECTED');
         return true;
       });
+    });
+  });
+
+  describe('listSummaries', () => {
+    /** Seeds the cached profile with the given repos' (id, pushedAt) pairs. */
+    async function seedProfile(userId, repos) {
+      const data = JSON.stringify({
+        login: 'octocat',
+        repos: repos.map((r) => ({ id: r.id, pushedAt: r.pushedAt })),
+        fetchedAt: new Date().toISOString(),
+      });
+      await database.run(
+        `INSERT INTO github_profiles (user_id, data, fetched_at) VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
+        [userId, data, new Date().toISOString()]
+      );
+    }
+
+    it('returns [] for a user with no summaries (never throws)', async () => {
+      const userId = await createUser();
+      assert.deepEqual(await listSummaries(userId), []);
+    });
+
+    it('returns entries with parsed bullets/project; stale=false without a profile cache', async () => {
+      const userId = await createUser(5);
+      await connect(userId);
+      await analyzeRepos(userId, [makeRepo(1)]);
+
+      installFetchMock();
+      const entries = await listSummaries(userId);
+
+      assert.equal(fetchCalls.length, 0, 'listSummaries must be a pure DB read');
+      assert.equal(entries.length, 1);
+      const entry = entries[0];
+      assert.equal(entry.repoId, 'R_repo_1');
+      assert.equal(entry.repoName, 'repo-1');
+      assert.equal(entry.pushedAt, '2026-07-01T00:00:00Z');
+      assert.ok(Array.isArray(entry.bullets) && entry.bullets.length >= 1);
+      assert.equal(entry.project.repoUrl, 'https://github.com/octocat/repo-1');
+      assert.equal(entry.countedFree, true);
+      assert.ok(entry.createdAt);
+      assert.equal(entry.stale, false, 'no profile cache → stale is false');
+    });
+
+    it('stale=false when the cached profile matches; true after the profile shows a newer push', async () => {
+      const userId = await createUser(5);
+      await connect(userId);
+      const repo = makeRepo(1, '2026-07-01T00:00:00Z');
+      await analyzeRepos(userId, [repo]);
+
+      await seedProfile(userId, [repo]);
+      let [entry] = await listSummaries(userId);
+      assert.equal(entry.stale, false, 'matching pushedAt → not stale');
+
+      await seedProfile(userId, [makeRepo(1, '2026-07-09T00:00:00Z')]);
+      [entry] = await listSummaries(userId);
+      assert.equal(entry.stale, true, 'newer pushedAt in profile cache → stale');
+    });
+
+    it('stale=false when the repo is absent from the cached profile', async () => {
+      const userId = await createUser(5);
+      await connect(userId);
+      await analyzeRepos(userId, [makeRepo(1)]);
+      await seedProfile(userId, [makeRepo(2)]); // profile knows a different repo only
+
+      const [entry] = await listSummaries(userId);
+      assert.equal(entry.stale, false);
+    });
+
+    it('returns only the requesting user rows', async () => {
+      const userA = await createUser(5);
+      const userB = await createUser(5);
+      await connect(userA);
+      await connect(userB);
+      await analyzeRepos(userA, [makeRepo(1), makeRepo(2)]);
+      await analyzeRepos(userB, [makeRepo(3)]);
+
+      const aEntries = await listSummaries(userA);
+      const bEntries = await listSummaries(userB);
+      assert.deepEqual(aEntries.map((e) => e.repoId).sort(), ['R_repo_1', 'R_repo_2']);
+      assert.deepEqual(bEntries.map((e) => e.repoId), ['R_repo_3']);
     });
   });
 });
