@@ -15,7 +15,7 @@ export type TailorDiffItem = {
 
 /**
  * bulletId format (see backend aiService prompt):
- *   experience-<expIdx>-<bulletIdx> → experience[expIdx].description line
+ *   experience-<expIdx>-<bulletIdx> → experience[expIdx].responsibilities[bulletIdx]
  *   projects-<projIdx>-<bulletIdx>  → projects[projIdx].description[bulletIdx]
  *
  * Note: the editor stores experience bullets as a newline-joined string and
@@ -29,11 +29,11 @@ function setBulletText(data: ResumeData, bulletId: string, text: string): void {
   if (Number.isNaN(sectionIdx) || Number.isNaN(bulletIdx)) return;
 
   if (section === 'experience' && data.experience?.[sectionIdx]) {
-    const exp = { ...data.experience[sectionIdx] } as { description?: string };
-    const bullets = (exp.description || '').split('\n').filter(Boolean);
+    const exp = { ...data.experience[sectionIdx] } as { responsibilities?: string[] };
+    const bullets = Array.isArray(exp.responsibilities) ? [...exp.responsibilities] : [];
     if (bulletIdx < bullets.length) {
       bullets[bulletIdx] = text;
-      exp.description = bullets.join('\n');
+      exp.responsibilities = bullets;
       data.experience = data.experience.map((e, i) => (i === sectionIdx ? exp : e)) as ResumeData['experience'];
     }
   } else if (section === 'projects' && data.projects?.[sectionIdx]) {

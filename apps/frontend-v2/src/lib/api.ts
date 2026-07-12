@@ -1,6 +1,20 @@
 import axios from 'axios';
 import type { ResumeData, TailoredResume, ApiResponse } from '../types';
 
+/**
+ * Per-dimension rubric scores returned by the /ai/score endpoint.
+ * Each value is 0-100. `keywordMatch` is present only when scored against a JD.
+ */
+export type ScoreBreakdown = {
+  metrics: number;
+  verbs: number;
+  readability: number;
+  formatting: number;
+  impact: number;
+  clarity: number;
+  keywordMatch?: number;
+};
+
 // Create a standard axios instance
 const api = axios.create({
   baseURL: (window as any).ENV?.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:4300/api',
@@ -40,10 +54,17 @@ function toBackendPayload(resumeData: any) {
     payload.contact = { ...resumeData.contact, name: resumeData.contact.fullName };
   }
   if (resumeData.experience) {
-    payload.experience = resumeData.experience.map((exp: any) => ({
-      ...exp,
-      responsibilities: exp.responsibilities || (exp.description ? exp.description.split('\n').filter(Boolean) : []),
-    }));
+    payload.experience = resumeData.experience.map((exp: any) => {
+      // The editor holds bullets as the `responsibilities` array (the backend's
+      // shape). Drop any legacy `description` string; trim/filter empties on save.
+      const { description, ...rest } = exp;
+      const responsibilities = Array.isArray(exp.responsibilities)
+        ? exp.responsibilities.map((s: string) => s.trim()).filter(Boolean)
+        : typeof description === 'string'
+          ? description.split('\n').map((s: string) => s.trim()).filter(Boolean)
+          : [];
+      return { ...rest, responsibilities };
+    });
   }
   if (resumeData.education) {
     payload.education = resumeData.education.map((edu: any) => ({
@@ -66,7 +87,11 @@ function fromBackendPayload(r: any): ResumeData {
     },
     experience: (r.experience || []).map((exp: any) => ({
       ...exp,
-      description: exp.description || (exp.responsibilities || []).join('\n'),
+      responsibilities: Array.isArray(exp.responsibilities)
+        ? exp.responsibilities
+        : typeof exp.description === 'string'
+          ? exp.description.split('\n').filter(Boolean)
+          : [],
     })),
     education: (r.education || []).map((edu: any) => ({
       ...edu,
@@ -114,7 +139,15 @@ export const resumesApi = {
     await api.delete(`/resumes/${id}`);
   },
 
-  scoreResume: async (resumeId: string): Promise<{ score: number; issues: any[]; suggestions: any[] }> => {
+  scoreResume: async (
+    resumeId: string,
+  ): Promise<{
+    score: number;
+    issues: any[];
+    suggestions: any[];
+    breakdown?: ScoreBreakdown | null;
+    cached?: boolean;
+  }> => {
     const response = await api.post(`/ai/score/${resumeId}`);
     return response.data.data;
   },
