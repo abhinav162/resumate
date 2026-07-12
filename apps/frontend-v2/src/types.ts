@@ -32,6 +32,8 @@ export interface ResumeData {
     url?: string;
     repoUrl?: string;
     description: string[];
+    /** Source repo id when imported from GitHub; null/absent for manual projects. */
+    githubRepoId?: string | null;
   }>;
   skills: string[];
   updatedAt?: string;

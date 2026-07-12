@@ -13,6 +13,8 @@ export type ImportedProject = {
   url?: string;
   repoUrl?: string;
   description: string[];
+  /** Source repo id — lets the editor dedupe and badge GitHub-imported projects. */
+  githubRepoId: string;
 };
 
 /**
@@ -28,21 +30,26 @@ export function GitHubImportModal({
   open,
   onClose,
   onImport,
+  existingRepoIds,
 }: {
   open: boolean;
   onClose: () => void;
   onImport: (projects: ImportedProject[]) => void;
+  /** Repo ids already present in the open resume — shown as unselectable. */
+  existingRepoIds?: string[];
 }) {
   if (!open) return null;
-  return <ModalContent onClose={onClose} onImport={onImport} />;
+  return <ModalContent onClose={onClose} onImport={onImport} existingRepoIds={existingRepoIds} />;
 }
 
 function ModalContent({
   onClose,
   onImport,
+  existingRepoIds,
 }: {
   onClose: () => void;
   onImport: (projects: ImportedProject[]) => void;
+  existingRepoIds?: string[];
 }) {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<'pick' | 'preview'>('pick');
@@ -50,6 +57,10 @@ function ModalContent({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<RepoSummary[]>([]);
   const [checkedRepoIds, setCheckedRepoIds] = useState<Set<string>>(new Set());
+
+  // Repos already in the open resume: unselectable in the picker and never
+  // pre-checked (or imported) on the preview step.
+  const existingSet = new Set(existingRepoIds ?? []);
 
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ['github', 'status'],
@@ -80,7 +91,9 @@ function ModalContent({
     mutationFn: githubApi.analyzeRepos,
     onSuccess: (result) => {
       setSummaries(result.summaries);
-      setCheckedRepoIds(new Set(result.summaries.map((s) => s.repoId)));
+      setCheckedRepoIds(
+        new Set(result.summaries.map((s) => s.repoId).filter((id) => !existingSet.has(id)))
+      );
       setStep('preview');
       queryClient.invalidateQueries({ queryKey: ['credits'] });
       queryClient.invalidateQueries({ queryKey: ['github'] });
@@ -141,7 +154,7 @@ function ModalContent({
       ];
     });
     setSummaries(cached);
-    setCheckedRepoIds(new Set(cached.map((s) => s.repoId)));
+    setCheckedRepoIds(new Set(cached.map((s) => s.repoId).filter((id) => !existingSet.has(id))));
     setStep('preview');
   };
 
@@ -162,12 +175,13 @@ function ModalContent({
 
   const handleImport = () => {
     const projects: ImportedProject[] = summaries
-      .filter((s) => checkedRepoIds.has(s.repoId))
+      .filter((s) => checkedRepoIds.has(s.repoId) && !existingSet.has(s.repoId))
       .map((s) => ({
         name: s.project.name,
         url: s.project.url,
         repoUrl: s.project.repoUrl,
         description: s.project.description,
+        githubRepoId: s.repoId,
       }));
     onImport(projects);
     onClose();
@@ -249,6 +263,7 @@ function ModalContent({
                   onToggle={toggleSelected}
                   freeRepoIds={freeRepoIds}
                   freeReposLeft={freeReposLeft}
+                  disabledIds={existingSet}
                 />
               )}
             </>

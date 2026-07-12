@@ -445,9 +445,13 @@ export async function analyzeRepos(userId, repos) {
  * newer pushed_at for the repo than the one the summary was generated from;
  * without a profile cache (or when the repo is absent from it) stale is false.
  *
+ * M2.8.2: each entry also carries `inResumes` — the user's base resumes that
+ * already contain a project imported from that repo (via projects.github_repo_id).
+ *
  * @param {number} userId
  * @returns {Promise<Array<{ repoId: string, repoName: string|null, pushedAt: string,
- *   bullets: string[], project: object, countedFree: boolean, createdAt: string, stale: boolean }>>}
+ *   bullets: string[], project: object, countedFree: boolean, createdAt: string, stale: boolean,
+ *   inResumes: Array<{ id: string, name: string }> }>>}
  */
 export async function listSummaries(userId) {
   const rows = await database.all(
@@ -455,6 +459,20 @@ export async function listSummaries(userId) {
      FROM github_repo_summaries WHERE user_id = ? ORDER BY created_at DESC`,
     [userId]
   );
+
+  // Usage map: github_repo_id → [{ id: resume uuid, name }] for this user's
+  // resumes, in one query (grouped in JS below).
+  const usageRows = await database.all(
+    `SELECT p.github_repo_id, br.uuid AS id, br.name
+     FROM projects p JOIN base_resumes br ON br.id = p.resume_id
+     WHERE br.user_id = ? AND p.github_repo_id IS NOT NULL`,
+    [userId]
+  );
+  const inResumesByRepoId = new Map();
+  for (const u of usageRows) {
+    if (!inResumesByRepoId.has(u.github_repo_id)) inResumesByRepoId.set(u.github_repo_id, []);
+    inResumesByRepoId.get(u.github_repo_id).push({ id: u.id, name: u.name });
+  }
 
   // Map repoId → pushedAt from the cached profile (if any) for staleness.
   const pushedAtById = new Map();
@@ -484,6 +502,7 @@ export async function listSummaries(userId) {
       countedFree: Boolean(row.counted_free),
       createdAt: row.created_at,
       stale: cachedPushedAt !== undefined && cachedPushedAt !== row.pushed_at,
+      inResumes: inResumesByRepoId.get(row.repo_id) ?? [],
     };
   });
 }

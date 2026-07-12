@@ -218,6 +218,10 @@ async function createTables() {
   // used by the "missing keywords" panel.
   await database.run(`ALTER TABLE tailored_resumes ADD COLUMN jd_keywords TEXT`).catch(() => {});
 
+  // M2.8 provenance: which GitHub repo an imported project came from (null for
+  // hand-written projects) — powers dedupe, editor badges, and the usage map.
+  await database.run(`ALTER TABLE projects ADD COLUMN github_repo_id TEXT`).catch(() => {});
+
   // Reset any IN_PROGRESS / PENDING rows orphaned by a server restart
   await database.run(
     `UPDATE tailored_resumes SET status='FAILED', error_message='Server restarted during tailoring' WHERE status IN ('PENDING','IN_PROGRESS')`
