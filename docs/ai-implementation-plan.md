@@ -377,6 +377,45 @@ analyzeRepos(userId, repos):
 
 ---
 
+## M2.8 — GitHub project provenance (dedupe + badges + usage map)
+
+**Goal:** track which GitHub repo a project came from so the same repo can't be
+added twice to one resume, imported projects are visibly GitHub-sourced in the
+editor, and the library shows where each project is already used.
+
+### M2.8.1 — Provenance column end-to-end
+- Migration: `projects.github_repo_id TEXT` (idempotent ALTER).
+- `Project.create`/`findByResumeId` persist/return `githubRepoId`; import flows
+  (editor modal + /github add-to-resume) stamp it; hand-written projects keep null.
+- `Resume.update` child-replace dedupes incoming projects by `githubRepoId`
+  (keep first) — server-side guard against double-add.
+
+**Verification**
+- [ ] `githubRepoId` round-trips create → find → update; null for manual projects.
+- [ ] Update payload with two projects sharing a `githubRepoId` persists one.
+
+### M2.8.2 — Usage map in the library
+- `listSummaries` gains `inResumes: [{ id, name }]` via
+  `projects.github_repo_id` ⋈ `base_resumes` (user-scoped).
+- /github library cards show "In: <resume names>"; the add-to-resume picker
+  disables resumes that already contain the repo ("Added").
+
+**Verification**
+- [ ] inResumes lists exactly the user's resumes containing the repo.
+- [ ] Adding to a listed resume is blocked in UI; server dedupe holds regardless.
+
+### M2.8.3 — Editor indicators + modal dedupe
+- Projects form: GitHub icon beside the reorder handle when `githubRepoId` is
+  set (tooltip "Imported from GitHub").
+- Import modal receives the current resume's `githubRepoId`s; matching repos
+  show "in this resume" and can't be selected.
+
+**Verification**
+- [ ] Icon shows only on imported projects; layout unchanged otherwise.
+- [ ] Repos already in the open resume are unselectable in the modal.
+
+---
+
 ## M3 — Tailoring robustness
 
 **Goal:** make tailoring reliable, faster-feeling, and granular.
