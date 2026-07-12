@@ -47,6 +47,21 @@ export type AnalyzeResult = {
   charged: number;
   freeUsed: number;
   freeLeft: number;
+  /** How many stale library entries were re-analyzed for free. */
+  reanalyzed?: number;
+};
+
+/** A stored library entry from a previous repo analysis. */
+export type GithubSummaryEntry = {
+  repoId: string;
+  repoName: string;
+  pushedAt: string;
+  bullets: string[];
+  project: { name: string; description: string[]; url?: string; repoUrl?: string };
+  countedFree: boolean;
+  createdAt: string;
+  /** True when the repo has new pushes since this entry was generated. */
+  stale: boolean;
 };
 
 export type GithubReposResult = {
@@ -77,6 +92,14 @@ export const githubApi = {
     const url = refresh ? '/github/repos?refresh=true' : '/github/repos';
     const response = await api.get<ApiResponse<GithubReposResult>>(url);
     if (!response.data.data) throw new Error('Failed to fetch GitHub repos');
+    return response.data.data;
+  },
+
+  getSummaries: async (): Promise<{ summaries: GithubSummaryEntry[]; freeReposLeft: number }> => {
+    const response = await api.get<
+      ApiResponse<{ summaries: GithubSummaryEntry[]; freeReposLeft: number }>
+    >('/github/summaries');
+    if (!response.data.data) throw new Error('Failed to fetch GitHub summaries');
     return response.data.data;
   },
 
