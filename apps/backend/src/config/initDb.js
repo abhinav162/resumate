@@ -140,6 +140,47 @@ async function createTables() {
     )
   `);
 
+  // M2 GitHub integration — one connection per user; token encrypted at rest.
+  await database.run(`
+    CREATE TABLE IF NOT EXISTS github_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER UNIQUE NOT NULL,
+      github_login TEXT,
+      encrypted_token TEXT NOT NULL,
+      scopes TEXT,
+      connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    )
+  `);
+
+  // Raw GitHub profile payload cache (repos, languages, contributions), TTL-based.
+  await database.run(`
+    CREATE TABLE IF NOT EXISTS github_profiles (
+      user_id INTEGER PRIMARY KEY,
+      data TEXT NOT NULL,
+      fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    )
+  `);
+
+  // Per-repo LLM summaries, cached by (repo_id, pushed_at) so an unchanged repo
+  // never re-invokes the LLM or charges credits. counted_free tracks the
+  // user's free-analysis allowance (GITHUB_FREE_REPOS).
+  await database.run(`
+    CREATE TABLE IF NOT EXISTS github_repo_summaries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      repo_id TEXT NOT NULL,
+      repo_name TEXT,
+      pushed_at TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      counted_free INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, repo_id),
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    )
+  `);
+
   // Webhook idempotency — payment-gateway events we've already processed
   await database.run(`
     CREATE TABLE IF NOT EXISTS processed_payment_events (
@@ -155,6 +196,7 @@ async function createTables() {
   await database.run('CREATE INDEX IF NOT EXISTS idx_education_resume_id ON education(resume_id)');
   await database.run('CREATE INDEX IF NOT EXISTS idx_projects_resume_id ON projects(resume_id)');
   await database.run('CREATE INDEX IF NOT EXISTS idx_tailored_resumes_base_id ON tailored_resumes(base_resume_id)');
+  await database.run('CREATE INDEX IF NOT EXISTS idx_github_repo_summaries_user ON github_repo_summaries(user_id)');
 
   // Migrations — safe to run repeatedly (SQLite ignores duplicate column errors via .catch)
   await database.run(`ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0`).catch(() => {});

@@ -3,7 +3,7 @@ import { useUser } from '@clerk/clerk-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { useCredits } from '../contexts/CreditContext';
+import { useCredits, formatCredits } from '../contexts/CreditContext';
 import { creditsApi, type CreditPack } from '../lib/api';
 import { useCreditPacks, useCreateCheckout } from '../hooks/useCreditsApi';
 import { loadRazorpayCheckout } from '../lib/razorpay';
@@ -105,7 +105,7 @@ export default function CreditsPage() {
         <h1 className="font-heading text-3xl font-bold text-ink-primary">Buy Credits</h1>
         <p className="text-ink-secondary mt-1">
           Current balance:{' '}
-          <span className="font-mono font-semibold">{balance ?? '–'}</span> credits
+          <span className="font-mono font-semibold">{formatCredits(balance)}</span> credits
         </p>
       </div>
 

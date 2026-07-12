@@ -10,6 +10,7 @@ import { requireCredits } from '../middleware/requireCredits.js';
 import { CREDIT_COSTS } from '../config/credits.config.js';
 import { handleValidationErrors } from '../middleware/errorHelpers.js';
 import { contentHash } from '../lib/scoring/hash.js';
+import { buildGithubEvidence } from '../lib/github/evidence.js';
 
 const router = express.Router();
 
@@ -98,6 +99,37 @@ router.post('/score/:resumeId', async (req, res) => {
 });
 
 /**
+ * M2.6 — loads the user's cached GitHub data (profile payload + analyzed repo
+ * summaries) and builds the compact evidence block for the tailor prompt.
+ * Cache-only by design: no GitHub network calls at tailor time. Returns null —
+ * leaving tailoring exactly as before — when the flag is off, the user has no
+ * connection/cache, or anything goes wrong.
+ */
+async function loadGithubEvidence(userId) {
+  if (process.env.GITHUB_TAILOR_EVIDENCE === 'false') return null;
+  try {
+    const profileRow = await database.get(
+      'SELECT data FROM github_profiles WHERE user_id = ?',
+      [userId]
+    );
+    if (!profileRow) return null;
+    const summaryRows = await database.all(
+      'SELECT repo_id, repo_name, summary FROM github_repo_summaries WHERE user_id = ? ORDER BY created_at DESC LIMIT 5',
+      [userId]
+    );
+    const summaries = summaryRows.map((r) => ({
+      repoId: r.repo_id,
+      repoName: r.repo_name,
+      bullets: JSON.parse(r.summary)?.bullets ?? [],
+    }));
+    return buildGithubEvidence(JSON.parse(profileRow.data), summaries);
+  } catch (err) {
+    console.error('Failed to build GitHub evidence (continuing without):', err);
+    return null;
+  }
+}
+
+/**
  * Background worker for tailoring a resume.
  * Updates the tailored_resumes row through PENDING → IN_PROGRESS → COMPLETED/FAILED.
  * Credits are reserved (deducted) at queue time by the route handler — this worker
@@ -110,8 +142,10 @@ async function processTailorJob({ tailoredUuid, resumeData, jobTitle, company, j
       [tailoredUuid]
     );
 
+    const githubEvidence = await loadGithubEvidence(userId);
+
     const { tailoredResume, diff, beforeScore, afterScore, afterBreakdown, jdKeywords } = await tailorResume(
-      resumeData, jobTitle, company, jobDescription
+      resumeData, jobTitle, company, jobDescription, { githubEvidence }
     );
 
     // Persist the after-score breakdown + content hash so an immediate re-score

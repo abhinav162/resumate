@@ -1,4 +1,4 @@
-import { useCredits } from '../../contexts/CreditContext';
+import { useCredits, formatCredits } from '../../contexts/CreditContext';
 import { useNavigate } from 'react-router-dom';
 
 export function CreditCounter() {
@@ -11,7 +11,7 @@ export function CreditCounter() {
       {loading ? (
         <div className="h-7 w-12 bg-paper-border rounded animate-pulse" />
       ) : (
-        <p className="font-mono text-2xl font-semibold text-ink-primary">{balance ?? '–'}</p>
+        <p className="font-mono text-2xl font-semibold text-ink-primary">{formatCredits(balance)}</p>
       )}
       <button
         onClick={() => navigate('/credits')}
