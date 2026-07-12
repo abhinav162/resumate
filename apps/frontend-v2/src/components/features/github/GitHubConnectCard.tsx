@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Github } from 'lucide-react';
 import { Button } from '../../ui/Button';
@@ -89,9 +90,14 @@ export function GitHubConnectCard({ className = '' }: { className?: string }) {
           </Button>
         )}
       </div>
-      <p className="text-xs text-ink-muted">
-        {status.freeReposLeft} free repo {status.freeReposLeft === 1 ? 'analysis' : 'analyses'} left
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-ink-muted">
+          {status.freeReposLeft} free repo {status.freeReposLeft === 1 ? 'analysis' : 'analyses'} left
+        </p>
+        <Link to="/github" className="text-xs text-indigo-600 font-medium hover:text-indigo-700">
+          Manage projects →
+        </Link>
+      </div>
     </Card>
   );
 }

@@ -360,40 +360,48 @@ Rules:
 }
 
 /**
- * Analyzes a user-selected set of repos, applying the pricing model:
- * cached (unchanged) repos are always free; fresh repos consume the
- * GITHUB_FREE_REPOS allowance first, then cost CREDIT_COSTS.GITHUB_REPO each.
+ * Analyzes a user-selected set of repos, applying the pricing model (M2.7.1):
+ * - NEW repos (no github_repo_summaries row at all) are the only chargeable
+ *   set: they consume the GITHUB_FREE_REPOS allowance first, then cost
+ *   CREDIT_COSTS.GITHUB_REPO each.
+ * - CHANGED repos (row exists but pushed_at differs) re-run the LLM but are
+ *   FREE for now — no charge, no free-slot consumption, and the row's
+ *   counted_free flag is preserved by the summarizeRepo UPSERT. (A pricing
+ *   hook for re-analysis may be added later.)
+ * - Unchanged repos are served from the cache: free, no LLM.
  * Credits are deducted up-front, BEFORE any LLM call.
  *
  * @param {number} userId
  * @param {object[]} repos normalized repo objects the user selected
- * @returns {Promise<{ summaries: object[], charged: number, freeUsed: number, freeLeft: number }>}
+ * @returns {Promise<{ summaries: object[], charged: number, freeUsed: number, freeLeft: number, reanalyzed: number }>}
  */
 export async function analyzeRepos(userId, repos) {
   const token = await getToken(userId);
   if (!token) throw notConnectedError();
 
-  // A repo is "fresh" (needs an LLM call) when it has no summary row or the
-  // repo has been pushed to since it was last summarized.
-  const freshIds = new Set();
+  // Classify: "new" = no summary row at all (chargeable set); "changed" =
+  // row exists but the repo was pushed to since (re-analyzed for free).
+  const newIds = new Set();
+  const changedIds = new Set();
   for (const repo of repos) {
     const row = await database.get(
       'SELECT pushed_at FROM github_repo_summaries WHERE user_id = ? AND repo_id = ?',
       [userId, repo.id]
     );
-    if (!row || row.pushed_at !== repo.pushedAt) freshIds.add(repo.id);
+    if (!row) newIds.add(repo.id);
+    else if (row.pushed_at !== repo.pushedAt) changedIds.add(repo.id);
   }
 
-  // Pricing: free allowance first, then per-repo credits. Round to cents to
-  // avoid floating-point dust (e.g. 3 * 0.2).
+  // Pricing (new repos only): free allowance first, then per-repo credits.
+  // Round to cents to avoid floating-point dust (e.g. 3 * 0.2).
   const freeRow = await database.get(
     'SELECT COUNT(*) AS n FROM github_repo_summaries WHERE user_id = ? AND counted_free = 1',
     [userId]
   );
   const alreadyFree = Number(freeRow?.n ?? 0);
   const freeLeft = Math.max(0, GITHUB_FREE_REPOS - alreadyFree);
-  const freeNow = Math.min(freeLeft, freshIds.size);
-  const chargeable = freshIds.size - freeNow;
+  const freeNow = Math.min(freeLeft, newIds.size);
+  const chargeable = newIds.size - freeNow;
   const cost = Math.round(chargeable * CREDIT_COSTS.GITHUB_REPO * 100) / 100;
 
   // Charge BEFORE any LLM call; INSUFFICIENT_CREDITS propagates to the caller.
@@ -401,13 +409,14 @@ export async function analyzeRepos(userId, repos) {
     await deductCredits(userId, cost);
   }
 
-  // Summarize sequentially (cached repos hit the cache); mark the first
-  // freeNow fresh summaries as consuming the free allowance.
+  // Summarize sequentially (unchanged repos hit the cache, changed repos
+  // re-run the LLM for free); mark the first freeNow NEW summaries as
+  // consuming the free allowance — changed repos never flip counted_free.
   const summaries = [];
   let freeMarked = 0;
   for (const repo of repos) {
     const summary = await summarizeRepo(userId, repo, token);
-    if (freshIds.has(repo.id) && freeMarked < freeNow) {
+    if (newIds.has(repo.id) && freeMarked < freeNow) {
       await database.run(
         'UPDATE github_repo_summaries SET counted_free = 1 WHERE user_id = ? AND repo_id = ?',
         [userId, repo.id]
@@ -417,5 +426,64 @@ export async function analyzeRepos(userId, repos) {
     summaries.push({ repoId: repo.id, repoName: repo.name, ...summary });
   }
 
-  return { summaries, charged: cost, freeUsed: freeNow, freeLeft: freeLeft - freeNow };
+  return {
+    summaries,
+    charged: cost,
+    freeUsed: freeNow,
+    freeLeft: freeLeft - freeNow,
+    reanalyzed: changedIds.size,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Project library (M2.7.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lists the user's stored repo summaries (project library). Pure DB read —
+ * no network, no LLM. `stale` is true when the cached GitHub profile shows a
+ * newer pushed_at for the repo than the one the summary was generated from;
+ * without a profile cache (or when the repo is absent from it) stale is false.
+ *
+ * @param {number} userId
+ * @returns {Promise<Array<{ repoId: string, repoName: string|null, pushedAt: string,
+ *   bullets: string[], project: object, countedFree: boolean, createdAt: string, stale: boolean }>>}
+ */
+export async function listSummaries(userId) {
+  const rows = await database.all(
+    `SELECT repo_id, repo_name, pushed_at, summary, counted_free, created_at
+     FROM github_repo_summaries WHERE user_id = ? ORDER BY created_at DESC`,
+    [userId]
+  );
+
+  // Map repoId → pushedAt from the cached profile (if any) for staleness.
+  const pushedAtById = new Map();
+  const profileRow = await database.get(
+    'SELECT data FROM github_profiles WHERE user_id = ?',
+    [userId]
+  );
+  if (profileRow) {
+    try {
+      for (const repo of JSON.parse(profileRow.data)?.repos ?? []) {
+        pushedAtById.set(repo.id, repo.pushedAt);
+      }
+    } catch {
+      // Corrupt profile cache → treat as absent (stale: false everywhere).
+    }
+  }
+
+  return rows.map((row) => {
+    const parsed = JSON.parse(row.summary) ?? {};
+    const cachedPushedAt = pushedAtById.get(row.repo_id);
+    return {
+      repoId: row.repo_id,
+      repoName: row.repo_name,
+      pushedAt: row.pushed_at,
+      bullets: parsed.bullets ?? [],
+      project: parsed.project ?? {},
+      countedFree: Boolean(row.counted_free),
+      createdAt: row.created_at,
+      stale: cachedPushedAt !== undefined && cachedPushedAt !== row.pushed_at,
+    };
+  });
 }

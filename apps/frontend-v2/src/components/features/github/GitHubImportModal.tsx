@@ -2,12 +2,11 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { ArrowLeft, Github, Star, X } from 'lucide-react';
+import { ArrowLeft, Github, X } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { githubApi, type RepoSummary } from '../../../lib/githubApi';
-
-const CREDIT_COST_PER_REPO = 0.2;
+import { RepoPickerList, RepoPricingSummary } from './RepoPickerList';
 
 export type ImportedProject = {
   name: string;
@@ -15,16 +14,6 @@ export type ImportedProject = {
   repoUrl?: string;
   description: string[];
 };
-
-/** Compact relative time for a repo's last push (e.g. "3d ago"). */
-function timeAgo(iso: string): string {
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (days < 1) return 'today';
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
-}
 
 /**
  * Modal that walks the user through importing GitHub repos as resume projects.
@@ -79,6 +68,14 @@ function ModalContent({
     enabled: connected,
   });
 
+  // Library entries power the fast-path (cached-only selections skip the
+  // analyze call) and the pricing rule that any library repo is free.
+  const { data: library } = useQuery({
+    queryKey: ['github', 'summaries'],
+    queryFn: githubApi.getSummaries,
+    enabled: connected,
+  });
+
   const analyze = useMutation({
     mutationFn: githubApi.analyzeRepos,
     onSuccess: (result) => {
@@ -110,18 +107,42 @@ function ModalContent({
   const importable = repos?.importable ?? [];
   const freeReposLeft = repos?.freeReposLeft ?? status?.freeReposLeft ?? 0;
 
-  // Price meter: cached repos are always free; among the rest, the first
-  // `freeReposLeft` picks (in selection order) are free, the others are paid.
-  const analyzedIds = new Set(importable.filter((r) => r.analyzed).map((r) => r.id));
-  const billableIds = selectedIds.filter((id) => !analyzedIds.has(id));
-  const freeCount = Math.min(billableIds.length, freeReposLeft) + (selectedIds.length - billableIds.length);
-  const paidCount = billableIds.length - Math.min(billableIds.length, freeReposLeft);
-  const totalCost = (paidCount * CREDIT_COST_PER_REPO).toFixed(1);
+  // Free set: repos flagged analyzed by the repos endpoint plus anything with
+  // a library entry (stale or not — re-analysis is free). Only never-analyzed
+  // repos are chargeable.
+  const libraryEntries = library?.summaries ?? [];
+  const freeRepoIds = new Set([
+    ...importable.filter((r) => r.analyzed).map((r) => r.id),
+    ...libraryEntries.map((s) => s.repoId),
+  ]);
 
-  /** Price label for a selected, non-cached repo based on its pick order. */
-  const priceLabel = (repoId: string): string => {
-    const billableIndex = billableIds.indexOf(repoId);
-    return billableIndex < freeReposLeft ? 'free' : `${CREDIT_COST_PER_REPO} cr`;
+  // Fast-path: every selected repo has a fresh (non-stale) library entry, so
+  // the preview can be built from cache with zero LLM calls and no charge.
+  const entryByRepoId = new Map(libraryEntries.map((s) => [s.repoId, s]));
+  const allCached =
+    selectedIds.length > 0 &&
+    selectedIds.every((id) => {
+      const entry = entryByRepoId.get(id);
+      return entry !== undefined && !entry.stale;
+    });
+
+  const useCachedBullets = () => {
+    const cached: RepoSummary[] = selectedIds.flatMap((id) => {
+      const entry = entryByRepoId.get(id);
+      if (!entry) return [];
+      return [
+        {
+          repoId: entry.repoId,
+          repoName: entry.repoName,
+          cached: true,
+          bullets: entry.bullets,
+          project: entry.project,
+        },
+      ];
+    });
+    setSummaries(cached);
+    setCheckedRepoIds(new Set(cached.map((s) => s.repoId)));
+    setStep('preview');
   };
 
   const toggleSelected = (repoId: string) => {
@@ -222,53 +243,13 @@ function ModalContent({
               )}
 
               {connected && !reposLoading && !reposError && (
-                <ul className="space-y-2">
-                  {importable.map((repo) => {
-                    const selected = selectedIds.includes(repo.id);
-                    return (
-                      <li key={repo.id}>
-                        <label
-                          className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                            selected
-                              ? 'border-indigo-400 bg-indigo-50'
-                              : 'border-paper-border hover:border-paper-border-strong'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            onChange={() => toggleSelected(repo.id)}
-                            className="mt-1 accent-indigo-600"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm text-ink-primary truncate">{repo.name}</span>
-                              {repo.analyzed ? (
-                                <Badge variant="success">cached · free</Badge>
-                              ) : (
-                                selected && <Badge variant="indigo">{priceLabel(repo.id)}</Badge>
-                              )}
-                            </div>
-                            {repo.description && (
-                              <p className="text-xs text-ink-secondary truncate mt-0.5">{repo.description}</p>
-                            )}
-                            <div className="flex items-center gap-3 mt-1.5 text-xs text-ink-muted">
-                              <span className="inline-flex items-center gap-1">
-                                <Star size={11} />
-                                {repo.stars}
-                              </span>
-                              {repo.primaryLanguage && <Badge>{repo.primaryLanguage}</Badge>}
-                              <span>pushed {timeAgo(repo.pushedAt)}</span>
-                            </div>
-                          </div>
-                        </label>
-                      </li>
-                    );
-                  })}
-                  {importable.length === 0 && (
-                    <p className="py-12 text-center text-sm text-ink-muted">No importable repositories found.</p>
-                  )}
-                </ul>
+                <RepoPickerList
+                  repos={importable}
+                  selectedIds={selectedIds}
+                  onToggle={toggleSelected}
+                  freeRepoIds={freeRepoIds}
+                  freeReposLeft={freeReposLeft}
+                />
               )}
             </>
           )}
@@ -320,18 +301,25 @@ function ModalContent({
 
           {step === 'pick' ? (
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-ink-muted">
-                {selectedIds.length} selected · {freeCount} free
-                {paidCount > 0 && ` · ${paidCount} × ${CREDIT_COST_PER_REPO} = ${totalCost} credits`}
-              </p>
-              <Button
-                size="sm"
-                disabled={selectedIds.length === 0}
-                loading={analyze.isPending}
-                onClick={() => analyze.mutate(selectedIds)}
-              >
-                Analyze {selectedIds.length} {selectedIds.length === 1 ? 'repo' : 'repos'}
-              </Button>
+              <RepoPricingSummary
+                selectedIds={selectedIds}
+                freeRepoIds={freeRepoIds}
+                freeReposLeft={freeReposLeft}
+              />
+              {allCached ? (
+                <Button size="sm" onClick={useCachedBullets}>
+                  Use cached bullets
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  disabled={selectedIds.length === 0}
+                  loading={analyze.isPending}
+                  onClick={() => analyze.mutate(selectedIds)}
+                >
+                  Analyze {selectedIds.length} {selectedIds.length === 1 ? 'repo' : 'repos'}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="flex items-center justify-between gap-3">

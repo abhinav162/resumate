@@ -10,6 +10,7 @@ import {
   deleteConnection,
   fetchGithubProfile,
   analyzeRepos,
+  listSummaries,
 } from '../services/githubService.js';
 
 const router = express.Router();
@@ -203,9 +204,27 @@ router.get('/repos', requireUser, async (req, res) => {
   }
 });
 
+// GET /api/github/summaries — the user's analyzed-repo library (M2.7). Pure DB
+// read: stored bullets/project drafts plus a `stale` flag when the cached
+// profile shows the repo has been pushed since analysis.
+router.get('/summaries', requireUser, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        summaries: await listSummaries(req.user.id),
+        freeReposLeft: await freeReposLeft(req.user.id),
+      },
+    });
+  } catch (error) {
+    sendGithubError(res, error);
+  }
+});
+
 // POST /api/github/analyze { repoIds: [] } — summarize selected repos into
-// resume-ready bullets. First GITHUB_FREE_REPOS user-selected repos are free,
-// then CREDIT_COSTS.GITHUB_REPO per fresh repo; cache hits are always free.
+// resume-ready bullets. First GITHUB_FREE_REPOS never-analyzed repos are free,
+// then CREDIT_COSTS.GITHUB_REPO each. Cache hits and re-analysis of changed
+// repos are free (M2.7 — re-analysis pricing may come later).
 router.post('/analyze', requireUser, async (req, res) => {
   try {
     const { repoIds } = req.body ?? {};
