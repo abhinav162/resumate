@@ -613,6 +613,61 @@ describe('githubService', () => {
       assert.equal(entry.stale, false);
     });
 
+    // M2.8.2 — usage map: which of the user's resumes already contain the repo.
+    /** Seeds a base resume + a project row optionally stamped with a github_repo_id. */
+    async function seedResumeWithProject(userId, resumeName, githubRepoId) {
+      const resumeUuid = crypto.randomUUID();
+      const res = await database.run(
+        `INSERT INTO base_resumes (uuid, user_id, name, contact_data, skills, is_base)
+         VALUES (?, ?, ?, '{}', '[]', 1)`,
+        [resumeUuid, userId, resumeName]
+      );
+      await database.run(
+        `INSERT INTO projects (uuid, resume_id, name, description, github_repo_id)
+         VALUES (?, ?, 'proj', '[]', ?)`,
+        [crypto.randomUUID(), res.id, githubRepoId ?? null]
+      );
+      return resumeUuid;
+    }
+
+    it('inResumes lists the resume uuid+name containing a project stamped with the repo', async () => {
+      const userId = await createUser(5);
+      await connect(userId);
+      await analyzeRepos(userId, [makeRepo(1)]);
+      const resumeUuid = await seedResumeWithProject(userId, 'My Base Resume', 'R_repo_1');
+
+      const [entry] = await listSummaries(userId);
+      assert.deepEqual(entry.inResumes, [{ id: resumeUuid, name: 'My Base Resume' }]);
+    });
+
+    it('inResumes is an empty array when no resume uses the repo', async () => {
+      const userId = await createUser(5);
+      await connect(userId);
+      await analyzeRepos(userId, [makeRepo(1)]);
+      // A resume with only a manual (null github_repo_id) project must not count.
+      await seedResumeWithProject(userId, 'Manual Only', null);
+
+      const [entry] = await listSummaries(userId);
+      assert.deepEqual(entry.inResumes, []);
+    });
+
+    it("inResumes never includes another user's resumes", async () => {
+      const userA = await createUser(5);
+      const userB = await createUser(5);
+      await connect(userA);
+      await connect(userB);
+      await analyzeRepos(userA, [makeRepo(1)]);
+      await analyzeRepos(userB, [makeRepo(1)]);
+
+      const aResume = await seedResumeWithProject(userA, 'A resume', 'R_repo_1');
+      await seedResumeWithProject(userB, 'B resume', 'R_repo_1');
+
+      const [aEntry] = await listSummaries(userA);
+      assert.deepEqual(aEntry.inResumes, [{ id: aResume, name: 'A resume' }]);
+      const [bEntry] = await listSummaries(userB);
+      assert.deepEqual(bEntry.inResumes.map((r) => r.name), ['B resume']);
+    });
+
     it('returns only the requesting user rows', async () => {
       const userA = await createUser(5);
       const userB = await createUser(5);
