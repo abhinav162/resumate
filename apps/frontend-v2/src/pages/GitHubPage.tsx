@@ -8,6 +8,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { GitHubConnectCard } from '../components/features/github/GitHubConnectCard';
+import { PrivateRepoToggle } from '../components/features/github/PrivateRepoToggle';
 import {
   RepoPickerList,
   RepoPricingSummary,
@@ -161,6 +162,8 @@ export default function GitHubPage() {
                 Refresh
               </Button>
             </div>
+
+            {status && <PrivateRepoToggle status={status} />}
 
             {reposLoading && (
               <div className="space-y-2">
