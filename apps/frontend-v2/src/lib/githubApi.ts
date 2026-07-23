@@ -32,6 +32,10 @@ export type GithubStatus = {
   connected: boolean;
   login: string | null;
   freeReposLeft: number;
+  /** Whether private repos are included in listings (user opt-in). */
+  includePrivate: boolean;
+  /** GitHub App slug for the "grant repo access" install deep-link, if configured. */
+  appSlug: string | null;
 };
 
 export type RepoSummary = {
@@ -88,6 +92,10 @@ export const githubApi = {
 
   disconnect: async (): Promise<void> => {
     await api.post('/github/disconnect');
+  },
+
+  setPreferences: async (includePrivate: boolean): Promise<void> => {
+    await api.post('/github/preferences', { includePrivate });
   },
 
   getRepos: async (refresh?: boolean): Promise<GithubReposResult> => {

@@ -5,6 +5,7 @@ import { Github } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
 import { githubApi } from '../../../lib/githubApi';
+import { PrivateRepoToggle } from './PrivateRepoToggle';
 
 /**
  * Dashboard card for the GitHub integration.
@@ -98,6 +99,7 @@ export function GitHubConnectCard({ className = '' }: { className?: string }) {
           Manage projects →
         </Link>
       </div>
+      <PrivateRepoToggle status={status} />
     </Card>
   );
 }

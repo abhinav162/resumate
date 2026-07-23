@@ -24,9 +24,16 @@ const README_EXCERPT_CHARS = 3000;
 const MAX_BULLET_CHARS = 280;
 const MAX_BULLETS = 4;
 
+// Refresh the access token when it expires within this window, so a token
+// can't die between the check and the API calls that follow it.
+const TOKEN_EXPIRY_SKEW_MS = 5 * 60 * 1000;
+
 // GraphQL query: viewer identity + contribution counts + 100 most recently
 // pushed repos (owned or collaborated on) with language byte breakdown.
-const PROFILE_QUERY = `query {
+// Private repos are excluded at the query level unless the user opted in
+// (M2.9.2) — the explicit privacy filter keeps the default flow public-only
+// even when the app installation could see more.
+const profileQuery = (includePrivate) => `query {
   viewer {
     login
     contributionsCollection {
@@ -35,7 +42,7 @@ const PROFILE_QUERY = `query {
       totalPullRequestReviewContributions
       totalIssueContributions
     }
-    repositories(first: 100, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: [OWNER, COLLABORATOR]) {
+    repositories(first: 100, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: [OWNER, COLLABORATOR]${includePrivate ? '' : ', privacy: PUBLIC'}) {
       nodes {
         id
         name
@@ -61,23 +68,38 @@ const PROFILE_QUERY = `query {
 // ---------------------------------------------------------------------------
 
 /**
- * Stores (or replaces) a user's GitHub connection. The token is encrypted at
- * rest; reconnecting overwrites the previous token/login/scopes.
+ * Stores (or replaces) a user's GitHub connection. Both tokens are encrypted
+ * at rest; reconnecting overwrites the previous tokens/login/scopes but
+ * PRESERVES the include_private preference.
+ *
+ * Expiry fields are absolute ISO timestamps (null = non-expiring token, i.e.
+ * the app has "Expire user authorization tokens" disabled).
  *
  * @param {number} userId
- * @param {{ token: string, login: string, scopes?: string }} connection
+ * @param {{ token: string, login: string, scopes?: string,
+ *   refreshToken?: string|null, tokenExpiresAt?: string|null,
+ *   refreshTokenExpiresAt?: string|null }} connection
  */
-export async function saveConnection(userId, { token, login, scopes }) {
+export async function saveConnection(
+  userId,
+  { token, login, scopes, refreshToken = null, tokenExpiresAt = null, refreshTokenExpiresAt = null }
+) {
   const encrypted = encryptToken(token);
+  const encryptedRefresh = refreshToken ? encryptToken(refreshToken) : null;
   await database.run(
-    `INSERT INTO github_connections (user_id, github_login, encrypted_token, scopes, connected_at)
-     VALUES (?, ?, ?, ?, datetime('now'))
+    `INSERT INTO github_connections
+       (user_id, github_login, encrypted_token, scopes, encrypted_refresh_token,
+        token_expires_at, refresh_token_expires_at, connected_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(user_id) DO UPDATE SET
        github_login = excluded.github_login,
        encrypted_token = excluded.encrypted_token,
        scopes = excluded.scopes,
+       encrypted_refresh_token = excluded.encrypted_refresh_token,
+       token_expires_at = excluded.token_expires_at,
+       refresh_token_expires_at = excluded.refresh_token_expires_at,
        connected_at = excluded.connected_at`,
-    [userId, login, encrypted, scopes ?? null]
+    [userId, login, encrypted, scopes ?? null, encryptedRefresh, tokenExpiresAt, refreshTokenExpiresAt]
   );
 }
 
@@ -90,11 +112,16 @@ export async function saveConnection(userId, { token, login, scopes }) {
  */
 export async function getConnection(userId) {
   const row = await database.get(
-    'SELECT github_login, scopes, connected_at FROM github_connections WHERE user_id = ?',
+    'SELECT github_login, scopes, connected_at, include_private FROM github_connections WHERE user_id = ?',
     [userId]
   );
   if (!row) return null;
-  return { login: row.github_login, scopes: row.scopes, connectedAt: row.connected_at };
+  return {
+    login: row.github_login,
+    scopes: row.scopes,
+    connectedAt: row.connected_at,
+    includePrivate: Boolean(row.include_private),
+  };
 }
 
 /**
@@ -111,6 +138,122 @@ export async function getToken(userId) {
   );
   if (!row) return null;
   return decryptToken(row.encrypted_token);
+}
+
+/** Builds the typed error that sends the frontend into the reconnect flow. */
+function reconnectError() {
+  const e = new Error('GitHub token expired or revoked — please reconnect');
+  e.code = 'GITHUB_RECONNECT';
+  e.status = 401;
+  return e;
+}
+
+/**
+ * Exchanges the stored refresh token for a fresh access token and persists the
+ * rotated pair (GitHub rotates the refresh token on every use). Throws
+ * GITHUB_RECONNECT when there is no refresh token, it has expired, or GitHub
+ * rejects it — all cases where only a full re-connect can help.
+ *
+ * @param {number} userId
+ * @param {{ encrypted_refresh_token: string|null, refresh_token_expires_at: string|null }} row
+ * @returns {Promise<string>} fresh plaintext access token
+ */
+async function refreshAccessToken(userId, row) {
+  if (!row?.encrypted_refresh_token) throw reconnectError();
+  const refreshExpiry = row.refresh_token_expires_at ? Date.parse(row.refresh_token_expires_at) : NaN;
+  if (Number.isFinite(refreshExpiry) && refreshExpiry <= Date.now()) throw reconnectError();
+
+  const response = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      client_id: process.env.GITHUB_CLIENT_ID,
+      client_secret: process.env.GITHUB_CLIENT_SECRET,
+      grant_type: 'refresh_token',
+      refresh_token: decryptToken(row.encrypted_refresh_token),
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.access_token) throw reconnectError();
+
+  const now = Date.now();
+  await database.run(
+    `UPDATE github_connections SET
+       encrypted_token = ?,
+       encrypted_refresh_token = ?,
+       token_expires_at = ?,
+       refresh_token_expires_at = ?
+     WHERE user_id = ?`,
+    [
+      encryptToken(data.access_token),
+      data.refresh_token ? encryptToken(data.refresh_token) : row.encrypted_refresh_token,
+      data.expires_in ? new Date(now + data.expires_in * 1000).toISOString() : null,
+      data.refresh_token_expires_in
+        ? new Date(now + data.refresh_token_expires_in * 1000).toISOString()
+        : row.refresh_token_expires_at,
+      userId,
+    ]
+  );
+  return data.access_token;
+}
+
+/** Reads the full token row for refresh decisions. */
+function getTokenRow(userId) {
+  return database.get(
+    `SELECT encrypted_token, encrypted_refresh_token, token_expires_at, refresh_token_expires_at
+     FROM github_connections WHERE user_id = ?`,
+    [userId]
+  );
+}
+
+/**
+ * Returns a currently-valid access token, refreshing it first when it is
+ * expired or about to expire (within TOKEN_EXPIRY_SKEW_MS). Tokens without an
+ * expiry (app setting disabled, or legacy rows) are returned as-is. Null when
+ * not connected; GITHUB_RECONNECT when a needed refresh is impossible.
+ *
+ * @param {number} userId
+ * @returns {Promise<string|null>}
+ */
+export async function getValidToken(userId) {
+  const row = await getTokenRow(userId);
+  if (!row) return null;
+  const expiresAt = row.token_expires_at ? Date.parse(row.token_expires_at) : NaN;
+  if (Number.isFinite(expiresAt) && expiresAt - Date.now() <= TOKEN_EXPIRY_SKEW_MS) {
+    return refreshAccessToken(userId, row);
+  }
+  return decryptToken(row.encrypted_token);
+}
+
+/**
+ * Forces a token refresh regardless of the stored expiry — used after a live
+ * 401, which proves the current token is dead no matter what the row says
+ * (revocation, clock skew, legacy rows without expiry metadata).
+ *
+ * @param {number} userId
+ * @returns {Promise<string>} fresh plaintext access token
+ */
+async function forceRefreshToken(userId) {
+  const row = await getTokenRow(userId);
+  if (!row) throw notConnectedError();
+  return refreshAccessToken(userId, row);
+}
+
+/**
+ * Persists the user's private-repo listing preference and invalidates the
+ * cached profile so the next listing reflects it immediately.
+ *
+ * @param {number} userId
+ * @param {boolean} includePrivate
+ */
+export async function setIncludePrivate(userId, includePrivate) {
+  const conn = await getConnection(userId);
+  if (!conn) throw notConnectedError();
+  await database.run(
+    'UPDATE github_connections SET include_private = ? WHERE user_id = ?',
+    [includePrivate ? 1 : 0, userId]
+  );
+  await database.run('DELETE FROM github_profiles WHERE user_id = ?', [userId]);
 }
 
 /**
@@ -158,24 +301,32 @@ export async function fetchGithubProfile(userId, { refresh = false } = {}) {
     }
   }
 
-  const token = await getToken(userId);
+  const conn = await getConnection(userId);
+  if (!conn) throw notConnectedError();
+  const includePrivate = conn.includePrivate;
+
+  const token = await getValidToken(userId);
   if (!token) throw notConnectedError();
 
-  const response = await fetch(GITHUB_GRAPHQL_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ query: PROFILE_QUERY }),
-  });
+  const query = profileQuery(includePrivate);
+  const graphql = (bearer) =>
+    fetch(GITHUB_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${bearer}`,
+      },
+      body: JSON.stringify({ query }),
+    });
 
-  // 401 = token revoked/expired. Surface a reconnect state instead of crashing.
+  let response = await graphql(token);
+
+  // A live 401 means the token is dead even if the stored expiry disagreed
+  // (revoked, or a legacy row without expiry metadata) — force one refresh and
+  // retry before surfacing the reconnect state.
   if (response.status === 401) {
-    const e = new Error('GitHub token is no longer valid — please reconnect');
-    e.code = 'GITHUB_RECONNECT';
-    e.status = 401;
-    throw e;
+    response = await graphql(await forceRefreshToken(userId));
+    if (response.status === 401) throw reconnectError();
   }
   if (!response.ok) {
     const bodyText = await response.text().catch(() => '');
@@ -199,7 +350,11 @@ export async function fetchGithubProfile(userId, { refresh = false } = {}) {
       reviews: contrib.totalPullRequestReviewContributions ?? 0,
       issues: contrib.totalIssueContributions ?? 0,
     },
-    repos: (viewer.repositories?.nodes ?? []).map((node) => ({
+    // Defense-in-depth: the query already filters privacy, but a public-only
+    // user must never see private repos even if GitHub returns them.
+    repos: (viewer.repositories?.nodes ?? [])
+      .filter((node) => includePrivate || !node.isPrivate)
+      .map((node) => ({
       id: node.id,
       name: node.name,
       nameWithOwner: node.nameWithOwner,
@@ -376,7 +531,7 @@ Rules:
  * @returns {Promise<{ summaries: object[], charged: number, freeUsed: number, freeLeft: number, reanalyzed: number }>}
  */
 export async function analyzeRepos(userId, repos) {
-  const token = await getToken(userId);
+  const token = await getValidToken(userId);
   if (!token) throw notConnectedError();
 
   // Classify: "new" = no summary row at all (chargeable set); "changed" =

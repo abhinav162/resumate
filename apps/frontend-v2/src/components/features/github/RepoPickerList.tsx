@@ -1,4 +1,4 @@
-import { Star } from 'lucide-react';
+import { Lock, Star } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
 import type { GithubRepo } from '../../../lib/githubApi';
 import { CREDIT_COST_PER_REPO, computeRepoPricing, timeAgo } from './repoPricing';
@@ -56,6 +56,14 @@ export function RepoPickerList({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm text-ink-primary truncate">{repo.name}</span>
+                  {repo.isPrivate && (
+                    <Badge>
+                      <span className="inline-flex items-center gap-1">
+                        <Lock size={10} />
+                        Private
+                      </span>
+                    </Badge>
+                  )}
                   {disabled ? (
                     <Badge>{disabledTag}</Badge>
                   ) : freeRepoIds.has(repo.id) ? (

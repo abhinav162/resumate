@@ -222,6 +222,17 @@ async function createTables() {
   // hand-written projects) — powers dedupe, editor badges, and the usage map.
   await database.run(`ALTER TABLE projects ADD COLUMN github_repo_id TEXT`).catch(() => {});
 
+  // M2.9.1 token refresh: GitHub App user tokens expire after 8h when the app
+  // has "Expire user authorization tokens" enabled; we store the (encrypted)
+  // refresh token + absolute expiries so getValidToken can rotate silently.
+  await database.run(`ALTER TABLE github_connections ADD COLUMN encrypted_refresh_token TEXT`).catch(() => {});
+  await database.run(`ALTER TABLE github_connections ADD COLUMN token_expires_at TEXT`).catch(() => {});
+  await database.run(`ALTER TABLE github_connections ADD COLUMN refresh_token_expires_at TEXT`).catch(() => {});
+
+  // M2.9.2 private repos: off by default — public-only listing stays the
+  // baseline flow until the user opts in.
+  await database.run(`ALTER TABLE github_connections ADD COLUMN include_private INTEGER NOT NULL DEFAULT 0`).catch(() => {});
+
   // Reset any IN_PROGRESS / PENDING rows orphaned by a server restart
   await database.run(
     `UPDATE tailored_resumes SET status='FAILED', error_message='Server restarted during tailoring' WHERE status IN ('PENDING','IN_PROGRESS')`

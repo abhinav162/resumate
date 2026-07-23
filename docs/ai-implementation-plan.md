@@ -37,6 +37,8 @@ These are the integration points every milestone builds on:
 | **M1** | Scoring quick wins (rubric + JD keyword coverage + cache) | — | Low |
 | **M2** | GitHub integration MVP | M1 (keyword infra reused) | Med |
 | **M2.7** | GitHub project library (standalone analysis + add-to-resume) | M2 | Low |
+| **M2.8** | GitHub project provenance (dedupe + badges + usage map) | M2.7 | Low |
+| **M2.9** | GitHub token refresh + private repo opt-in | M2 | Low |
 | **M3** | Tailoring robustness (schema validation, streaming, section re-tailor) | M1 | Med |
 | **M4** | Bigger bets (ATS simulation, embeddings match, eval harness) | M1–M3 | High |
 | **M5** | LinkedIn export parsing | M2 patterns | Med |
@@ -413,6 +415,51 @@ editor, and the library shows where each project is already used.
 **Verification**
 - [ ] Icon shows only on imported projects; layout unchanged otherwise.
 - [ ] Repos already in the open resume are unselectable in the modal.
+
+---
+
+## M2.9 — GitHub token refresh + private repo opt-in
+
+**Goal:** stop the forced re-connect every 8 hours (GitHub App user tokens
+expire when "Expire user authorization tokens" is enabled) and let users opt
+into listing private repositories — public-only stays the default flow.
+
+### M2.9.1 — Token refresh
+- `github_connections` gains `encrypted_refresh_token`, `token_expires_at`,
+  `refresh_token_expires_at` (idempotent ALTERs). Both tokens AES-256-GCM
+  encrypted at rest.
+- OAuth callback stores the full token response (`refresh_token`,
+  `expires_in`, `refresh_token_expires_in` → absolute ISO expiries).
+- `getValidToken(userId)`: refreshes proactively when the access token is
+  within 5 min of expiry (`grant_type=refresh_token`), persists the rotated
+  pair (GitHub rotates the refresh token on every use). Legacy rows without
+  expiry metadata are returned as-is.
+- Reactive fallback: a live GraphQL 401 forces one refresh-and-retry before
+  surfacing `GITHUB_RECONNECT`. Refresh impossible/rejected → `GITHUB_RECONNECT`
+  (one final re-connect for pre-M2.9 connections, then self-healing).
+
+**Verification**
+- [x] Expired/near-expiry token → one refresh call, rotated pair persisted.
+- [x] Expired with no refresh token, or refresh rejected → `GITHUB_RECONNECT`.
+- [x] Live 401 with valid-looking expiry → refresh + retry succeeds.
+
+### M2.9.2 — Private repo opt-in
+- `github_connections.include_private` (default 0). `POST
+  /api/github/preferences { includePrivate }` toggles it and clears the
+  profile cache; reconnect preserves the preference.
+- GraphQL repositories query adds `privacy: PUBLIC` unless opted in, plus a
+  server-side `isPrivate` post-filter as defense-in-depth.
+- `/status` returns `includePrivate` + `appSlug` (new `GITHUB_APP_SLUG` env);
+  UI checkbox on the connect card and /github page with a
+  `github.com/apps/<slug>/installations/new` "grant repo access" link —
+  private repos only appear once the app is installed on the account (app
+  needs Contents: Read-only permission).
+- Repo picker rows show a "Private" lock badge.
+
+**Verification**
+- [x] Default flow: query carries `privacy: PUBLIC`, private repos filtered.
+- [x] Opt-in: filter dropped, private repos listed; toggle invalidates cache.
+- [x] Preference survives reconnect; toggle without connection → 400.
 
 ---
 

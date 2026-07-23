@@ -7,6 +7,8 @@ import {
   saveConnection,
   getConnection,
   getToken,
+  getValidToken,
+  setIncludePrivate,
   deleteConnection,
   fetchGithubProfile,
   summarizeRepo,
@@ -99,11 +101,27 @@ const DEFAULT_LLM_SUMMARY = {
 
 function installFetchMock(overrides = {}) {
   fetchCalls = [];
+  let graphqlFailedOnce = false;
   global.fetch = async (url, init = {}) => {
     const u = String(url);
     fetchCalls.push({ url: u, init });
 
+    if (u === 'https://github.com/login/oauth/access_token') {
+      return mockResponse(200, {
+        json: overrides.refreshResponse ?? {
+          access_token: 'ghp_refreshed',
+          refresh_token: 'ghr_rotated',
+          expires_in: 28800,
+          refresh_token_expires_in: 15811200,
+        },
+      });
+    }
     if (u === 'https://api.github.com/graphql') {
+      // graphqlStatusOnce: fail the FIRST GraphQL call only (401-retry tests).
+      if (overrides.graphqlStatusOnce && !graphqlFailedOnce) {
+        graphqlFailedOnce = true;
+        return mockResponse(overrides.graphqlStatusOnce, { json: { message: 'Bad credentials' } });
+      }
       if (overrides.graphqlStatus) {
         return mockResponse(overrides.graphqlStatus, { json: { message: 'Bad credentials' } });
       }
@@ -263,6 +281,8 @@ describe('githubService', () => {
     it('first call hits the network, normalizes, and persists the cache row', async () => {
       const userId = await createUser();
       await connect(userId);
+      // The mocked payload includes a private repo — opt in so both come through.
+      await setIncludePrivate(userId, true);
 
       const profile = await fetchGithubProfile(userId);
 
@@ -325,6 +345,183 @@ describe('githubService', () => {
         assert.equal(err.status, 401);
         return true;
       });
+    });
+  });
+
+  // M2.9.1 — expiring GitHub App user tokens are refreshed silently.
+  describe('token refresh', () => {
+    const future = (ms) => new Date(Date.now() + ms).toISOString();
+    const past = (ms) => new Date(Date.now() - ms).toISOString();
+
+    async function connectExpiring(userId, { tokenExpiresAt, refreshToken = 'ghr_original' } = {}) {
+      await saveConnection(userId, {
+        token: 'ghp_original',
+        login: 'octocat',
+        scopes: '',
+        refreshToken,
+        tokenExpiresAt,
+        refreshTokenExpiresAt: future(180 * 24 * 60 * 60 * 1000),
+      });
+    }
+
+    it('stores the refresh token encrypted, never in plaintext', async () => {
+      const userId = await createUser();
+      await connectExpiring(userId, { tokenExpiresAt: future(8 * 60 * 60 * 1000) });
+
+      const row = await database.get(
+        'SELECT encrypted_refresh_token, token_expires_at FROM github_connections WHERE user_id = ?',
+        [userId]
+      );
+      assert.ok(row.encrypted_refresh_token);
+      assert.ok(!row.encrypted_refresh_token.includes('ghr_original'));
+      assert.ok(row.token_expires_at);
+    });
+
+    it('returns the stored token untouched when it is far from expiry', async () => {
+      const userId = await createUser();
+      await connectExpiring(userId, { tokenExpiresAt: future(8 * 60 * 60 * 1000) });
+
+      assert.equal(await getValidToken(userId), 'ghp_original');
+      assert.equal(fetchCalls.length, 0, 'no network call for a healthy token');
+    });
+
+    it('returns a legacy non-expiring token as-is (no expiry metadata)', async () => {
+      const userId = await createUser();
+      await connect(userId, 'ghp_legacy'); // no refresh/expiry fields
+
+      assert.equal(await getValidToken(userId), 'ghp_legacy');
+      assert.equal(fetchCalls.length, 0);
+    });
+
+    it('refreshes an expired token and persists the rotated pair', async () => {
+      const userId = await createUser();
+      await connectExpiring(userId, { tokenExpiresAt: past(60 * 1000) });
+
+      const token = await getValidToken(userId);
+
+      assert.equal(token, 'ghp_refreshed');
+      assert.equal(callsTo('github.com/login/oauth/access_token'), 1);
+      const call = fetchCalls.find((c) => c.url.includes('login/oauth/access_token'));
+      const body = JSON.parse(call.init.body);
+      assert.equal(body.grant_type, 'refresh_token');
+      assert.equal(body.refresh_token, 'ghr_original');
+
+      // Rotated pair persisted: next call needs no refresh.
+      assert.equal(await getToken(userId), 'ghp_refreshed');
+      installFetchMock();
+      assert.equal(await getValidToken(userId), 'ghp_refreshed');
+      assert.equal(fetchCalls.length, 0, 'new expiry must be in the future');
+      const row = await database.get(
+        'SELECT encrypted_refresh_token FROM github_connections WHERE user_id = ?',
+        [userId]
+      );
+      assert.ok(!row.encrypted_refresh_token.includes('ghr_rotated'), 'rotated token encrypted');
+    });
+
+    it('refreshes proactively when the token expires within the skew window', async () => {
+      const userId = await createUser();
+      await connectExpiring(userId, { tokenExpiresAt: future(60 * 1000) }); // < 5 min skew
+
+      assert.equal(await getValidToken(userId), 'ghp_refreshed');
+      assert.equal(callsTo('login/oauth/access_token'), 1);
+    });
+
+    it('throws GITHUB_RECONNECT when expired with no refresh token', async () => {
+      const userId = await createUser();
+      await connectExpiring(userId, { tokenExpiresAt: past(60 * 1000), refreshToken: null });
+
+      await assert.rejects(getValidToken(userId), (err) => {
+        assert.equal(err.code, 'GITHUB_RECONNECT');
+        return true;
+      });
+      assert.equal(fetchCalls.length, 0);
+    });
+
+    it('throws GITHUB_RECONNECT when GitHub rejects the refresh token', async () => {
+      const userId = await createUser();
+      await connectExpiring(userId, { tokenExpiresAt: past(60 * 1000) });
+      installFetchMock({ refreshResponse: { error: 'bad_refresh_token' } });
+
+      await assert.rejects(getValidToken(userId), (err) => {
+        assert.equal(err.code, 'GITHUB_RECONNECT');
+        return true;
+      });
+    });
+
+    it('fetchGithubProfile retries once with a refreshed token after a live 401', async () => {
+      const userId = await createUser();
+      // Expiry metadata says "valid", but GitHub disagrees (revoked/legacy).
+      await connectExpiring(userId, { tokenExpiresAt: future(8 * 60 * 60 * 1000) });
+      installFetchMock({ graphqlStatusOnce: 401 });
+
+      const profile = await fetchGithubProfile(userId);
+
+      assert.equal(profile.login, 'octocat');
+      assert.equal(callsTo('login/oauth/access_token'), 1);
+      const graphqlCalls = fetchCalls.filter((c) => c.url.includes('graphql'));
+      assert.equal(graphqlCalls.length, 2);
+      assert.equal(graphqlCalls[1].init.headers.Authorization, 'Bearer ghp_refreshed');
+    });
+  });
+
+  // M2.9.2 — private repos are listed only when the user opts in.
+  describe('private repo preference', () => {
+    it('defaults to public-only: privacy filter in the query, private repos dropped', async () => {
+      const userId = await createUser();
+      await connect(userId);
+
+      const profile = await fetchGithubProfile(userId);
+
+      const gql = fetchCalls.find((c) => c.url.includes('graphql'));
+      assert.ok(JSON.parse(gql.init.body).query.includes('privacy: PUBLIC'));
+      assert.deepEqual(profile.repos.map((r) => r.id), ['R_1'], 'private R_2 must be filtered');
+      assert.equal((await getConnection(userId)).includePrivate, false);
+    });
+
+    it('opt-in removes the privacy filter and keeps private repos', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      await setIncludePrivate(userId, true);
+
+      const profile = await fetchGithubProfile(userId);
+
+      const gql = fetchCalls.find((c) => c.url.includes('graphql'));
+      assert.ok(!JSON.parse(gql.init.body).query.includes('privacy:'));
+      assert.deepEqual(profile.repos.map((r) => r.id), ['R_1', 'R_2']);
+      assert.equal((await getConnection(userId)).includePrivate, true);
+    });
+
+    it('toggling the preference invalidates the cached profile', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      await fetchGithubProfile(userId); // caches public-only
+
+      await setIncludePrivate(userId, true);
+      const cached = await database.get('SELECT 1 FROM github_profiles WHERE user_id = ?', [userId]);
+      assert.equal(cached, null, 'profile cache cleared on toggle');
+
+      installFetchMock();
+      const profile = await fetchGithubProfile(userId); // refetches with private
+      assert.equal(callsTo('api.github.com/graphql'), 1);
+      assert.equal(profile.repos.length, 2);
+    });
+
+    it('throws GITHUB_NOT_CONNECTED when setting the preference without a connection', async () => {
+      const userId = await createUser();
+      await assert.rejects(setIncludePrivate(userId, true), (err) => {
+        assert.equal(err.code, 'GITHUB_NOT_CONNECTED');
+        return true;
+      });
+    });
+
+    it('reconnecting preserves the include_private preference', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      await setIncludePrivate(userId, true);
+
+      await saveConnection(userId, { token: 'ghp_new', login: 'octocat', scopes: '' });
+
+      assert.equal((await getConnection(userId)).includePrivate, true);
     });
   });
 

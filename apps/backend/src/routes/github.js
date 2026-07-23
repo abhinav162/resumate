@@ -11,6 +11,7 @@ import {
   fetchGithubProfile,
   analyzeRepos,
   listSummaries,
+  setIncludePrivate,
 } from '../services/githubService.js';
 
 const router = express.Router();
@@ -85,6 +86,10 @@ router.get('/status', requireUser, async (req, res) => {
         connected: Boolean(conn),
         login: conn?.login ?? null,
         freeReposLeft: await freeReposLeft(req.user.id),
+        includePrivate: conn?.includePrivate ?? false,
+        // App slug for the "grant repo access" install deep-link (private repos
+        // are only visible once the app is installed on the user's account).
+        appSlug: process.env.GITHUB_APP_SLUG || null,
       },
     });
   } catch (error) {
@@ -141,15 +146,41 @@ router.get('/callback', requireGithubConfig, async (req, res) => {
     });
     const ghUser = userRes.ok ? await userRes.json() : {};
 
+    // Expiring user tokens ("Expire user authorization tokens" app setting):
+    // GitHub returns expires_in (~8h) + a refresh_token (~6 months). Store both
+    // so getValidToken can rotate silently instead of forcing a reconnect.
+    const now = Date.now();
     await saveConnection(userRow.id, {
       token: tokenData.access_token,
       login: ghUser.login ?? null,
       scopes: tokenData.scope ?? '',
+      refreshToken: tokenData.refresh_token ?? null,
+      tokenExpiresAt: tokenData.expires_in
+        ? new Date(now + tokenData.expires_in * 1000).toISOString()
+        : null,
+      refreshTokenExpiresAt: tokenData.refresh_token_expires_in
+        ? new Date(now + tokenData.refresh_token_expires_in * 1000).toISOString()
+        : null,
     });
     res.redirect(`${frontend}/dashboard?github=connected`);
   } catch (error) {
     console.error('GitHub callback error:', error);
     res.redirect(`${frontend}/dashboard?github=error`);
+  }
+});
+
+// POST /api/github/preferences { includePrivate } — opt in/out of listing
+// private repos (M2.9.2). Clears the profile cache so the change is immediate.
+router.post('/preferences', requireUser, async (req, res) => {
+  try {
+    const { includePrivate } = req.body ?? {};
+    if (typeof includePrivate !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'includePrivate must be a boolean' });
+    }
+    await setIncludePrivate(req.user.id, includePrivate);
+    res.json({ success: true, data: { includePrivate } });
+  } catch (error) {
+    sendGithubError(res, error);
   }
 });
 
