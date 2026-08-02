@@ -39,6 +39,7 @@ These are the integration points every milestone builds on:
 | **M2.7** | GitHub project library (standalone analysis + add-to-resume) | M2 | Low |
 | **M2.8** | GitHub project provenance (dedupe + badges + usage map) | M2.7 | Low |
 | **M2.9** | GitHub token refresh + private repo opt-in | M2 | Low |
+| **M2.10** | Enterprise-grade GitHub: multi-org, installations, webhooks, resilience | M2.9 | Med |
 | **M3** | Tailoring robustness (schema validation, streaming, section re-tailor) | M1 | Med |
 | **M4** | Bigger bets (ATS simulation, embeddings match, eval harness) | M1–M3 | High |
 | **M5** | LinkedIn export parsing | M2 patterns | Med |
@@ -460,6 +461,75 @@ into listing private repositories — public-only stays the default flow.
 - [x] Default flow: query carries `privacy: PUBLIC`, private repos filtered.
 - [x] Opt-in: filter dropped, private repos listed; toggle invalidates cache.
 - [x] Preference survives reconnect; toggle without connection → 400.
+
+---
+
+## M2.10 — Enterprise-grade GitHub integration
+
+**Goal:** repos across multiple organizations (owned or not) are discovered and
+ranked by the user's actual work; org install/approval state is visible and
+actionable; app lifecycle events (revocation, suspension) are handled; API
+failures degrade gracefully instead of sinking whole requests.
+
+### M2.10.1 — Multi-org repo discovery
+- GraphQL affiliations gain `ORGANIZATION_MEMBER`; `repositoriesContributedTo`
+  (COMMIT/PULL_REQUEST, excluding own repos) merged in, deduped by id;
+  affiliated repos cursor-paginated (3 × 100 cap).
+- Normalized repos carry `ownerLogin`, `ownerType`, `viewerPermission`,
+  `contributed`, `commitCount` (last-year commits via
+  `commitContributionsByRepository`); profile carries `organizations`.
+- Ranking: `+1.5·log1p(commitCount)`, ownership down-weighted to 0.5 — org
+  repos the user built rank on evidence, not ownership.
+- Picker groups rows by owner with org badges.
+
+**Verification**
+- [x] Query carries ORGANIZATION_MEMBER + contributed-to + commit counts.
+- [x] Affiliated+contributed merge dedupes; owner/commit metadata mapped.
+- [x] Cursor pagination issues follow-up queries and merges pages.
+- [x] Commit-heavy unowned org repo outranks an idle owned repo.
+
+### M2.10.2 — Installations & org-access panel
+- `listUserInstallations` (`GET /user/installations`) mirrored into
+  `github_app_installations` (global — several users can share an org).
+- `GET /api/github/orgs`: personal account + every org membership with the
+  app's status there (`installed` / `suspended` / `not_installed`).
+- /github "Organizations & access" panel with install / request-approval
+  deep-links (`target_id` when the org databaseId is known); explains that
+  private org repos require installation + org-owner approval.
+
+### M2.10.3 — Webhook lifecycle receiver
+- `POST /api/github/webhook`: raw-body HMAC (X-Hub-Signature-256, new
+  `GITHUB_WEBHOOK_SECRET`), payload parsed only after verification;
+  idempotency on X-GitHub-Delivery (`github_webhook_deliveries`).
+- `github_app_authorization.revoked` → purge connection/tokens (summaries
+  kept). `installation` created/deleted/suspend/unsuspend +
+  `installation_repositories` → mirror install state, clear profile caches
+  (rebuilt lazily). Handlers are idempotent upserts — duplicates and
+  out-of-order deliveries are harmless; unknown events ack 200.
+- App settings (manual): set webhook URL + secret, subscribe to Installation
+  events.
+
+**Verification**
+- [x] Bad signature 401 (nothing processed); malformed JSON 400; no secret 503.
+- [x] Revocation purges connection, keeps paid summaries.
+- [x] Suspend/unsuspend/delete lifecycle mirrored; replayed delivery id inert.
+
+### M2.10.4 — Rate limits & fault tolerance
+- All GitHub calls go through `githubFetch`: exponential backoff on network
+  errors/502/503/504; primary (`x-ratelimit-remaining: 0`) and secondary
+  (`retry-after`) limits throw `GITHUB_RATE_LIMITED` with `retryAt`
+  (surfaced by the API as `retryAt`).
+- `analyzeRepos` is per-repo fault-tolerant: failures land in `failed[]`,
+  successes keep their summaries, failed *paid* repos are auto-refunded and
+  failed new repos never consume free slots.
+- Security stance: user-to-server tokens only — no installation access tokens
+  are ever minted or cached, so cross-tenant leakage by token confusion is
+  structurally impossible.
+
+**Verification**
+- [x] 403-quota/429 map to GITHUB_RATE_LIMITED with correct retryAt.
+- [x] Partial batch: failure collected, success charged, refund issued,
+      free slots preserved.
 
 ---
 

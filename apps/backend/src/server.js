@@ -14,6 +14,7 @@ import aiRouter from "./routes/ai.js";
 import uploadsRouter from "./routes/uploads.js";
 import creditsRouter, { razorpayWebhookHandler } from "./routes/credits.js";
 import githubRouter from "./routes/github.js";
+import { githubWebhookHandler } from "./routes/githubWebhook.js";
 import testRouter from "./routes/test.js";
 import { ensureUserExists } from "./middleware/ensureUser.js";
 
@@ -54,6 +55,13 @@ app.post(
   "/api/credits/webhook",
   express.raw({ type: "application/json" }),
   razorpayWebhookHandler
+);
+
+// GitHub App webhook — same raw-body requirement for HMAC verification.
+app.post(
+  "/api/github/webhook",
+  express.raw({ type: "application/json" }),
+  githubWebhookHandler
 );
 
 // Body parsing middleware

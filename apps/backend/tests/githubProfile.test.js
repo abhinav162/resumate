@@ -163,8 +163,36 @@ describe('rankImportable', () => {
 
   it('applies the scoring formula, rounded to 3 dp', () => {
     const [top] = rankImportable([hot], { now: NOW });
-    const expected = 2.0 * Math.log1p(50) + 3.0 * 1 + 1.0 + 0.5;
+    const expected = 2.0 * Math.log1p(50) + 3.0 * 1 + 1.5 * Math.log1p(0) + 0.5 + 0.5;
     assert.equal(top.rank, Math.round(expected * 1000) / 1000);
+  });
+
+  // M2.10.1 — commit evidence outweighs ownership: an org repo the user
+  // actually built ranks above a similar repo they merely own.
+  it('boosts unowned org repos by the user commit count', () => {
+    const ownedIdle = makeRepo({
+      id: 'owned-idle',
+      name: 'owned-idle',
+      stars: 3,
+      pushedAt: isoMonthsAgo(1),
+      isOwner: true,
+      commitCount: 0,
+      description: 'mine but untouched',
+    });
+    const orgBuilt = makeRepo({
+      id: 'org-built',
+      name: 'org-built',
+      stars: 3,
+      pushedAt: isoMonthsAgo(1),
+      isOwner: false,
+      commitCount: 80,
+      description: 'org repo I actually built',
+    });
+    const ranked = rankImportable([ownedIdle, orgBuilt], { now: NOW });
+    assert.deepEqual(
+      ranked.map((r) => r.id),
+      ['org-built', 'owned-idle']
+    );
   });
 
   it('is stable for ties, keeping input order', () => {

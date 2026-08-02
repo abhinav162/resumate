@@ -22,6 +22,12 @@ export type GithubRepo = {
   rank?: number;
   /** True when a cached analysis already exists — re-analyzing is free. */
   analyzed?: boolean;
+  /** Login of the owning user/org. Optional: stale cached responses may lack it. */
+  ownerLogin?: string;
+  /** Whether the repo belongs to a personal account or an organization. */
+  ownerType?: 'User' | 'Organization';
+  /** The user's commits to this repo in the last year (0 if none). */
+  commitCount?: number;
 };
 
 export type GithubTechProfile = {
@@ -53,6 +59,16 @@ export type AnalyzeResult = {
   freeLeft: number;
   /** How many stale library entries were re-analyzed for free. */
   reanalyzed?: number;
+  /** Repos that could not be analyzed (absent or empty when everything succeeded). */
+  failed?: { repoId: string; repoName: string | null; code?: string }[];
+};
+
+/** One account (personal or organization) and the GitHub App's install state there. */
+export type GithubOrgAccess = {
+  login: string;
+  type: 'User' | 'Organization';
+  databaseId: number | null;
+  status: 'installed' | 'suspended' | 'not_installed';
 };
 
 /** A stored library entry from a previous repo analysis. */
@@ -102,6 +118,14 @@ export const githubApi = {
     const url = refresh ? '/github/repos?refresh=true' : '/github/repos';
     const response = await api.get<ApiResponse<GithubReposResult>>(url);
     if (!response.data.data) throw new Error('Failed to fetch GitHub repos');
+    return response.data.data;
+  },
+
+  getOrgs: async (): Promise<{ orgs: GithubOrgAccess[]; appSlug: string | null }> => {
+    const response = await api.get<
+      ApiResponse<{ orgs: GithubOrgAccess[]; appSlug: string | null }>
+    >('/github/orgs');
+    if (!response.data.data) throw new Error('Failed to fetch GitHub organizations');
     return response.data.data;
   },
 

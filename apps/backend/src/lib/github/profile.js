@@ -5,6 +5,8 @@
 // {
 //   id, name, nameWithOwner, description, url,
 //   isPrivate, isFork, isOwner,
+//   ownerLogin, ownerType,        // 'User' | 'Organization' (M2.10)
+//   commitCount,                  // user's commits in the last year (M2.10)
 //   stars, primaryLanguage,
 //   languages: [{ name, bytes }],
 //   pushedAt, // ISO date string
@@ -85,7 +87,10 @@ export function techProfile(repos, { now } = {}) {
  * Score per repo:
  *   2.0 * log1p(stars)
  * + 3.0 * recencyWeight(pushedAt, now)
- * + 1.0 * (isOwner ? 1 : 0)
+ * + 1.5 * log1p(commitCount)      // user's own commits (last year) — makes
+ *                                 // org repos they built rank on evidence,
+ *                                 // not ownership (M2.10.1)
+ * + 0.5 * (isOwner ? 1 : 0)
  * + 0.5 * (non-empty description ? 1 : 0)
  *
  * @param {Array<object>} repos - Normalized repos (not mutated).
@@ -101,7 +106,8 @@ export function rankImportable(repos, { now } = {}) {
       const score =
         2.0 * Math.log1p(repo.stars || 0) +
         3.0 * recencyWeight(repo.pushedAt, now ?? Date.now()) +
-        1.0 * (repo.isOwner ? 1 : 0) +
+        1.5 * Math.log1p(repo.commitCount || 0) +
+        0.5 * (repo.isOwner ? 1 : 0) +
         0.5 * (repo.description?.trim() ? 1 : 0);
       return { ...repo, rank: round(score, 3) };
     })
