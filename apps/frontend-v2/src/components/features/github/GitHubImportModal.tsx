@@ -57,6 +57,8 @@ function ModalContent({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<RepoSummary[]>([]);
   const [checkedRepoIds, setCheckedRepoIds] = useState<Set<string>>(new Set());
+  // True when the last analyze run skipped some repos (partial failure).
+  const [hadFailures, setHadFailures] = useState(false);
 
   // Repos already in the open resume: unselectable in the picker and never
   // pre-checked (or imported) on the preview step.
@@ -91,6 +93,7 @@ function ModalContent({
     mutationFn: githubApi.analyzeRepos,
     onSuccess: (result) => {
       setSummaries(result.summaries);
+      setHadFailures((result.failed?.length ?? 0) > 0);
       setCheckedRepoIds(
         new Set(result.summaries.map((s) => s.repoId).filter((id) => !existingSet.has(id)))
       );
@@ -154,6 +157,7 @@ function ModalContent({
       ];
     });
     setSummaries(cached);
+    setHadFailures(false);
     setCheckedRepoIds(new Set(cached.map((s) => s.repoId).filter((id) => !existingSet.has(id))));
     setStep('preview');
   };
@@ -267,6 +271,12 @@ function ModalContent({
                 />
               )}
             </>
+          )}
+
+          {step === 'preview' && hadFailures && (
+            <p className="text-xs text-warning-text mb-3">
+              Some repositories couldn't be analyzed and were skipped.
+            </p>
           )}
 
           {step === 'preview' && (

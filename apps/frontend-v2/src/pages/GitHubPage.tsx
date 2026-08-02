@@ -8,13 +8,14 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { GitHubConnectCard } from '../components/features/github/GitHubConnectCard';
+import { OrganizationsPanel } from '../components/features/github/OrganizationsPanel';
 import { PrivateRepoToggle } from '../components/features/github/PrivateRepoToggle';
 import {
   RepoPickerList,
   RepoPricingSummary,
 } from '../components/features/github/RepoPickerList';
 import { timeAgo } from '../components/features/github/repoPricing';
-import { githubApi, type GithubSummaryEntry } from '../lib/githubApi';
+import { githubApi, type AnalyzeResult, type GithubSummaryEntry } from '../lib/githubApi';
 import { resumesApi } from '../lib/api';
 import { useResumes, useUpdateResume } from '../hooks/useResumes';
 
@@ -35,6 +36,8 @@ export default function GitHubPage() {
   const queryClient = useQueryClient();
   // Pick order matters: the first `freeReposLeft` non-cached selections are free.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Repos skipped by the last analyze run (partial failure) — cleared on retry.
+  const [analyzeFailed, setAnalyzeFailed] = useState<NonNullable<AnalyzeResult['failed']>>([]);
 
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ['github', 'status'],
@@ -70,7 +73,11 @@ export default function GitHubPage() {
 
   const analyze = useMutation({
     mutationFn: githubApi.analyzeRepos,
-    onSuccess: () => {
+    onMutate: () => {
+      setAnalyzeFailed([]);
+    },
+    onSuccess: (data) => {
+      setAnalyzeFailed(data.failed ?? []);
       setSelectedIds([]);
       queryClient.invalidateQueries({ queryKey: ['github'] });
       queryClient.invalidateQueries({ queryKey: ['credits'] });
@@ -146,6 +153,11 @@ export default function GitHubPage() {
             ))}
           </section>
 
+          {/* Organizations & access */}
+          <section>
+            <OrganizationsPanel connected={connected} />
+          </section>
+
           {/* Analyze more repos */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
@@ -199,6 +211,14 @@ export default function GitHubPage() {
                 )}
                 {analyze.isError && !notEnoughCredits && (
                   <p className="text-sm text-danger-text">Analysis failed. Please try again.</p>
+                )}
+                {analyzeFailed.length > 0 && (
+                  <p className="text-sm text-warning-text">
+                    {analyzeFailed.length} {analyzeFailed.length === 1 ? 'repo' : 'repos'} could
+                    not be analyzed:{' '}
+                    {analyzeFailed.map((f) => f.repoName ?? f.repoId).join(', ')} — try again
+                    later.
+                  </p>
                 )}
                 <div className="flex items-center justify-between gap-3">
                   <RepoPricingSummary
