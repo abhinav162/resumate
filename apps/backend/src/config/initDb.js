@@ -190,6 +190,29 @@ async function createTables() {
     )
   `);
 
+  // M2.10.2 — app installations we know about (personal accounts + orgs),
+  // refreshed from GET /user/installations and kept current by webhooks.
+  // Global (not per-user): several users can belong to the same org.
+  await database.run(`
+    CREATE TABLE IF NOT EXISTS github_app_installations (
+      installation_id TEXT PRIMARY KEY,
+      account_login TEXT NOT NULL,
+      account_type TEXT,
+      suspended INTEGER NOT NULL DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // M2.10.3 — GitHub webhook idempotency: at-least-once delivery means the
+  // same X-GitHub-Delivery id can arrive multiple times.
+  await database.run(`
+    CREATE TABLE IF NOT EXISTS github_webhook_deliveries (
+      delivery_id TEXT PRIMARY KEY,
+      event TEXT,
+      processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Create indexes for better performance
   await database.run('CREATE INDEX IF NOT EXISTS idx_base_resumes_user_id ON base_resumes(user_id)');
   await database.run('CREATE INDEX IF NOT EXISTS idx_experiences_resume_id ON experiences(resume_id)');

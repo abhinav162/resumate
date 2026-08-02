@@ -11,9 +11,11 @@ import {
   setIncludePrivate,
   deleteConnection,
   fetchGithubProfile,
+  fetchReadme,
   summarizeRepo,
   analyzeRepos,
   listSummaries,
+  listUserInstallations,
 } from '../src/services/githubService.js';
 
 // ---------------------------------------------------------------------------
@@ -102,6 +104,7 @@ const DEFAULT_LLM_SUMMARY = {
 function installFetchMock(overrides = {}) {
   fetchCalls = [];
   let graphqlFailedOnce = false;
+  let graphqlPageIndex = 0;
   global.fetch = async (url, init = {}) => {
     const u = String(url);
     fetchCalls.push({ url: u, init });
@@ -116,6 +119,9 @@ function installFetchMock(overrides = {}) {
         },
       });
     }
+    if (u.startsWith('https://api.github.com/user/installations')) {
+      return mockResponse(200, { json: overrides.installations ?? { installations: [] } });
+    }
     if (u === 'https://api.github.com/graphql') {
       // graphqlStatusOnce: fail the FIRST GraphQL call only (401-retry tests).
       if (overrides.graphqlStatusOnce && !graphqlFailedOnce) {
@@ -125,9 +131,19 @@ function installFetchMock(overrides = {}) {
       if (overrides.graphqlStatus) {
         return mockResponse(overrides.graphqlStatus, { json: { message: 'Bad credentials' } });
       }
+      // graphqlPages: sequential payloads, one per GraphQL call (pagination tests).
+      if (overrides.graphqlPages) {
+        const idx = Math.min(graphqlPageIndex, overrides.graphqlPages.length - 1);
+        graphqlPageIndex += 1;
+        return mockResponse(200, { json: overrides.graphqlPages[idx] });
+      }
       return mockResponse(200, { json: overrides.graphql ?? graphqlPayload() });
     }
     if (u.startsWith('https://api.github.com/repos/') && u.endsWith('/readme')) {
+      // readmeFailFor: URL fragment whose README request permanently 500s.
+      if (overrides.readmeFailFor && u.includes(overrides.readmeFailFor)) {
+        return mockResponse(500, { text: 'boom' });
+      }
       if (overrides.readmeStatus) {
         return mockResponse(overrides.readmeStatus, { headers: overrides.readmeHeaders ?? {} });
       }
@@ -186,6 +202,7 @@ describe('githubService', () => {
     process.env.GITHUB_TOKEN_ENCRYPTION_KEY = '0123456789abcdef'.repeat(4);
     process.env.BIFROST_URL = 'https://bifrost.test';
     process.env.BIFROST_VIRTUAL_KEY = 'sk-test';
+    process.env.GITHUB_BACKOFF_MS = '1'; // keep githubFetch retries instant in tests
     await database.close(); // fresh in-memory connection for test isolation
     await initializeDatabase();
   });
@@ -522,6 +539,247 @@ describe('githubService', () => {
       await saveConnection(userId, { token: 'ghp_new', login: 'octocat', scopes: '' });
 
       assert.equal((await getConnection(userId)).includePrivate, true);
+    });
+  });
+
+  // M2.10.1 — repos across orgs and contributed-to repos are discovered.
+  describe('multi-org discovery', () => {
+    /** GraphQL node factory (raw GraphQL shape, not the normalized one). */
+    function makeNode(id, nameWithOwner, { ownerType = 'User', isPrivate = false } = {}) {
+      const [ownerLogin, name] = nameWithOwner.split('/');
+      return {
+        id,
+        name,
+        nameWithOwner,
+        description: `${name} description`,
+        url: `https://github.com/${nameWithOwner}`,
+        isPrivate,
+        isFork: false,
+        stargazerCount: 1,
+        viewerPermission: 'WRITE',
+        primaryLanguage: { name: 'JavaScript' },
+        pushedAt: '2026-07-01T00:00:00Z',
+        owner: { login: ownerLogin, __typename: ownerType },
+        languages: { edges: [] },
+      };
+    }
+
+    function multiOrgPayload() {
+      return {
+        data: {
+          viewer: {
+            login: 'octocat',
+            contributionsCollection: {
+              totalCommitContributions: 100,
+              totalPullRequestContributions: 10,
+              totalPullRequestReviewContributions: 5,
+              totalIssueContributions: 2,
+              commitContributionsByRepository: [
+                { repository: { id: 'R_ORG' }, contributions: { totalCount: 42 } },
+              ],
+            },
+            organizations: { nodes: [{ login: 'acme', databaseId: 123 }] },
+            repositories: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [
+                makeNode('R_MINE', 'octocat/mine'),
+                makeNode('R_ORG', 'acme/platform', { ownerType: 'Organization' }),
+              ],
+            },
+            repositoriesContributedTo: {
+              nodes: [
+                makeNode('R_CONTRIB', 'bigco/tool', { ownerType: 'Organization' }),
+                makeNode('R_MINE', 'octocat/mine'), // duplicate — must be deduped
+              ],
+            },
+          },
+        },
+      };
+    }
+
+    it('queries with ORGANIZATION_MEMBER affiliation and contributed-to repos', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      installFetchMock({ graphql: multiOrgPayload() });
+
+      await fetchGithubProfile(userId);
+
+      const gql = fetchCalls.find((c) => c.url.includes('graphql'));
+      const query = JSON.parse(gql.init.body).query;
+      assert.ok(query.includes('ORGANIZATION_MEMBER'), 'org-member affiliation in the query');
+      assert.ok(query.includes('repositoriesContributedTo'), 'contributed-to field in the query');
+      assert.ok(query.includes('commitContributionsByRepository'), 'commit counts in the query');
+    });
+
+    it('merges affiliated + contributed repos, deduped, with owner/commit metadata', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      installFetchMock({ graphql: multiOrgPayload() });
+
+      const profile = await fetchGithubProfile(userId);
+
+      assert.deepEqual(
+        profile.repos.map((r) => r.id),
+        ['R_MINE', 'R_ORG', 'R_CONTRIB'],
+        'affiliated first, contributed appended, duplicate dropped'
+      );
+      const org = profile.repos.find((r) => r.id === 'R_ORG');
+      assert.equal(org.ownerLogin, 'acme');
+      assert.equal(org.ownerType, 'Organization');
+      assert.equal(org.isOwner, false);
+      assert.equal(org.commitCount, 42, 'per-repo commit count mapped');
+      const contribRepo = profile.repos.find((r) => r.id === 'R_CONTRIB');
+      assert.equal(contribRepo.contributed, true);
+      assert.deepEqual(profile.organizations, [{ login: 'acme', databaseId: 123 }]);
+    });
+
+    it('pages through affiliated repos with the cursor', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      const page1 = multiOrgPayload();
+      page1.data.viewer.repositories.pageInfo = { hasNextPage: true, endCursor: 'c1' };
+      const page2 = {
+        data: {
+          viewer: {
+            repositories: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [makeNode('R_PAGE2', 'acme/older-repo', { ownerType: 'Organization' })],
+            },
+          },
+        },
+      };
+      installFetchMock({ graphqlPages: [page1, page2] });
+
+      const profile = await fetchGithubProfile(userId);
+
+      assert.equal(callsTo('api.github.com/graphql'), 2);
+      const second = fetchCalls.filter((c) => c.url.includes('graphql'))[1];
+      assert.equal(JSON.parse(second.init.body).variables.cursor, 'c1');
+      assert.deepEqual(
+        profile.repos.map((r) => r.id),
+        ['R_MINE', 'R_ORG', 'R_PAGE2', 'R_CONTRIB']
+      );
+    });
+  });
+
+  // M2.10.2 — installation visibility for the org-access panel.
+  describe('listUserInstallations', () => {
+    it('normalizes installations and mirrors them into github_app_installations', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      installFetchMock({
+        installations: {
+          installations: [
+            { id: 11, account: { login: 'octocat', type: 'User' }, suspended_at: null },
+            { id: 22, account: { login: 'acme', type: 'Organization' }, suspended_at: '2026-08-01T00:00:00Z' },
+          ],
+        },
+      });
+
+      const list = await listUserInstallations(userId);
+
+      assert.deepEqual(list, [
+        { id: '11', login: 'octocat', type: 'User', suspended: false },
+        { id: '22', login: 'acme', type: 'Organization', suspended: true },
+      ]);
+      const row = await database.get(
+        'SELECT account_login, account_type, suspended FROM github_app_installations WHERE installation_id = ?',
+        ['22']
+      );
+      assert.equal(row.account_login, 'acme');
+      assert.equal(Number(row.suspended), 1);
+    });
+
+    it('throws GITHUB_NOT_CONNECTED without a connection', async () => {
+      const userId = await createUser();
+      await assert.rejects(listUserInstallations(userId), (err) => {
+        assert.equal(err.code, 'GITHUB_NOT_CONNECTED');
+        return true;
+      });
+    });
+  });
+
+  // M2.10.4 — rate-limit mapping with retryAt.
+  describe('rate limiting', () => {
+    it('maps a 403 with exhausted quota to GITHUB_RATE_LIMITED with retryAt', async () => {
+      const resetEpoch = Math.floor(Date.now() / 1000) + 900;
+      installFetchMock({
+        readmeStatus: 403,
+        readmeHeaders: {
+          'x-ratelimit-remaining': '0',
+          'x-ratelimit-reset': String(resetEpoch),
+        },
+      });
+
+      await assert.rejects(fetchReadme('ghp_x', 'octocat', 'alpha'), (err) => {
+        assert.equal(err.code, 'GITHUB_RATE_LIMITED');
+        assert.equal(err.status, 429);
+        assert.equal(err.retryAt, new Date(resetEpoch * 1000).toISOString());
+        return true;
+      });
+    });
+
+    it('maps a 429 with retry-after (secondary limit) to GITHUB_RATE_LIMITED', async () => {
+      installFetchMock({
+        readmeStatus: 429,
+        readmeHeaders: { 'retry-after': '60' },
+      });
+
+      await assert.rejects(fetchReadme('ghp_x', 'octocat', 'alpha'), (err) => {
+        assert.equal(err.code, 'GITHUB_RATE_LIMITED');
+        assert.ok(err.retryAt, 'retryAt derived from retry-after');
+        return true;
+      });
+    });
+  });
+
+  // M2.10.4 — one failing repo must not sink the batch, and paid failures refund.
+  describe('analyzeRepos partial failure', () => {
+    it('collects failures, keeps successes, and refunds the failed paid repo', async () => {
+      const userId = await createUser(5);
+      await connect(userId);
+      // Exhaust the free allowance so both new repos are chargeable.
+      for (let i = 0; i < 10; i++) {
+        await database.run(
+          `INSERT INTO github_repo_summaries (user_id, repo_id, repo_name, pushed_at, summary, counted_free)
+           VALUES (?, ?, ?, '2026-01-01T00:00:00Z', '{}', 1)`,
+          [userId, `R_seed_${i}`, `seed-${i}`]
+        );
+      }
+      installFetchMock({ readmeFailFor: 'repo-22' });
+
+      const result = await analyzeRepos(userId, [makeRepo(21), makeRepo(22)]);
+
+      assert.equal(result.summaries.length, 1);
+      assert.equal(result.summaries[0].repoId, 'R_repo_21');
+      assert.deepEqual(result.failed.map((f) => f.repoId), ['R_repo_22']);
+      assert.equal(result.charged, 0.2, 'only the successful paid repo stays charged');
+
+      const credits = await database.get('SELECT credits FROM users WHERE id = ?', [userId]);
+      assert.equal(credits.credits, 4.8, '0.4 charged up-front, 0.2 refunded');
+      const row = await database.get(
+        'SELECT 1 FROM github_repo_summaries WHERE user_id = ? AND repo_id = ?',
+        [userId, 'R_repo_22']
+      );
+      assert.equal(row, null, 'no summary row for the failed repo');
+    });
+
+    it('failed new repos do not consume free slots', async () => {
+      const userId = await createUser(5);
+      await connect(userId);
+      installFetchMock({ readmeFailFor: 'repo-1' });
+
+      const result = await analyzeRepos(userId, [makeRepo(1), makeRepo(2)]);
+
+      assert.equal(result.charged, 0);
+      assert.equal(result.freeUsed, 1, 'only the successful repo consumed a slot');
+      assert.equal(result.freeLeft, 9);
+      assert.deepEqual(result.failed.map((f) => f.repoId), ['R_repo_1']);
+      const marked = await database.get(
+        'SELECT COUNT(*) AS n FROM github_repo_summaries WHERE user_id = ? AND counted_free = 1',
+        [userId]
+      );
+      assert.equal(Number(marked.n), 1);
     });
   });
 

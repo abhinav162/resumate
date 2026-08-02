@@ -1,6 +1,6 @@
 import database from '../config/database.js';
 import { encryptToken, decryptToken } from '../lib/crypto.js';
-import { deductCredits } from './creditService.js';
+import { deductCredits, grantCredits } from './creditService.js';
 import { CREDIT_COSTS, GITHUB_FREE_REPOS } from '../config/credits.config.js';
 import { bifrostGenerate, parseJsonResponse } from './aiService.js';
 
@@ -28,22 +28,12 @@ const MAX_BULLETS = 4;
 // can't die between the check and the API calls that follow it.
 const TOKEN_EXPIRY_SKEW_MS = 5 * 60 * 1000;
 
-// GraphQL query: viewer identity + contribution counts + 100 most recently
-// pushed repos (owned or collaborated on) with language byte breakdown.
-// Private repos are excluded at the query level unless the user opted in
-// (M2.9.2) — the explicit privacy filter keeps the default flow public-only
-// even when the app installation could see more.
-const profileQuery = (includePrivate) => `query {
-  viewer {
-    login
-    contributionsCollection {
-      totalCommitContributions
-      totalPullRequestContributions
-      totalPullRequestReviewContributions
-      totalIssueContributions
-    }
-    repositories(first: 100, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: [OWNER, COLLABORATOR]${includePrivate ? '' : ', privacy: PUBLIC'}) {
-      nodes {
+// Discovery caps (M2.10.1): affiliated repos are paged, contributed-to repos
+// take one page — keeps a full profile refresh cheap even for large accounts.
+const REPO_PAGE_SIZE = 100;
+const MAX_REPO_PAGES = 3;
+
+const REPO_FIELDS = `
         id
         name
         nameWithOwner
@@ -52,16 +42,113 @@ const profileQuery = (includePrivate) => `query {
         isPrivate
         isFork
         stargazerCount
+        viewerPermission
         primaryLanguage { name }
         pushedAt
-        owner { login }
+        owner { login __typename }
         languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
           edges { size node { name } }
-        }
+        }`;
+
+// First page (M2.10.1): identity + contribution counts (incl. per-repo commit
+// counts used for ranking) + org memberships + affiliated repos — now
+// including ORGANIZATION_MEMBER, the multi-org fix — plus repos the user
+// contributed to without holding any affiliation. Private repos stay excluded
+// at the query level unless the user opted in (M2.9.2).
+const profileQuery = (includePrivate) => `query {
+  viewer {
+    login
+    contributionsCollection {
+      totalCommitContributions
+      totalPullRequestContributions
+      totalPullRequestReviewContributions
+      totalIssueContributions
+      commitContributionsByRepository(maxRepositories: 100) {
+        repository { id }
+        contributions { totalCount }
+      }
+    }
+    organizations(first: 50) {
+      nodes { login databaseId }
+    }
+    repositories(first: ${REPO_PAGE_SIZE}, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]${includePrivate ? '' : ', privacy: PUBLIC'}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {${REPO_FIELDS}
+      }
+    }
+    repositoriesContributedTo(first: ${REPO_PAGE_SIZE}, orderBy: {field: PUSHED_AT, direction: DESC}, contributionTypes: [COMMIT, PULL_REQUEST], includeUserRepositories: false${includePrivate ? '' : ', privacy: PUBLIC'}) {
+      nodes {${REPO_FIELDS}
       }
     }
   }
 }`;
+
+// Follow-up pages of affiliated repos (cursor-based).
+const repoPageQuery = (includePrivate) => `query($cursor: String!) {
+  viewer {
+    repositories(first: ${REPO_PAGE_SIZE}, after: $cursor, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]${includePrivate ? '' : ', privacy: PUBLIC'}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {${REPO_FIELDS}
+      }
+    }
+  }
+}`;
+
+// ---------------------------------------------------------------------------
+// HTTP layer (M2.10.4) — every GitHub call goes through githubFetch, which
+// retries transient upstream failures with exponential backoff and maps
+// rate-limit responses to a typed GITHUB_RATE_LIMITED error carrying retryAt.
+// ---------------------------------------------------------------------------
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function rateLimitedError(response) {
+  const e = new Error('GitHub API rate limit exceeded — try again later');
+  e.code = 'GITHUB_RATE_LIMITED';
+  e.status = 429;
+  const retryAfter = Number(response.headers.get('retry-after'));
+  const reset = Number(response.headers.get('x-ratelimit-reset'));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) {
+    e.retryAt = new Date(Date.now() + retryAfter * 1000).toISOString();
+  } else if (Number.isFinite(reset) && reset > 0) {
+    e.retryAt = new Date(reset * 1000).toISOString();
+  }
+  return e;
+}
+
+/**
+ * fetch() with GitHub-aware resilience:
+ * - network errors and 502/503/504 retry with exponential backoff
+ *   (GITHUB_BACKOFF_MS base, default 500ms);
+ * - primary rate limit (403/429 with x-ratelimit-remaining: 0) and secondary
+ *   abuse limit (retry-after header) throw GITHUB_RATE_LIMITED with retryAt
+ *   instead of hammering the API.
+ */
+async function githubFetch(url, init = {}, { retries = 2 } = {}) {
+  const baseMs = Number(process.env.GITHUB_BACKOFF_MS ?? 500);
+  for (let attempt = 0; ; attempt++) {
+    let response;
+    try {
+      response = await fetch(url, init);
+    } catch (err) {
+      if (attempt >= retries) throw err;
+      await sleep(baseMs * 2 ** attempt);
+      continue;
+    }
+    if ([502, 503, 504].includes(response.status) && attempt < retries) {
+      await sleep(baseMs * 2 ** attempt);
+      continue;
+    }
+    if (
+      (response.status === 403 || response.status === 429) &&
+      (response.headers.get('x-ratelimit-remaining') === '0' ||
+        response.headers.get('retry-after'))
+    ) {
+      throw rateLimitedError(response);
+    }
+    return response;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Connection management (userId = internal integer users.id)
@@ -163,7 +250,7 @@ async function refreshAccessToken(userId, row) {
   const refreshExpiry = row.refresh_token_expires_at ? Date.parse(row.refresh_token_expires_at) : NaN;
   if (Number.isFinite(refreshExpiry) && refreshExpiry <= Date.now()) throw reconnectError();
 
-  const response = await fetch('https://github.com/login/oauth/access_token', {
+  const response = await githubFetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
@@ -240,6 +327,27 @@ async function forceRefreshToken(userId) {
 }
 
 /**
+ * Runs an authenticated request, transparently refreshing the token once when
+ * GitHub answers a live 401 (revoked token, legacy rows without expiry
+ * metadata). `request` is called with a plaintext token and must return the
+ * fetch Response.
+ *
+ * @param {number} userId
+ * @param {(token: string) => Promise<Response>} request
+ * @returns {Promise<Response>}
+ */
+async function withAuthRetry(userId, request) {
+  const token = await getValidToken(userId);
+  if (!token) throw notConnectedError();
+  let response = await request(token);
+  if (response.status === 401) {
+    response = await request(await forceRefreshToken(userId));
+    if (response.status === 401) throw reconnectError();
+  }
+  return response;
+}
+
+/**
  * Persists the user's private-repo listing preference and invalidates the
  * cached profile so the next listing reflects it immediately.
  *
@@ -305,43 +413,63 @@ export async function fetchGithubProfile(userId, { refresh = false } = {}) {
   if (!conn) throw notConnectedError();
   const includePrivate = conn.includePrivate;
 
-  const token = await getValidToken(userId);
-  if (!token) throw notConnectedError();
+  // Every GraphQL request goes through the auth-retry + resilience layers.
+  const runQuery = async (query, variables) => {
+    const response = await withAuthRetry(userId, (token) =>
+      githubFetch(GITHUB_GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(variables ? { query, variables } : { query }),
+      })
+    );
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => '');
+      const e = new Error(`GitHub GraphQL request failed (${response.status}): ${bodyText.slice(0, 500)}`);
+      e.status = response.status;
+      throw e;
+    }
+    const payload = await response.json();
+    const viewer = payload?.data?.viewer;
+    if (!viewer) {
+      throw new Error('GitHub GraphQL response missing data.viewer');
+    }
+    return viewer;
+  };
 
-  const query = profileQuery(includePrivate);
-  const graphql = (bearer) =>
-    fetch(GITHUB_GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${bearer}`,
-      },
-      body: JSON.stringify({ query }),
-    });
+  const viewer = await runQuery(profileQuery(includePrivate));
 
-  let response = await graphql(token);
-
-  // A live 401 means the token is dead even if the stored expiry disagreed
-  // (revoked, or a legacy row without expiry metadata) — force one refresh and
-  // retry before surfacing the reconnect state.
-  if (response.status === 401) {
-    response = await graphql(await forceRefreshToken(userId));
-    if (response.status === 401) throw reconnectError();
+  // Page through the remaining affiliated repos (capped at MAX_REPO_PAGES).
+  const affiliated = [...(viewer.repositories?.nodes ?? [])];
+  let pageInfo = viewer.repositories?.pageInfo;
+  for (let page = 1; page < MAX_REPO_PAGES && pageInfo?.hasNextPage && pageInfo?.endCursor; page++) {
+    const pageViewer = await runQuery(repoPageQuery(includePrivate), { cursor: pageInfo.endCursor });
+    affiliated.push(...(pageViewer.repositories?.nodes ?? []));
+    pageInfo = pageViewer.repositories?.pageInfo;
   }
-  if (!response.ok) {
-    const bodyText = await response.text().catch(() => '');
-    const e = new Error(`GitHub GraphQL request failed (${response.status}): ${bodyText.slice(0, 500)}`);
-    e.status = response.status;
-    throw e;
+
+  // Merge affiliated + contributed-to repos, deduped by id (affiliated wins —
+  // it carries the same fields, and its ordering reflects PUSHED_AT rank).
+  const contributed = viewer.repositoriesContributedTo?.nodes ?? [];
+  const contributedIds = new Set(contributed.map((n) => n?.id).filter(Boolean));
+  const seenIds = new Set();
+  const nodes = [];
+  for (const node of [...affiliated, ...contributed]) {
+    if (!node || seenIds.has(node.id)) continue;
+    seenIds.add(node.id);
+    nodes.push(node);
   }
 
-  const payload = await response.json();
-  const viewer = payload?.data?.viewer;
-  if (!viewer) {
-    throw new Error('GitHub GraphQL response missing data.viewer');
-  }
-
+  // Last-year commit counts per repo — the strongest "this is my work" signal
+  // for ranking org repos the user does not own.
   const contrib = viewer.contributionsCollection ?? {};
+  const commitsByRepo = new Map();
+  for (const c of contrib.commitContributionsByRepository ?? []) {
+    if (c?.repository?.id) commitsByRepo.set(c.repository.id, c.contributions?.totalCount ?? 0);
+  }
+
   const normalized = {
     login: viewer.login,
     contributions: {
@@ -350,9 +478,12 @@ export async function fetchGithubProfile(userId, { refresh = false } = {}) {
       reviews: contrib.totalPullRequestReviewContributions ?? 0,
       issues: contrib.totalIssueContributions ?? 0,
     },
+    organizations: (viewer.organizations?.nodes ?? [])
+      .filter((org) => org?.login)
+      .map((org) => ({ login: org.login, databaseId: org.databaseId ?? null })),
     // Defense-in-depth: the query already filters privacy, but a public-only
     // user must never see private repos even if GitHub returns them.
-    repos: (viewer.repositories?.nodes ?? [])
+    repos: nodes
       .filter((node) => includePrivate || !node.isPrivate)
       .map((node) => ({
       id: node.id,
@@ -363,6 +494,11 @@ export async function fetchGithubProfile(userId, { refresh = false } = {}) {
       isPrivate: !!node.isPrivate,
       isFork: !!node.isFork,
       isOwner: node.owner?.login === viewer.login,
+      ownerLogin: node.owner?.login ?? null,
+      ownerType: node.owner?.__typename === 'Organization' ? 'Organization' : 'User',
+      viewerPermission: node.viewerPermission ?? null,
+      contributed: contributedIds.has(node.id),
+      commitCount: commitsByRepo.get(node.id) ?? 0,
       stars: node.stargazerCount ?? 0,
       primaryLanguage: node.primaryLanguage?.name ?? null,
       languages: (node.languages?.edges ?? []).map((edge) => ({
@@ -396,7 +532,9 @@ export async function fetchGithubProfile(userId, { refresh = false } = {}) {
  * @returns {Promise<string>}
  */
 export async function fetchReadme(token, owner, repo) {
-  const response = await fetch(
+  // githubFetch already retries transient failures and throws
+  // GITHUB_RATE_LIMITED (with retryAt) when the quota is exhausted.
+  const response = await githubFetch(
     `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`,
     {
       headers: {
@@ -409,17 +547,60 @@ export async function fetchReadme(token, owner, repo) {
   if (response.ok) return response.text();
   if (response.status === 404) return ''; // no README — summarize from metadata alone
 
-  if (response.headers.get('x-ratelimit-remaining') === '0') {
-    const e = new Error('GitHub API rate limit exceeded — try again later');
-    e.code = 'GITHUB_RATE_LIMITED';
-    e.status = 429;
-    throw e;
-  }
-
   const bodyText = await response.text().catch(() => '');
   const e = new Error(`GitHub README request failed (${response.status}): ${bodyText.slice(0, 500)}`);
   e.status = response.status;
   throw e;
+}
+
+// ---------------------------------------------------------------------------
+// Installations (M2.10.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lists the app installations the user's token can see (personal account +
+ * orgs where the app is installed) and mirrors them into
+ * github_app_installations so webhook lifecycle events (suspend/unsuspend/
+ * delete) have rows to keep current between refreshes.
+ *
+ * @param {number} userId
+ * @returns {Promise<Array<{ id: string, login: string|null, type: string|null, suspended: boolean }>>}
+ */
+export async function listUserInstallations(userId) {
+  const response = await withAuthRetry(userId, (token) =>
+    githubFetch('https://api.github.com/user/installations?per_page=100', {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+      },
+    })
+  );
+  if (!response.ok) {
+    const e = new Error(`GitHub installations request failed (${response.status})`);
+    e.status = response.status;
+    throw e;
+  }
+  const data = await response.json().catch(() => ({}));
+  const installations = (data.installations ?? []).map((inst) => ({
+    id: String(inst.id),
+    login: inst.account?.login ?? null,
+    type: inst.account?.type ?? null,
+    suspended: Boolean(inst.suspended_at),
+  }));
+
+  for (const inst of installations) {
+    await database.run(
+      `INSERT INTO github_app_installations (installation_id, account_login, account_type, suspended, updated_at)
+       VALUES (?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(installation_id) DO UPDATE SET
+         account_login = excluded.account_login,
+         account_type = excluded.account_type,
+         suspended = excluded.suspended,
+         updated_at = excluded.updated_at`,
+      [inst.id, inst.login, inst.type, inst.suspended ? 1 : 0]
+    );
+  }
+  return installations;
 }
 
 // ---------------------------------------------------------------------------
@@ -564,29 +745,50 @@ export async function analyzeRepos(userId, repos) {
     await deductCredits(userId, cost);
   }
 
-  // Summarize sequentially (unchanged repos hit the cache, changed repos
-  // re-run the LLM for free); mark the first freeNow NEW summaries as
-  // consuming the free allowance — changed repos never flip counted_free.
+  // Summarize sequentially with per-repo fault tolerance (M2.10.4): one repo
+  // failing — deleted, org access lost mid-batch, rate limit — must not sink
+  // the whole batch. Free slots go to the first freeNow NEW repos that
+  // actually succeed; changed repos never flip counted_free.
   const summaries = [];
+  const failed = [];
   let freeMarked = 0;
+  let paidSucceeded = 0;
   for (const repo of repos) {
-    const summary = await summarizeRepo(userId, repo, token);
-    if (newIds.has(repo.id) && freeMarked < freeNow) {
-      await database.run(
-        'UPDATE github_repo_summaries SET counted_free = 1 WHERE user_id = ? AND repo_id = ?',
-        [userId, repo.id]
-      );
-      freeMarked += 1;
+    let summary;
+    try {
+      summary = await summarizeRepo(userId, repo, token);
+    } catch (err) {
+      failed.push({ repoId: repo.id, repoName: repo.name ?? null, code: err.code ?? 'ANALYSIS_FAILED' });
+      continue;
+    }
+    if (newIds.has(repo.id)) {
+      if (freeMarked < freeNow) {
+        await database.run(
+          'UPDATE github_repo_summaries SET counted_free = 1 WHERE user_id = ? AND repo_id = ?',
+          [userId, repo.id]
+        );
+        freeMarked += 1;
+      } else {
+        paidSucceeded += 1;
+      }
     }
     summaries.push({ repoId: repo.id, repoName: repo.name, ...summary });
   }
 
+  // Refund the up-front charge for paid NEW repos that failed — the user must
+  // never pay for a summary they didn't get.
+  const refund = Math.round(Math.max(0, chargeable - paidSucceeded) * CREDIT_COSTS.GITHUB_REPO * 100) / 100;
+  if (refund > 0) {
+    await grantCredits(userId, refund);
+  }
+
   return {
     summaries,
-    charged: cost,
-    freeUsed: freeNow,
-    freeLeft: freeLeft - freeNow,
-    reanalyzed: changedIds.size,
+    charged: Math.round((cost - refund) * 100) / 100,
+    freeUsed: freeMarked,
+    freeLeft: freeLeft - freeMarked,
+    reanalyzed: summaries.filter((s) => changedIds.has(s.repoId)).length,
+    failed,
   };
 }
 

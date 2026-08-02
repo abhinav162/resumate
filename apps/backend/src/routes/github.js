@@ -12,6 +12,7 @@ import {
   analyzeRepos,
   listSummaries,
   setIncludePrivate,
+  listUserInstallations,
 } from '../services/githubService.js';
 
 const router = express.Router();
@@ -59,7 +60,12 @@ function sendGithubError(res, error) {
     return res.status(401).json({ success: false, code: error.code, message: 'GitHub token expired or revoked — please reconnect' });
   }
   if (error.code === 'GITHUB_RATE_LIMITED') {
-    return res.status(429).json({ success: false, code: error.code, message: 'GitHub rate limit reached — try again shortly' });
+    return res.status(429).json({
+      success: false,
+      code: error.code,
+      retryAt: error.retryAt ?? null,
+      message: 'GitHub rate limit reached — try again shortly',
+    });
   }
   if (error.code === 'INSUFFICIENT_CREDITS') {
     return res.status(402).json({ success: false, code: error.code, message: 'Not enough credits for this analysis' });
@@ -217,6 +223,10 @@ router.get('/repos', requireUser, async (req, res) => {
       primaryLanguage: repo.primaryLanguage,
       pushedAt: repo.pushedAt,
       rank: repo.rank,
+      // M2.10.1 — owner grouping + commit-evidence signal for the UI.
+      ownerLogin: repo.ownerLogin ?? null,
+      ownerType: repo.ownerType ?? 'User',
+      commitCount: repo.commitCount ?? 0,
       // "analyzed" means a summary exists for the current push — importing it is free.
       analyzed: analyzedByRepo.get(repo.id) === repo.pushedAt,
     }));
@@ -229,6 +239,41 @@ router.get('/repos', requireUser, async (req, res) => {
         importable,
         freeReposLeft: await freeReposLeft(req.user.id),
       },
+    });
+  } catch (error) {
+    sendGithubError(res, error);
+  }
+});
+
+// GET /api/github/orgs — the org/installation access map (M2.10.2): the
+// user's personal account plus every org they belong to, each with the app's
+// install status there. Powers the "Organizations & access" panel that
+// explains why an org's private repos are (in)visible.
+router.get('/orgs', requireUser, async (req, res) => {
+  try {
+    const profile = await fetchGithubProfile(req.user.id);
+    const installations = await listUserInstallations(req.user.id);
+    const byLogin = new Map(
+      installations.filter((i) => i.login).map((i) => [i.login.toLowerCase(), i])
+    );
+    const statusFor = (login) => {
+      const inst = byLogin.get(String(login ?? '').toLowerCase());
+      if (!inst) return 'not_installed';
+      return inst.suspended ? 'suspended' : 'installed';
+    };
+    const orgs = [
+      { login: profile.login, type: 'User', databaseId: null, status: statusFor(profile.login) },
+      // Profiles cached before M2.10 have no organizations array.
+      ...(profile.organizations ?? []).map((org) => ({
+        login: org.login,
+        type: 'Organization',
+        databaseId: org.databaseId ?? null,
+        status: statusFor(org.login),
+      })),
+    ];
+    res.json({
+      success: true,
+      data: { orgs, appSlug: process.env.GITHUB_APP_SLUG || null },
     });
   } catch (error) {
     sendGithubError(res, error);
