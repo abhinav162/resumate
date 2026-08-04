@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Github } from 'lucide-react';
 import { AccountsStrip } from '../components/features/github/AccountsStrip';
 import { BrowseTab } from '../components/features/github/BrowseTab';
@@ -37,6 +38,22 @@ export default function GitHubPage() {
   const { isLoaded, isSignedIn } = useAuth();
   const { balance, loading: creditsLoading } = useCredits();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+
+  // GitHub's post-install redirect (after installing the app or changing its
+  // repo access on github.com) lands on ?tab=access&github=installed. Repo
+  // visibility just changed there, so refetch everything github-scoped once.
+  const installedFlash = searchParams.get('github') === 'installed';
+  const dismissInstalledFlash = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete('github');
+    setSearchParams(params, { replace: true });
+  };
+  useEffect(() => {
+    if (installedFlash) {
+      queryClient.invalidateQueries({ queryKey: ['github'] });
+    }
+  }, [installedFlash, queryClient]);
 
   const rawTab = searchParams.get('tab');
   const tab: TabId = rawTab === 'browse' || rawTab === 'access' ? rawTab : 'library';
@@ -88,6 +105,15 @@ export default function GitHubPage() {
           </p>
         )}
       </div>
+
+      {installedFlash && (
+        <div
+          className="bg-success-bg border border-success-border rounded-lg px-4 py-3 text-success-text text-sm font-medium cursor-pointer"
+          onClick={dismissInstalledFlash}
+        >
+          ✓ GitHub repository access updated — your repo list is refreshing.
+        </div>
+      )}
 
       {statusLoading && <div className="h-24 bg-paper-border rounded-lg animate-pulse" />}
 
