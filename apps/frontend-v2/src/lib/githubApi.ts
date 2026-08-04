@@ -87,6 +87,14 @@ export type GithubOrgAccess = {
   type: 'User' | 'Organization';
   databaseId: number | null;
   status: 'installed' | 'suspended' | 'not_installed';
+  /** 'all' | 'selected' — the installation's repo grant mode (M2.12). */
+  repositorySelection?: 'all' | 'selected' | null;
+  /**
+   * Repos THIS account's token can reach through the installation — the
+   * intersection of the org's grant and the user's own GitHub permissions.
+   * Null when the count could not be fetched.
+   */
+  accessible?: { total: number; privateCount: number } | null;
 };
 
 /** Org/installation access grouped under one connected account (M2.11). */

@@ -13,6 +13,7 @@ import {
   listSummaries,
   setIncludePrivate,
   listUserInstallations,
+  countInstallationAccessibleRepos,
   MAX_GITHUB_ACCOUNTS,
 } from '../services/githubService.js';
 
@@ -145,8 +146,13 @@ router.get('/callback', requireGithubConfig, async (req, res) => {
       // to save (installation webhooks keep repo access current, and without
       // a state the code cannot be attributed to a user), so land softly on
       // the access tab instead of flashing a failure.
+      //
+      // setup_action distinguishes what actually happened: 'install'/'update'
+      // granted access NOW; 'request' means a non-admin asked an org owner to
+      // approve — NOTHING is installed yet, so a success flash would lie.
       if (setupAction) {
-        return res.redirect(`${frontend}/github?tab=access&github=installed`);
+        const flash = setupAction === 'request' ? 'requested' : 'installed';
+        return res.redirect(`${frontend}/github?tab=access&github=${flash}`);
       }
       return res.redirect(`${frontend}/dashboard?github=error`);
     }
@@ -323,25 +329,35 @@ router.get('/orgs', requireUser, async (req, res) => {
       const byLogin = new Map(
         installations.filter((i) => i.login).map((i) => [i.login.toLowerCase(), i])
       );
-      const statusFor = (login) => {
+      // M2.12 — per-org access diagnostics: the intersection of the
+      // installation's grant and THIS user's own GitHub permissions. An org
+      // member without read on a granted private repo sees it missing here,
+      // so the UI can explain instead of hiding repos silently. Best-effort:
+      // a failed count never breaks the panel.
+      const describe = async (login, type) => {
         const inst = byLogin.get(String(login ?? '').toLowerCase());
-        if (!inst) return 'not_installed';
-        return inst.suspended ? 'suspended' : 'installed';
+        const entry = {
+          login,
+          type,
+          databaseId: null,
+          status: !inst ? 'not_installed' : inst.suspended ? 'suspended' : 'installed',
+          repositorySelection: inst?.repositorySelection ?? null,
+          accessible: null,
+        };
+        if (inst && !inst.suspended) {
+          try {
+            entry.accessible = await countInstallationAccessibleRepos(account.connectionId, inst.id);
+          } catch {
+            // leave accessible: null — the status badge still renders
+          }
+        }
+        return entry;
       };
-      accounts.push({
-        id: account.connectionId,
-        login: account.login,
-        error,
-        orgs: [
-          { login: account.login, type: 'User', databaseId: null, status: statusFor(account.login) },
-          ...(account.organizations ?? []).map((org) => ({
-            login: org.login,
-            type: 'Organization',
-            databaseId: org.databaseId ?? null,
-            status: statusFor(org.login),
-          })),
-        ],
-      });
+      const orgs = [await describe(account.login, 'User')];
+      for (const org of account.organizations ?? []) {
+        orgs.push({ ...(await describe(org.login, 'Organization')), databaseId: org.databaseId ?? null });
+      }
+      accounts.push({ id: account.connectionId, login: account.login, error, orgs });
     }
     res.json({
       success: true,

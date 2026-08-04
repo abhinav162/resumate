@@ -40,10 +40,13 @@ export default function GitHubPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
-  // GitHub's post-install redirect (after installing the app or changing its
-  // repo access on github.com) lands on ?tab=access&github=installed. Repo
-  // visibility just changed there, so refetch everything github-scoped once.
-  const installedFlash = searchParams.get('github') === 'installed';
+  // GitHub's post-install redirect lands on ?tab=access with a flash:
+  // 'installed' — the app was installed or its repo access changed (refetch
+  // everything github-scoped once); 'requested' — a non-admin org member
+  // asked an owner to approve, so NOTHING is granted yet.
+  const githubFlash = searchParams.get('github');
+  const installedFlash = githubFlash === 'installed';
+  const requestedFlash = githubFlash === 'requested';
   const dismissInstalledFlash = () => {
     const params = new URLSearchParams(searchParams);
     params.delete('github');
@@ -112,6 +115,15 @@ export default function GitHubPage() {
           onClick={dismissInstalledFlash}
         >
           ✓ GitHub repository access updated — your repo list is refreshing.
+        </div>
+      )}
+      {requestedFlash && (
+        <div
+          className="bg-warning-bg border border-warning-border rounded-lg px-4 py-3 text-warning-text text-sm font-medium cursor-pointer"
+          onClick={dismissInstalledFlash}
+        >
+          Access request sent — an organization owner must approve it before those repos appear
+          here. You'll see the org as connected once they do.
         </div>
       )}
 
