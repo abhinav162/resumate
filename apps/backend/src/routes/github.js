@@ -146,8 +146,13 @@ router.get('/callback', requireGithubConfig, async (req, res) => {
       // to save (installation webhooks keep repo access current, and without
       // a state the code cannot be attributed to a user), so land softly on
       // the access tab instead of flashing a failure.
+      //
+      // setup_action distinguishes what actually happened: 'install'/'update'
+      // granted access NOW; 'request' means a non-admin asked an org owner to
+      // approve — NOTHING is installed yet, so a success flash would lie.
       if (setupAction) {
-        return res.redirect(`${frontend}/github?tab=access&github=installed`);
+        const flash = setupAction === 'request' ? 'requested' : 'installed';
+        return res.redirect(`${frontend}/github?tab=access&github=${flash}`);
       }
       return res.redirect(`${frontend}/dashboard?github=error`);
     }

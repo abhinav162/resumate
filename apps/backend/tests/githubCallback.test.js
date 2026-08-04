@@ -60,6 +60,19 @@ describe('GET /api/github/callback redirect decisions', () => {
     assert.equal(res.redirectedTo, 'https://app.test/github?tab=access&github=installed');
   });
 
+  it("an org-member's access REQUEST lands with the pending flash, not the success one", async () => {
+    const res = mockRes();
+    await callbackHandler()(
+      { query: { setup_action: 'request', installation_id: '12345' } },
+      res
+    );
+    assert.equal(
+      res.redirectedTo,
+      'https://app.test/github?tab=access&github=requested',
+      'nothing is installed until an org owner approves — the flash must say so'
+    );
+  });
+
   it('a tampered state with setup_action still lands softly', async () => {
     const res = mockRes();
     await callbackHandler()(
