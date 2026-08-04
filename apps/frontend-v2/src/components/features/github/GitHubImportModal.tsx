@@ -55,6 +55,8 @@ function ModalContent({
   const [step, setStep] = useState<'pick' | 'preview'>('pick');
   // Pick order matters: the first `freeReposLeft` non-cached selections are free.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Narrow the picker to one connected account ('' = all) when several exist.
+  const [accountFilter, setAccountFilter] = useState('');
   const [summaries, setSummaries] = useState<RepoSummary[]>([]);
   const [checkedRepoIds, setCheckedRepoIds] = useState<Set<string>>(new Set());
   // True when the last analyze run skipped some repos (partial failure).
@@ -122,6 +124,10 @@ function ModalContent({
 
   const importable = repos?.importable ?? [];
   const freeReposLeft = repos?.freeReposLeft ?? status?.freeReposLeft ?? 0;
+  const accounts = status?.accounts ?? [];
+  const visibleRepos = accountFilter
+    ? importable.filter((r) => String(r.connectionId ?? '') === accountFilter)
+    : importable;
 
   // Free set: repos flagged analyzed by the repos endpoint plus anything with
   // a library entry (stale or not — re-analysis is free). Only never-analyzed
@@ -261,14 +267,33 @@ function ModalContent({
               )}
 
               {connected && !reposLoading && !reposError && (
-                <RepoPickerList
-                  repos={importable}
-                  selectedIds={selectedIds}
-                  onToggle={toggleSelected}
-                  freeRepoIds={freeRepoIds}
-                  freeReposLeft={freeReposLeft}
-                  disabledIds={existingSet}
-                />
+                <>
+                  {accounts.length > 1 && (
+                    <div className="mb-3">
+                      <select
+                        value={accountFilter}
+                        onChange={(e) => setAccountFilter(e.target.value)}
+                        className="text-xs font-medium border border-paper-border rounded px-2 py-1.5 bg-paper-surface text-ink-secondary hover:border-paper-border-strong focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        aria-label="Filter by account"
+                      >
+                        <option value="">All accounts</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={String(a.id)}>
+                            {a.login ? `@${a.login}` : `Account #${a.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <RepoPickerList
+                    repos={visibleRepos}
+                    selectedIds={selectedIds}
+                    onToggle={toggleSelected}
+                    freeRepoIds={freeRepoIds}
+                    freeReposLeft={freeReposLeft}
+                    disabledIds={existingSet}
+                  />
+                </>
               )}
             </>
           )}

@@ -6,14 +6,17 @@ import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
 import { githubApi } from '../../../lib/githubApi';
 import { PrivateRepoToggle } from './PrivateRepoToggle';
+import { useGithubConnect } from './useGithubConnect';
 
 /**
  * Dashboard card for the GitHub integration.
  *
  * Not connected: pitch + "Connect GitHub" button that redirects to the OAuth
- * URL. Connected: shows the login, remaining free repo analyses, and a
- * two-step disconnect (first click arms, second confirms). A status fetch
- * error is treated as "not connected" so the card never crashes the dashboard.
+ * URL. Connected: shows the first account's login (plus a "+N more" hint when
+ * several accounts are connected — they're managed on /github), remaining
+ * free repo analyses, and a two-step disconnect-all (first click arms, second
+ * confirms). A status fetch error is treated as "not connected" so the card
+ * never crashes the dashboard.
  */
 export function GitHubConnectCard({ className = '' }: { className?: string }) {
   const queryClient = useQueryClient();
@@ -24,15 +27,11 @@ export function GitHubConnectCard({ className = '' }: { className?: string }) {
     queryFn: githubApi.getStatus,
   });
 
-  const connect = useMutation({
-    mutationFn: githubApi.getConnectUrl,
-    onSuccess: ({ url }) => {
-      window.location.href = url;
-    },
-  });
+  const connect = useGithubConnect();
 
   const disconnect = useMutation({
-    mutationFn: githubApi.disconnect,
+    // No connectionId: the dashboard shortcut disconnects every account.
+    mutationFn: () => githubApi.disconnect(),
     onSuccess: () => {
       setConfirmingDisconnect(false);
       queryClient.invalidateQueries({ queryKey: ['github'] });
@@ -67,13 +66,29 @@ export function GitHubConnectCard({ className = '' }: { className?: string }) {
     );
   }
 
+  const accounts = status.accounts;
+  const extraAccounts = accounts.length - 1;
+
   return (
     <Card className={`p-4 space-y-3 ${className}`}>
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Github size={18} className="text-ink-primary" />
-          <p className="font-heading font-semibold text-ink-primary">@{status.login}</p>
-          <span className="w-2 h-2 rounded-full bg-success-text" title="Connected" />
+        <div className="flex items-center gap-2 min-w-0">
+          <Github size={18} className="text-ink-primary shrink-0" />
+          <p className="font-heading font-semibold text-ink-primary truncate">
+            @{accounts[0]?.login ?? status.login}
+          </p>
+          {extraAccounts > 0 && (
+            <span
+              className="text-xs text-ink-muted shrink-0"
+              title={accounts
+                .slice(1)
+                .map((a) => (a.login ? `@${a.login}` : `Account #${a.id}`))
+                .join(', ')}
+            >
+              +{extraAccounts} more
+            </span>
+          )}
+          <span className="w-2 h-2 rounded-full bg-success-text shrink-0" title="Connected" />
         </div>
         {confirmingDisconnect ? (
           <Button
@@ -83,7 +98,7 @@ export function GitHubConnectCard({ className = '' }: { className?: string }) {
             onClick={() => disconnect.mutate()}
             onBlur={() => setConfirmingDisconnect(false)}
           >
-            Confirm disconnect?
+            {accounts.length > 1 ? 'Disconnect all?' : 'Confirm disconnect?'}
           </Button>
         ) : (
           <Button size="sm" variant="ghost" onClick={() => setConfirmingDisconnect(true)}>
@@ -99,7 +114,21 @@ export function GitHubConnectCard({ className = '' }: { className?: string }) {
           Manage projects →
         </Link>
       </div>
-      <PrivateRepoToggle status={status} />
+      {accounts.length === 1 ? (
+        <PrivateRepoToggle
+          includePrivate={accounts[0].includePrivate}
+          appSlug={status.appSlug}
+          connectionId={accounts[0].id}
+        />
+      ) : (
+        <p className="text-xs text-ink-muted">
+          Private-repo access is set per account on the{' '}
+          <Link to="/github?tab=access" className="text-indigo-600 font-medium hover:text-indigo-700">
+            GitHub page
+          </Link>
+          .
+        </p>
+      )}
     </Card>
   );
 }

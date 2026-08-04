@@ -14,7 +14,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { isLoaded, isSignedIn } = useAuth();
 
-  // The GitHub OAuth callback bounces back here with ?github=connected|error.
+  // The GitHub OAuth callback bounces back here with ?github=connected|error|limit.
   const [searchParams, setSearchParams] = useSearchParams();
   const githubResult = searchParams.get('github');
   const dismissGithubFlash = () => {
@@ -60,6 +60,14 @@ export default function Dashboard() {
           onClick={dismissGithubFlash}
         >
           GitHub connection failed. Please try again.
+        </div>
+      )}
+      {githubResult === 'limit' && (
+        <div
+          className="bg-warning-bg border border-warning-border rounded-lg px-4 py-3 text-warning-text text-sm font-medium cursor-pointer"
+          onClick={dismissGithubFlash}
+        >
+          Account limit reached (3) — disconnect a GitHub account before adding another.
         </div>
       )}
 

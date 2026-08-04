@@ -602,8 +602,8 @@ vertical stack.
 - Editor import modal keeps working (shared picker; account filter when >1).
 
 **Verification**
-- [ ] `tsc -b` clean; `vite build` green; eslint no net-new errors.
-- [ ] Old flat `/orgs` consumers gone; no stale single-account shapes.
+- [x] `tsc -b` clean; `vite build` green; eslint no net-new errors.
+- [x] Old flat `/orgs` consumers gone; no stale single-account shapes.
 
 ---
 

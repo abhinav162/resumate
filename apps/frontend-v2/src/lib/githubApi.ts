@@ -28,18 +28,36 @@ export type GithubRepo = {
   ownerType?: 'User' | 'Organization';
   /** The user's commits to this repo in the last year (0 if none). */
   commitCount?: number;
+  /** Connection (account) this repo was listed through (M2.11 multi-account). */
+  connectionId?: number | null;
+  /** Login of the connected account that listed this repo. */
+  accountLogin?: string | null;
 };
 
 export type GithubTechProfile = {
   languages: { name: string; score: number; percent: number }[];
 };
 
+/** One connected GitHub account (a user can connect up to `maxAccounts`). */
+export type GithubAccount = {
+  id: number;
+  login: string | null;
+  /** Whether private repos are included in listings for this account. */
+  includePrivate: boolean;
+  connectedAt: string;
+};
+
 export type GithubStatus = {
   connected: boolean;
+  /** Login of the first connected account (legacy mirror — see `accounts`). */
   login: string | null;
   freeReposLeft: number;
-  /** Whether private repos are included in listings (user opt-in). */
+  /** Private-repo preference of the first account (legacy mirror). */
   includePrivate: boolean;
+  /** All connected GitHub accounts, oldest first. */
+  accounts: GithubAccount[];
+  /** How many accounts can be connected at once. */
+  maxAccounts: number;
   /** GitHub App slug for the "grant repo access" install deep-link, if configured. */
   appSlug: string | null;
 };
@@ -71,6 +89,15 @@ export type GithubOrgAccess = {
   status: 'installed' | 'suspended' | 'not_installed';
 };
 
+/** Org/installation access grouped under one connected account (M2.11). */
+export type GithubOrgAccountAccess = {
+  id: number;
+  login: string | null;
+  /** Error code (e.g. 'GITHUB_RECONNECT') when this account's org fetch failed. */
+  error?: string | null;
+  orgs: GithubOrgAccess[];
+};
+
 /** A stored library entry from a previous repo analysis. */
 export type GithubSummaryEntry = {
   repoId: string;
@@ -84,12 +111,25 @@ export type GithubSummaryEntry = {
   stale: boolean;
   /** Resumes that already contain a project imported from this repo. */
   inResumes: { id: string; name: string }[];
+  /** Login of the connected account the repo was analyzed through. */
+  accountLogin: string | null;
+};
+
+/** Per-account fetch state returned alongside the repo list. */
+export type GithubRepoAccountState = {
+  id: number;
+  login: string | null;
+  /** Error code (e.g. 'GITHUB_RECONNECT') when this account's fetch failed —
+   *  other accounts still contribute repos to `importable`. */
+  error: string | null;
 };
 
 export type GithubReposResult = {
   login: string;
   techProfile: GithubTechProfile;
   importable: GithubRepo[];
+  /** One entry per connected account so partial failures can be surfaced. */
+  accounts: GithubRepoAccountState[];
   freeReposLeft: number;
 };
 
@@ -100,18 +140,28 @@ export const githubApi = {
     return response.data.data;
   },
 
+  /**
+   * One flow for connect, "add account" and reconnect: GitHub authorizes
+   * whichever account the browser is signed into — reconnecting an existing
+   * account rotates its token, a new account adds a connection.
+   */
   getConnectUrl: async (): Promise<{ url: string }> => {
     const response = await api.get<ApiResponse<{ url: string }>>('/github/connect');
     if (!response.data.data) throw new Error('Failed to fetch GitHub connect URL');
     return response.data.data;
   },
 
-  disconnect: async (): Promise<void> => {
-    await api.post('/github/disconnect');
+  /** Disconnect one account by connection id, or all accounts when omitted. */
+  disconnect: async (connectionId?: number): Promise<void> => {
+    await api.post('/github/disconnect', connectionId !== undefined ? { connectionId } : {});
   },
 
-  setPreferences: async (includePrivate: boolean): Promise<void> => {
-    await api.post('/github/preferences', { includePrivate });
+  /** Set the private-repo preference for one account, or all when omitted. */
+  setPreferences: async (includePrivate: boolean, connectionId?: number): Promise<void> => {
+    await api.post('/github/preferences', {
+      includePrivate,
+      ...(connectionId !== undefined ? { connectionId } : {}),
+    });
   },
 
   getRepos: async (refresh?: boolean): Promise<GithubReposResult> => {
@@ -121,9 +171,9 @@ export const githubApi = {
     return response.data.data;
   },
 
-  getOrgs: async (): Promise<{ orgs: GithubOrgAccess[]; appSlug: string | null }> => {
+  getOrgs: async (): Promise<{ accounts: GithubOrgAccountAccess[]; appSlug: string | null }> => {
     const response = await api.get<
-      ApiResponse<{ orgs: GithubOrgAccess[]; appSlug: string | null }>
+      ApiResponse<{ accounts: GithubOrgAccountAccess[]; appSlug: string | null }>
     >('/github/orgs');
     if (!response.data.data) throw new Error('Failed to fetch GitHub organizations');
     return response.data.data;
