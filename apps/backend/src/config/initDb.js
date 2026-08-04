@@ -140,23 +140,34 @@ async function createTables() {
     )
   `);
 
-  // M2 GitHub integration — one connection per user; token encrypted at rest.
+  // M2 GitHub integration — tokens encrypted at rest. M2.11: a user can
+  // connect several GitHub accounts, keyed by GitHub's numeric account id
+  // (stable across renames, unlike login). Legacy rows have a NULL account id
+  // until the account reconnects (SQLite treats NULLs as distinct in UNIQUE).
   await database.run(`
     CREATE TABLE IF NOT EXISTS github_connections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER UNIQUE NOT NULL,
+      user_id INTEGER NOT NULL,
+      github_account_id TEXT,
       github_login TEXT,
       encrypted_token TEXT NOT NULL,
       scopes TEXT,
+      encrypted_refresh_token TEXT,
+      token_expires_at TEXT,
+      refresh_token_expires_at TEXT,
+      include_private INTEGER NOT NULL DEFAULT 0,
       connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, github_account_id),
       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
     )
   `);
 
-  // Raw GitHub profile payload cache (repos, languages, contributions), TTL-based.
+  // Raw GitHub profile payload cache (repos, languages, contributions),
+  // TTL-based. M2.11: keyed per connection — each account has its own cache.
   await database.run(`
     CREATE TABLE IF NOT EXISTS github_profiles (
-      user_id INTEGER PRIMARY KEY,
+      connection_id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
       data TEXT NOT NULL,
       fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
@@ -255,6 +266,68 @@ async function createTables() {
   // M2.9.2 private repos: off by default — public-only listing stays the
   // baseline flow until the user opts in.
   await database.run(`ALTER TABLE github_connections ADD COLUMN include_private INTEGER NOT NULL DEFAULT 0`).catch(() => {});
+
+  // M2.11.1 — multiple GitHub accounts per user. Existing DBs carry
+  // UNIQUE(user_id) on github_connections, which SQLite cannot relax in
+  // place, so they get a transactional create-copy-swap rebuild (detected by
+  // the missing github_account_id column; fresh DBs are created with the new
+  // shape above and skip this). Row ids are preserved — profile caches and
+  // summaries reference them.
+  const connCols = await database.all(`PRAGMA table_info(github_connections)`);
+  if (!connCols.some((c) => c.name === 'github_account_id')) {
+    await database.batch([
+      `CREATE TABLE github_connections_m211 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        github_account_id TEXT,
+        github_login TEXT,
+        encrypted_token TEXT NOT NULL,
+        scopes TEXT,
+        encrypted_refresh_token TEXT,
+        token_expires_at TEXT,
+        refresh_token_expires_at TEXT,
+        include_private INTEGER NOT NULL DEFAULT 0,
+        connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, github_account_id),
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )`,
+      `INSERT INTO github_connections_m211
+         (id, user_id, github_login, encrypted_token, scopes, encrypted_refresh_token,
+          token_expires_at, refresh_token_expires_at, include_private, connected_at)
+       SELECT id, user_id, github_login, encrypted_token, scopes, encrypted_refresh_token,
+              token_expires_at, refresh_token_expires_at, include_private, connected_at
+       FROM github_connections`,
+      `DROP TABLE github_connections`,
+      `ALTER TABLE github_connections_m211 RENAME TO github_connections`,
+    ]);
+  }
+
+  // M2.11.1 — profile cache re-keyed per connection. The cache is disposable
+  // (24h TTL, rebuilt lazily), so old-shape tables are simply dropped.
+  const profCols = await database.all(`PRAGMA table_info(github_profiles)`);
+  if (!profCols.some((c) => c.name === 'connection_id')) {
+    await database.batch([
+      `DROP TABLE github_profiles`,
+      `CREATE TABLE github_profiles (
+        connection_id INTEGER PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        data TEXT NOT NULL,
+        fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )`,
+    ]);
+  }
+  await database.run('CREATE INDEX IF NOT EXISTS idx_github_profiles_user ON github_profiles(user_id)');
+
+  // M2.11.1 — which account a summary came from (display only; the free
+  // allowance stays per USER). Pre-M2.11 rows backfill to the user's single
+  // connection; both statements are idempotent.
+  await database.run(`ALTER TABLE github_repo_summaries ADD COLUMN connection_id INTEGER`).catch(() => {});
+  await database.run(
+    `UPDATE github_repo_summaries SET connection_id = (
+       SELECT MIN(id) FROM github_connections c WHERE c.user_id = github_repo_summaries.user_id
+     ) WHERE connection_id IS NULL`
+  ).catch(() => {});
 
   // Reset any IN_PROGRESS / PENDING rows orphaned by a server restart
   await database.run(

@@ -6,6 +6,7 @@ import { initializeDatabase } from '../src/config/initDb.js';
 import {
   saveConnection,
   getConnection,
+  listConnections,
   getToken,
   getValidToken,
   setIncludePrivate,
@@ -16,6 +17,7 @@ import {
   analyzeRepos,
   listSummaries,
   listUserInstallations,
+  MAX_GITHUB_ACCOUNTS,
 } from '../src/services/githubService.js';
 
 // ---------------------------------------------------------------------------
@@ -123,6 +125,16 @@ function installFetchMock(overrides = {}) {
       return mockResponse(200, { json: overrides.installations ?? { installations: [] } });
     }
     if (u === 'https://api.github.com/graphql') {
+      // graphqlByToken: route by Authorization header (multi-account tests).
+      // Values are either a payload object or a status number to fail with.
+      if (overrides.graphqlByToken) {
+        const token = String(init.headers?.Authorization ?? '').replace('Bearer ', '');
+        const entry = overrides.graphqlByToken[token];
+        if (typeof entry === 'number') {
+          return mockResponse(entry, { json: { message: 'Bad credentials' } });
+        }
+        if (entry) return mockResponse(200, { json: entry });
+      }
       // graphqlStatusOnce: fail the FIRST GraphQL call only (401-retry tests).
       if (overrides.graphqlStatusOnce && !graphqlFailedOnce) {
         graphqlFailedOnce = true;
@@ -260,9 +272,13 @@ describe('githubService', () => {
     it('deleteConnection removes connection + profile cache but keeps repo summaries', async () => {
       const userId = await createUser();
       await connect(userId);
+      const conn = await database.get(
+        'SELECT id FROM github_connections WHERE user_id = ?',
+        [userId]
+      );
       await database.run(
-        'INSERT INTO github_profiles (user_id, data, fetched_at) VALUES (?, ?, ?)',
-        [userId, '{}', new Date().toISOString()]
+        'INSERT INTO github_profiles (connection_id, user_id, data, fetched_at) VALUES (?, ?, ?, ?)',
+        [conn.id, userId, '{}', new Date().toISOString()]
       );
       await database.run(
         `INSERT INTO github_repo_summaries (user_id, repo_id, repo_name, pushed_at, summary)
@@ -662,6 +678,270 @@ describe('githubService', () => {
     });
   });
 
+  // M2.11 — multiple GitHub accounts per user.
+  describe('multiple accounts', () => {
+    /** Minimal GraphQL viewer payload for one account with the given repo ids. */
+    function accountNode(login, id) {
+      return {
+        id,
+        name: id.toLowerCase(),
+        nameWithOwner: `${login}/${id.toLowerCase()}`,
+        description: null,
+        url: `https://github.com/${login}/${id.toLowerCase()}`,
+        isPrivate: false,
+        isFork: false,
+        stargazerCount: 0,
+        viewerPermission: 'ADMIN',
+        primaryLanguage: { name: 'JavaScript' },
+        pushedAt: '2026-07-01T00:00:00Z',
+        owner: { login, __typename: 'User' },
+        languages: { edges: [] },
+      };
+    }
+
+    function accountPayload(login, repoIds) {
+      return {
+        data: {
+          viewer: {
+            login,
+            contributionsCollection: {
+              totalCommitContributions: 10,
+              totalPullRequestContributions: 2,
+              totalPullRequestReviewContributions: 1,
+              totalIssueContributions: 1,
+            },
+            organizations: { nodes: [] },
+            repositories: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: repoIds.map((id) => accountNode(login, id)),
+            },
+            repositoriesContributedTo: { nodes: [] },
+          },
+        },
+      };
+    }
+
+    it('creates one connection row per GitHub account', async () => {
+      const userId = await createUser();
+      const idA = await saveConnection(userId, { token: 'ghp_a', login: 'personal', scopes: '', accountId: '111' });
+      const idB = await saveConnection(userId, { token: 'ghp_b', login: 'workcat', scopes: '', accountId: '222' });
+
+      const conns = await listConnections(userId);
+      assert.deepEqual(conns.map((c) => c.id), [idA, idB]);
+      assert.deepEqual(conns.map((c) => c.accountId), ['111', '222']);
+      assert.deepEqual(conns.map((c) => c.login), ['personal', 'workcat']);
+    });
+
+    it('reconnecting the same account id rotates the token in place and preserves include_private', async () => {
+      const userId = await createUser();
+      const id1 = await saveConnection(userId, { token: 'ghp_one', login: 'personal', scopes: '', accountId: '111' });
+      await setIncludePrivate(userId, true, id1);
+
+      const id2 = await saveConnection(userId, {
+        token: 'ghp_two',
+        login: 'personal-renamed', // login changes track renames; the account id is the key
+        scopes: '',
+        accountId: '111',
+      });
+
+      assert.equal(id2, id1, 'same account must reuse the row');
+      const conns = await listConnections(userId);
+      assert.equal(conns.length, 1);
+      assert.equal(conns[0].login, 'personal-renamed');
+      assert.equal(conns[0].includePrivate, true, 'preference survives reconnect');
+      assert.equal(await getToken(userId), 'ghp_two');
+    });
+
+    it('claims a legacy connection (no account id) when the login matches', async () => {
+      const userId = await createUser();
+      await connect(userId); // legacy: login 'octocat', NULL account id
+
+      const id = await saveConnection(userId, { token: 'ghp_new', login: 'octocat', scopes: '', accountId: '777' });
+
+      const conns = await listConnections(userId);
+      assert.equal(conns.length, 1, 'legacy row claimed, not duplicated');
+      assert.equal(conns[0].id, id);
+      assert.equal(conns[0].accountId, '777', 'account id backfilled');
+      assert.equal(await getToken(userId), 'ghp_new');
+    });
+
+    it('a different login than the legacy row adds a second connection', async () => {
+      const userId = await createUser();
+      await connect(userId); // legacy octocat, NULL account id
+
+      await saveConnection(userId, { token: 'ghp_other', login: 'other', scopes: '', accountId: '888' });
+
+      const conns = await listConnections(userId);
+      assert.equal(conns.length, 2);
+      assert.equal(conns[0].accountId, null, 'legacy row untouched');
+      assert.equal(await getToken(userId), 'ghp_plaintext_secret', 'legacy token untouched');
+    });
+
+    it(`rejects account ${MAX_GITHUB_ACCOUNTS + 1} with GITHUB_ACCOUNT_LIMIT`, async () => {
+      const userId = await createUser();
+      for (let i = 1; i <= MAX_GITHUB_ACCOUNTS; i++) {
+        await saveConnection(userId, { token: `ghp_${i}`, login: `acct-${i}`, scopes: '', accountId: String(i) });
+      }
+
+      await assert.rejects(
+        saveConnection(userId, { token: 'ghp_x', login: 'one-too-many', scopes: '', accountId: '99' }),
+        (err) => {
+          assert.equal(err.code, 'GITHUB_ACCOUNT_LIMIT');
+          assert.equal(err.status, 409);
+          return true;
+        }
+      );
+      assert.equal((await listConnections(userId)).length, MAX_GITHUB_ACCOUNTS);
+    });
+
+    it('merges repos across accounts with per-account tags, deduping shared repos', async () => {
+      const userId = await createUser();
+      const idA = await saveConnection(userId, { token: 'ghp_a', login: 'personal', scopes: '', accountId: '111' });
+      const idB = await saveConnection(userId, { token: 'ghp_b', login: 'workcat', scopes: '', accountId: '222' });
+      installFetchMock({
+        graphqlByToken: {
+          ghp_a: accountPayload('personal', ['R_A1', 'R_SHARED']),
+          ghp_b: accountPayload('workcat', ['R_B1', 'R_SHARED']),
+        },
+      });
+
+      const profile = await fetchGithubProfile(userId);
+
+      assert.deepEqual(
+        profile.repos.map((r) => r.id),
+        ['R_A1', 'R_SHARED', 'R_B1'],
+        'first-account order, shared repo deduped'
+      );
+      const a1 = profile.repos.find((r) => r.id === 'R_A1');
+      assert.equal(a1.connectionId, idA);
+      assert.equal(a1.accountLogin, 'personal');
+      const b1 = profile.repos.find((r) => r.id === 'R_B1');
+      assert.equal(b1.connectionId, idB);
+      assert.equal(b1.accountLogin, 'workcat');
+      assert.deepEqual(profile.accounts.map((a) => a.login), ['personal', 'workcat']);
+      assert.deepEqual(profile.accounts.map((a) => a.error), [null, null]);
+      assert.equal(profile.contributions.commits, 20, 'contributions summed across accounts');
+    });
+
+    it('one dead account degrades gracefully: the other still loads, error surfaces per account', async () => {
+      const userId = await createUser();
+      await saveConnection(userId, { token: 'ghp_a', login: 'personal', scopes: '', accountId: '111' });
+      await saveConnection(userId, { token: 'ghp_dead', login: 'workcat', scopes: '', accountId: '222' });
+      installFetchMock({
+        graphqlByToken: {
+          ghp_a: accountPayload('personal', ['R_A1']),
+          ghp_dead: 401, // revoked, and no refresh token to fall back on
+        },
+      });
+
+      const profile = await fetchGithubProfile(userId);
+
+      assert.deepEqual(profile.repos.map((r) => r.id), ['R_A1']);
+      assert.equal(profile.accounts.find((a) => a.login === 'personal').error, null);
+      assert.equal(
+        profile.accounts.find((a) => a.login === 'workcat').error,
+        'GITHUB_RECONNECT',
+        'dead account reported, not fatal'
+      );
+    });
+
+    it('deleteConnection with a connectionId removes only that account (summaries kept)', async () => {
+      const userId = await createUser();
+      const iso = new Date().toISOString();
+      const idA = await saveConnection(userId, { token: 'ghp_a', login: 'personal', scopes: '', accountId: '111' });
+      const idB = await saveConnection(userId, { token: 'ghp_b', login: 'workcat', scopes: '', accountId: '222' });
+      await database.run(
+        'INSERT INTO github_profiles (connection_id, user_id, data, fetched_at) VALUES (?, ?, ?, ?)',
+        [idA, userId, '{}', iso]
+      );
+      await database.run(
+        'INSERT INTO github_profiles (connection_id, user_id, data, fetched_at) VALUES (?, ?, ?, ?)',
+        [idB, userId, '{}', iso]
+      );
+      await database.run(
+        `INSERT INTO github_repo_summaries (user_id, repo_id, repo_name, pushed_at, summary, connection_id)
+         VALUES (?, 'R_paid', 'paid', '2026-01-01T00:00:00Z', '{}', ?)`,
+        [userId, idB]
+      );
+
+      await deleteConnection(userId, idB);
+
+      assert.deepEqual((await listConnections(userId)).map((c) => c.id), [idA]);
+      assert.ok(
+        await database.get('SELECT 1 FROM github_profiles WHERE connection_id = ?', [idA]),
+        "the other account's cache survives"
+      );
+      assert.equal(await database.get('SELECT 1 FROM github_profiles WHERE connection_id = ?', [idB]), null);
+      assert.ok(
+        await database.get('SELECT 1 FROM github_repo_summaries WHERE user_id = ?', [userId]),
+        'paid summaries survive a per-account disconnect'
+      );
+    });
+
+    it('setIncludePrivate with a connectionId flips only that account and clears only its cache', async () => {
+      const userId = await createUser();
+      const iso = new Date().toISOString();
+      const idA = await saveConnection(userId, { token: 'ghp_a', login: 'personal', scopes: '', accountId: '111' });
+      const idB = await saveConnection(userId, { token: 'ghp_b', login: 'workcat', scopes: '', accountId: '222' });
+      await database.run(
+        'INSERT INTO github_profiles (connection_id, user_id, data, fetched_at) VALUES (?, ?, ?, ?)',
+        [idA, userId, '{}', iso]
+      );
+      await database.run(
+        'INSERT INTO github_profiles (connection_id, user_id, data, fetched_at) VALUES (?, ?, ?, ?)',
+        [idB, userId, '{}', iso]
+      );
+
+      await setIncludePrivate(userId, true, idB);
+
+      const conns = await listConnections(userId);
+      assert.equal(conns.find((c) => c.id === idA).includePrivate, false);
+      assert.equal(conns.find((c) => c.id === idB).includePrivate, true);
+      assert.ok(await database.get('SELECT 1 FROM github_profiles WHERE connection_id = ?', [idA]));
+      assert.equal(await database.get('SELECT 1 FROM github_profiles WHERE connection_id = ?', [idB]), null);
+    });
+
+    it("setIncludePrivate rejects a connectionId the user doesn't own", async () => {
+      const userA = await createUser();
+      const userB = await createUser();
+      await saveConnection(userA, { token: 'ghp_a', login: 'a', scopes: '', accountId: '111' });
+      const idB = await saveConnection(userB, { token: 'ghp_b', login: 'b', scopes: '', accountId: '222' });
+
+      await assert.rejects(setIncludePrivate(userA, true, idB), (err) => {
+        assert.equal(err.code, 'GITHUB_NOT_CONNECTED');
+        return true;
+      });
+      assert.equal((await listConnections(userB))[0].includePrivate, false, 'victim untouched');
+    });
+
+    it("analyzeRepos fetches each repo's README with its own account's token", async () => {
+      const userId = await createUser(5);
+      const idA = await saveConnection(userId, { token: 'ghp_a', login: 'personal', scopes: '', accountId: '111' });
+      const idB = await saveConnection(userId, { token: 'ghp_b', login: 'workcat', scopes: '', accountId: '222' });
+
+      const result = await analyzeRepos(userId, [
+        { ...makeRepo(101), connectionId: idA },
+        { ...makeRepo(102), connectionId: idB },
+      ]);
+
+      assert.equal(result.summaries.length, 2);
+      const readmeCalls = fetchCalls.filter((c) => c.url.includes('/readme'));
+      assert.equal(readmeCalls.length, 2);
+      assert.equal(readmeCalls[0].init.headers.Authorization, 'Bearer ghp_a');
+      assert.equal(readmeCalls[1].init.headers.Authorization, 'Bearer ghp_b');
+
+      const rows = await database.all(
+        'SELECT repo_id, connection_id FROM github_repo_summaries WHERE user_id = ? ORDER BY repo_id',
+        [userId]
+      );
+      assert.deepEqual(
+        rows.map((r) => [r.repo_id, Number(r.connection_id)]),
+        [['R_repo_101', idA], ['R_repo_102', idB]],
+        'summaries stamped with their source connection'
+      );
+    });
+  });
+
   // M2.10.2 — installation visibility for the org-access panel.
   describe('listUserInstallations', () => {
     it('normalizes installations and mirrors them into github_app_installations', async () => {
@@ -1005,15 +1285,19 @@ describe('githubService', () => {
   describe('listSummaries', () => {
     /** Seeds the cached profile with the given repos' (id, pushedAt) pairs. */
     async function seedProfile(userId, repos) {
+      const conn = await database.get(
+        'SELECT id FROM github_connections WHERE user_id = ? ORDER BY id LIMIT 1',
+        [userId]
+      );
       const data = JSON.stringify({
         login: 'octocat',
         repos: repos.map((r) => ({ id: r.id, pushedAt: r.pushedAt })),
         fetchedAt: new Date().toISOString(),
       });
       await database.run(
-        `INSERT INTO github_profiles (user_id, data, fetched_at) VALUES (?, ?, ?)
-         ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
-        [userId, data, new Date().toISOString()]
+        `INSERT INTO github_profiles (connection_id, user_id, data, fetched_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(connection_id) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
+        [conn.id, userId, data, new Date().toISOString()]
       );
     }
 

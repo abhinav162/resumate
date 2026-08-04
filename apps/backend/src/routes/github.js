@@ -6,13 +6,14 @@ import { GITHUB_FREE_REPOS } from '../config/credits.config.js';
 import { getCredits } from '../services/creditService.js';
 import {
   saveConnection,
-  getConnection,
+  listConnections,
   deleteConnection,
   fetchGithubProfile,
   analyzeRepos,
   listSummaries,
   setIncludePrivate,
   listUserInstallations,
+  MAX_GITHUB_ACCOUNTS,
 } from '../services/githubService.js';
 
 const router = express.Router();
@@ -70,6 +71,9 @@ function sendGithubError(res, error) {
   if (error.code === 'INSUFFICIENT_CREDITS') {
     return res.status(402).json({ success: false, code: error.code, message: 'Not enough credits for this analysis' });
   }
+  if (error.code === 'GITHUB_ACCOUNT_LIMIT') {
+    return res.status(409).json({ success: false, code: error.code, message: error.message });
+  }
   console.error('GitHub route error:', error);
   return res.status(error.status || 500).json({ success: false, message: error.message });
 }
@@ -82,17 +86,26 @@ async function freeReposLeft(userId) {
   return Math.max(0, GITHUB_FREE_REPOS - (row?.n ?? 0));
 }
 
-// GET /api/github/status — connection state for the dashboard card
+// GET /api/github/status — connection state for the dashboard card and the
+// accounts strip (M2.11: a user can connect up to MAX_GITHUB_ACCOUNTS
+// accounts; `login`/`includePrivate` mirror the first one for older UI spots).
 router.get('/status', requireUser, async (req, res) => {
   try {
-    const conn = await getConnection(req.user.id);
+    const accounts = await listConnections(req.user.id);
     res.json({
       success: true,
       data: {
-        connected: Boolean(conn),
-        login: conn?.login ?? null,
+        connected: accounts.length > 0,
+        login: accounts[0]?.login ?? null,
+        includePrivate: accounts[0]?.includePrivate ?? false,
+        accounts: accounts.map((a) => ({
+          id: a.id,
+          login: a.login,
+          includePrivate: a.includePrivate,
+          connectedAt: a.connectedAt,
+        })),
+        maxAccounts: MAX_GITHUB_ACCOUNTS,
         freeReposLeft: await freeReposLeft(req.user.id),
-        includePrivate: conn?.includePrivate ?? false,
         // App slug for the "grant repo access" install deep-link (private repos
         // are only visible once the app is installed on the user's account).
         appSlug: process.env.GITHUB_APP_SLUG || null,
@@ -155,19 +168,29 @@ router.get('/callback', requireGithubConfig, async (req, res) => {
     // Expiring user tokens ("Expire user authorization tokens" app setting):
     // GitHub returns expires_in (~8h) + a refresh_token (~6 months). Store both
     // so getValidToken can rotate silently instead of forcing a reconnect.
+    // M2.11: the numeric account id keys the connection — reconnecting the
+    // same GitHub account rotates tokens in place, a different one adds a row.
     const now = Date.now();
-    await saveConnection(userRow.id, {
-      token: tokenData.access_token,
-      login: ghUser.login ?? null,
-      scopes: tokenData.scope ?? '',
-      refreshToken: tokenData.refresh_token ?? null,
-      tokenExpiresAt: tokenData.expires_in
-        ? new Date(now + tokenData.expires_in * 1000).toISOString()
-        : null,
-      refreshTokenExpiresAt: tokenData.refresh_token_expires_in
-        ? new Date(now + tokenData.refresh_token_expires_in * 1000).toISOString()
-        : null,
-    });
+    try {
+      await saveConnection(userRow.id, {
+        token: tokenData.access_token,
+        login: ghUser.login ?? null,
+        accountId: ghUser.id != null ? String(ghUser.id) : null,
+        scopes: tokenData.scope ?? '',
+        refreshToken: tokenData.refresh_token ?? null,
+        tokenExpiresAt: tokenData.expires_in
+          ? new Date(now + tokenData.expires_in * 1000).toISOString()
+          : null,
+        refreshTokenExpiresAt: tokenData.refresh_token_expires_in
+          ? new Date(now + tokenData.refresh_token_expires_in * 1000).toISOString()
+          : null,
+      });
+    } catch (err) {
+      if (err.code === 'GITHUB_ACCOUNT_LIMIT') {
+        return res.redirect(`${frontend}/dashboard?github=limit`);
+      }
+      throw err;
+    }
     res.redirect(`${frontend}/dashboard?github=connected`);
   } catch (error) {
     console.error('GitHub callback error:', error);
@@ -175,26 +198,37 @@ router.get('/callback', requireGithubConfig, async (req, res) => {
   }
 });
 
-// POST /api/github/preferences { includePrivate } — opt in/out of listing
-// private repos (M2.9.2). Clears the profile cache so the change is immediate.
+// POST /api/github/preferences { includePrivate, connectionId? } — opt in/out
+// of listing private repos (M2.9.2). M2.11: connectionId scopes the change to
+// one account (absent = all). Clears the affected profile cache(s) so the
+// change is immediate.
 router.post('/preferences', requireUser, async (req, res) => {
   try {
-    const { includePrivate } = req.body ?? {};
+    const { includePrivate, connectionId } = req.body ?? {};
     if (typeof includePrivate !== 'boolean') {
       return res.status(400).json({ success: false, message: 'includePrivate must be a boolean' });
     }
-    await setIncludePrivate(req.user.id, includePrivate);
-    res.json({ success: true, data: { includePrivate } });
+    if (connectionId != null && !Number.isInteger(connectionId)) {
+      return res.status(400).json({ success: false, message: 'connectionId must be an integer' });
+    }
+    await setIncludePrivate(req.user.id, includePrivate, connectionId ?? null);
+    res.json({ success: true, data: { includePrivate, connectionId: connectionId ?? null } });
   } catch (error) {
     sendGithubError(res, error);
   }
 });
 
-// POST /api/github/disconnect — removes the stored token + profile cache
+// POST /api/github/disconnect { connectionId? } — removes the stored token +
+// profile cache. M2.11: connectionId disconnects one account (absent = all).
 router.post('/disconnect', requireUser, async (req, res) => {
   try {
-    await deleteConnection(req.user.id);
-    res.json({ success: true, data: { connected: false } });
+    const { connectionId } = req.body ?? {};
+    if (connectionId != null && !Number.isInteger(connectionId)) {
+      return res.status(400).json({ success: false, message: 'connectionId must be an integer' });
+    }
+    await deleteConnection(req.user.id, connectionId ?? null);
+    const remaining = await listConnections(req.user.id);
+    res.json({ success: true, data: { connected: remaining.length > 0 } });
   } catch (error) {
     sendGithubError(res, error);
   }
@@ -227,6 +261,9 @@ router.get('/repos', requireUser, async (req, res) => {
       ownerLogin: repo.ownerLogin ?? null,
       ownerType: repo.ownerType ?? 'User',
       commitCount: repo.commitCount ?? 0,
+      // M2.11 — which connected account this repo came from.
+      connectionId: repo.connectionId ?? null,
+      accountLogin: repo.accountLogin ?? null,
       // "analyzed" means a summary exists for the current push — importing it is free.
       analyzed: analyzedByRepo.get(repo.id) === repo.pushedAt,
     }));
@@ -237,6 +274,13 @@ router.get('/repos', requireUser, async (req, res) => {
         contributions: profile.contributions,
         techProfile: techProfile(profile.repos),
         importable,
+        // M2.11 — per-account fetch outcome so the UI can flag an account
+        // that needs reconnecting without blanking the others' repos.
+        accounts: (profile.accounts ?? []).map((a) => ({
+          id: a.connectionId,
+          login: a.login,
+          error: a.error ?? null,
+        })),
         freeReposLeft: await freeReposLeft(req.user.id),
       },
     });
@@ -245,35 +289,52 @@ router.get('/repos', requireUser, async (req, res) => {
   }
 });
 
-// GET /api/github/orgs — the org/installation access map (M2.10.2): the
-// user's personal account plus every org they belong to, each with the app's
-// install status there. Powers the "Organizations & access" panel that
-// explains why an org's private repos are (in)visible.
+// GET /api/github/orgs — the org/installation access map (M2.10.2): each
+// connected account plus every org it belongs to, with the app's install
+// status there. Powers the "Organizations & access" panel that explains why
+// an org's private repos are (in)visible. M2.11: grouped per account.
 router.get('/orgs', requireUser, async (req, res) => {
   try {
     const profile = await fetchGithubProfile(req.user.id);
-    const installations = await listUserInstallations(req.user.id);
-    const byLogin = new Map(
-      installations.filter((i) => i.login).map((i) => [i.login.toLowerCase(), i])
-    );
-    const statusFor = (login) => {
-      const inst = byLogin.get(String(login ?? '').toLowerCase());
-      if (!inst) return 'not_installed';
-      return inst.suspended ? 'suspended' : 'installed';
-    };
-    const orgs = [
-      { login: profile.login, type: 'User', databaseId: null, status: statusFor(profile.login) },
-      // Profiles cached before M2.10 have no organizations array.
-      ...(profile.organizations ?? []).map((org) => ({
-        login: org.login,
-        type: 'Organization',
-        databaseId: org.databaseId ?? null,
-        status: statusFor(org.login),
-      })),
-    ];
+    const accounts = [];
+    for (const account of profile.accounts ?? []) {
+      if (account.error) {
+        accounts.push({ id: account.connectionId, login: account.login, error: account.error, orgs: [] });
+        continue;
+      }
+      let installations = [];
+      let error = null;
+      try {
+        installations = await listUserInstallations(req.user.id, account.connectionId);
+      } catch (err) {
+        error = err.code ?? 'GITHUB_ERROR';
+      }
+      const byLogin = new Map(
+        installations.filter((i) => i.login).map((i) => [i.login.toLowerCase(), i])
+      );
+      const statusFor = (login) => {
+        const inst = byLogin.get(String(login ?? '').toLowerCase());
+        if (!inst) return 'not_installed';
+        return inst.suspended ? 'suspended' : 'installed';
+      };
+      accounts.push({
+        id: account.connectionId,
+        login: account.login,
+        error,
+        orgs: [
+          { login: account.login, type: 'User', databaseId: null, status: statusFor(account.login) },
+          ...(account.organizations ?? []).map((org) => ({
+            login: org.login,
+            type: 'Organization',
+            databaseId: org.databaseId ?? null,
+            status: statusFor(org.login),
+          })),
+        ],
+      });
+    }
     res.json({
       success: true,
-      data: { orgs, appSlug: process.env.GITHUB_APP_SLUG || null },
+      data: { accounts, appSlug: process.env.GITHUB_APP_SLUG || null },
     });
   } catch (error) {
     sendGithubError(res, error);

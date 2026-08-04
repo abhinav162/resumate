@@ -1,59 +1,151 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { RefreshCw, Unplug } from 'lucide-react';
 import { Badge } from '../../ui/Badge';
+import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
-import { githubApi, type GithubOrgAccess } from '../../../lib/githubApi';
+import {
+  githubApi,
+  type GithubOrgAccess,
+  type GithubOrgAccountAccess,
+  type GithubStatus,
+} from '../../../lib/githubApi';
+import { PrivateRepoToggle } from './PrivateRepoToggle';
+import { useGithubConnect } from './useGithubConnect';
 
 /**
- * "Organizations & access" panel (M2.10). Lists the user's personal account
- * plus every organization they belong to, with the GitHub App's install state
- * there. Orgs without the app installed get an install/request deep-link —
- * private repos from an org only become listable once the app is installed
- * (org owners may need to approve the request).
+ * "Access & settings" content (M2.10 orgs panel, reshaped per-account for
+ * M2.11): one card per connected GitHub account with the organizations it can
+ * see, the GitHub App's install state there, that account's private-repo
+ * preference, and reconnect/disconnect actions. Orgs without the app
+ * installed get an install/request deep-link — private repos from an org only
+ * become listable once the app is installed (org owners may need to approve).
  */
-export function OrganizationsPanel({ connected }: { connected: boolean }) {
+export function OrganizationsPanel({ status }: { status: GithubStatus }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['github', 'orgs'],
     queryFn: githubApi.getOrgs,
-    enabled: connected,
+    enabled: status.connected,
   });
 
-  const orgs = data?.orgs ?? [];
-  const appSlug = data?.appSlug ?? null;
+  const appSlug = data?.appSlug ?? status.appSlug;
+  // includePrivate lives on the status accounts; org data is keyed by the
+  // same connection ids.
+  const statusById = new Map(status.accounts.map((a) => [a.id, a]));
 
   return (
-    <Card className="p-4 space-y-3">
-      <div>
-        <h2 className="font-heading font-semibold text-ink-primary">Organizations &amp; access</h2>
-        <p className="text-xs text-ink-muted mt-0.5">
-          Private repositories from an organization appear only after the app is installed there —
-          org owners may need to approve the request.
-        </p>
-      </div>
+    <div className="space-y-4">
+      <p className="text-xs text-ink-muted">
+        Private repositories from an organization appear only after the app is installed there —
+        org owners may need to approve the request.
+      </p>
 
       {isLoading && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {[1, 2].map((i) => (
-            <div key={i} className="h-10 bg-paper-border rounded animate-pulse" />
+            <div key={i} className="h-32 bg-paper-border rounded-lg animate-pulse" />
           ))}
         </div>
       )}
 
       {isError && (
-        <p className="text-xs text-danger-text">
+        <p className="text-sm text-danger-text">
           Could not load your organizations. Please try again.
         </p>
       )}
 
-      {!isLoading && !isError && (
+      {!isLoading &&
+        !isError &&
+        (data?.accounts ?? []).map((account) => (
+          <AccountAccessCard
+            key={account.id}
+            account={account}
+            includePrivate={statusById.get(account.id)?.includePrivate ?? false}
+            appSlug={appSlug}
+          />
+        ))}
+    </div>
+  );
+}
+
+/** One connected account: its orgs, private-repo preference and actions. */
+function AccountAccessCard({
+  account,
+  includePrivate,
+  appSlug,
+}: {
+  account: GithubOrgAccountAccess;
+  includePrivate: boolean;
+  appSlug: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const connect = useGithubConnect();
+
+  const disconnect = useMutation({
+    mutationFn: () => githubApi.disconnect(account.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['github'] });
+    },
+  });
+
+  const label = account.login ? `@${account.login}` : `Account #${account.id}`;
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-heading font-semibold text-ink-primary truncate">{label}</h3>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={connect.isPending}
+            onClick={() => connect.mutate()}
+          >
+            <RefreshCw size={12} />
+            Reconnect
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={disconnect.isPending}
+            onClick={() => {
+              if (window.confirm(`Disconnect ${label}? Its repos will disappear from listings.`))
+                disconnect.mutate();
+            }}
+          >
+            <Unplug size={12} />
+            Disconnect
+          </Button>
+        </div>
+      </div>
+
+      {disconnect.isError && (
+        <p className="text-xs text-danger-text">Could not disconnect. Please try again.</p>
+      )}
+
+      {account.error ? (
+        <p className="text-xs text-warning-text">
+          {account.error === 'GITHUB_RECONNECT'
+            ? `${label} needs reconnecting — organization access can't be listed until then.`
+            : `Could not load organizations for ${label}. Please try again.`}
+        </p>
+      ) : (
         <ul className="divide-y divide-paper-border">
-          {orgs.map((org) => (
+          {account.orgs.map((org) => (
             <OrgRow key={org.login} org={org} appSlug={appSlug} />
           ))}
-          {orgs.length === 0 && (
+          {account.orgs.length === 0 && (
             <li className="py-2 text-xs text-ink-muted">No organizations found.</li>
           )}
         </ul>
       )}
+
+      <div className="pt-2 border-t border-paper-border">
+        <PrivateRepoToggle
+          includePrivate={includePrivate}
+          appSlug={appSlug}
+          connectionId={account.id}
+        />
+      </div>
     </Card>
   );
 }

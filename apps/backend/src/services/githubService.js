@@ -7,12 +7,17 @@ import { bifrostGenerate, parseJsonResponse } from './aiService.js';
 /**
  * GitHub integration service (M2).
  *
- * Handles the encrypted token store (one connection per user), a TTL-cached
- * GitHub GraphQL profile fetch, and per-repo LLM summarization with a
- * (repo_id, pushed_at) cache plus the free-allowance / credit pricing model.
+ * Handles the encrypted token store (M2.11: up to MAX_GITHUB_ACCOUNTS
+ * connections per user, keyed by GitHub's numeric account id), a TTL-cached
+ * per-connection GraphQL profile fetch merged across accounts, and per-repo
+ * LLM summarization with a (repo_id, pushed_at) cache plus the free-allowance
+ * / credit pricing model (the allowance stays per USER, not per account).
  */
 
 const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
+
+// M2.11 — hard cap on connected GitHub accounts per user.
+export const MAX_GITHUB_ACCOUNTS = 3;
 
 // Profile payloads are considered fresh for 24h unless the caller forces a refresh.
 const PROFILE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -151,80 +156,16 @@ async function githubFetch(url, init = {}, { retries = 2 } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Connection management (userId = internal integer users.id)
+// Connection management (userId = internal integer users.id; a user can have
+// several connections, identified to clients by the connection row id)
 // ---------------------------------------------------------------------------
 
-/**
- * Stores (or replaces) a user's GitHub connection. Both tokens are encrypted
- * at rest; reconnecting overwrites the previous tokens/login/scopes but
- * PRESERVES the include_private preference.
- *
- * Expiry fields are absolute ISO timestamps (null = non-expiring token, i.e.
- * the app has "Expire user authorization tokens" disabled).
- *
- * @param {number} userId
- * @param {{ token: string, login: string, scopes?: string,
- *   refreshToken?: string|null, tokenExpiresAt?: string|null,
- *   refreshTokenExpiresAt?: string|null }} connection
- */
-export async function saveConnection(
-  userId,
-  { token, login, scopes, refreshToken = null, tokenExpiresAt = null, refreshTokenExpiresAt = null }
-) {
-  const encrypted = encryptToken(token);
-  const encryptedRefresh = refreshToken ? encryptToken(refreshToken) : null;
-  await database.run(
-    `INSERT INTO github_connections
-       (user_id, github_login, encrypted_token, scopes, encrypted_refresh_token,
-        token_expires_at, refresh_token_expires_at, connected_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-     ON CONFLICT(user_id) DO UPDATE SET
-       github_login = excluded.github_login,
-       encrypted_token = excluded.encrypted_token,
-       scopes = excluded.scopes,
-       encrypted_refresh_token = excluded.encrypted_refresh_token,
-       token_expires_at = excluded.token_expires_at,
-       refresh_token_expires_at = excluded.refresh_token_expires_at,
-       connected_at = excluded.connected_at`,
-    [userId, login, encrypted, scopes ?? null, encryptedRefresh, tokenExpiresAt, refreshTokenExpiresAt]
-  );
-}
-
-/**
- * Returns the user's connection metadata for display, or null when not
- * connected. NEVER returns the token (not even encrypted).
- *
- * @param {number} userId
- * @returns {Promise<{ login: string, scopes: string|null, connectedAt: string }|null>}
- */
-export async function getConnection(userId) {
-  const row = await database.get(
-    'SELECT github_login, scopes, connected_at, include_private FROM github_connections WHERE user_id = ?',
-    [userId]
-  );
-  if (!row) return null;
-  return {
-    login: row.github_login,
-    scopes: row.scopes,
-    connectedAt: row.connected_at,
-    includePrivate: Boolean(row.include_private),
-  };
-}
-
-/**
- * Returns the decrypted access token, or null when not connected. For internal
- * use by routes/services only — never expose it in API responses.
- *
- * @param {number} userId
- * @returns {Promise<string|null>}
- */
-export async function getToken(userId) {
-  const row = await database.get(
-    'SELECT encrypted_token FROM github_connections WHERE user_id = ?',
-    [userId]
-  );
-  if (!row) return null;
-  return decryptToken(row.encrypted_token);
+/** Builds the typed error for a missing connection. */
+function notConnectedError() {
+  const e = new Error('GitHub account is not connected');
+  e.code = 'GITHUB_NOT_CONNECTED';
+  e.status = 400;
+  return e;
 }
 
 /** Builds the typed error that sends the frontend into the reconnect flow. */
@@ -235,17 +176,171 @@ function reconnectError() {
   return e;
 }
 
+/** Builds the typed error for exceeding the per-user account cap. */
+function accountLimitError() {
+  const e = new Error(`At most ${MAX_GITHUB_ACCOUNTS} GitHub accounts can be connected`);
+  e.code = 'GITHUB_ACCOUNT_LIMIT';
+  e.status = 409;
+  return e;
+}
+
+/**
+ * Stores a GitHub connection. Both tokens are encrypted at rest.
+ *
+ * M2.11 upsert rules (accountId = GitHub's numeric user id, stable across
+ * renames):
+ * - same (user, accountId) → token rotation in place, include_private PRESERVED;
+ * - a legacy row (NULL accountId) is claimed when the login matches (or when
+ *   the caller itself has no accountId — pre-M2.11 semantics);
+ * - otherwise a NEW row is added, capped at MAX_GITHUB_ACCOUNTS per user.
+ *
+ * Expiry fields are absolute ISO timestamps (null = non-expiring token, i.e.
+ * the app has "Expire user authorization tokens" disabled).
+ *
+ * @param {number} userId
+ * @param {{ token: string, login: string, scopes?: string, accountId?: string|number|null,
+ *   refreshToken?: string|null, tokenExpiresAt?: string|null,
+ *   refreshTokenExpiresAt?: string|null }} connection
+ * @returns {Promise<number>} the connection row id
+ */
+export async function saveConnection(
+  userId,
+  {
+    token,
+    login,
+    scopes,
+    accountId = null,
+    refreshToken = null,
+    tokenExpiresAt = null,
+    refreshTokenExpiresAt = null,
+  }
+) {
+  const encrypted = encryptToken(token);
+  const encryptedRefresh = refreshToken ? encryptToken(refreshToken) : null;
+  const account = accountId != null ? String(accountId) : null;
+
+  let existing = null;
+  if (account != null) {
+    existing = await database.get(
+      'SELECT id FROM github_connections WHERE user_id = ? AND github_account_id = ?',
+      [userId, account]
+    );
+  }
+  if (!existing) {
+    // Legacy rows (pre-M2.11) have no account id. Claim one only when it is
+    // provably the same account (login match) — a different login means the
+    // user is genuinely adding a second account.
+    existing =
+      account != null
+        ? await database.get(
+            'SELECT id FROM github_connections WHERE user_id = ? AND github_account_id IS NULL AND github_login = ?',
+            [userId, login]
+          )
+        : await database.get(
+            'SELECT id FROM github_connections WHERE user_id = ? AND github_account_id IS NULL',
+            [userId]
+          );
+  }
+
+  if (existing) {
+    await database.run(
+      `UPDATE github_connections SET
+         github_account_id = COALESCE(?, github_account_id),
+         github_login = ?,
+         encrypted_token = ?,
+         scopes = ?,
+         encrypted_refresh_token = ?,
+         token_expires_at = ?,
+         refresh_token_expires_at = ?,
+         connected_at = datetime('now')
+       WHERE id = ?`,
+      [account, login, encrypted, scopes ?? null, encryptedRefresh, tokenExpiresAt, refreshTokenExpiresAt, existing.id]
+    );
+    return Number(existing.id);
+  }
+
+  const countRow = await database.get(
+    'SELECT COUNT(*) AS n FROM github_connections WHERE user_id = ?',
+    [userId]
+  );
+  if (Number(countRow?.n ?? 0) >= MAX_GITHUB_ACCOUNTS) throw accountLimitError();
+
+  const result = await database.run(
+    `INSERT INTO github_connections
+       (user_id, github_account_id, github_login, encrypted_token, scopes,
+        encrypted_refresh_token, token_expires_at, refresh_token_expires_at, connected_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    [userId, account, login, encrypted, scopes ?? null, encryptedRefresh, tokenExpiresAt, refreshTokenExpiresAt]
+  );
+  return result.id;
+}
+
+/**
+ * Lists all of the user's connections for display. NEVER returns tokens.
+ *
+ * @param {number} userId
+ * @returns {Promise<Array<{ id: number, accountId: string|null, login: string|null,
+ *   scopes: string|null, connectedAt: string, includePrivate: boolean }>>}
+ */
+export async function listConnections(userId) {
+  const rows = await database.all(
+    `SELECT id, github_account_id, github_login, scopes, connected_at, include_private
+     FROM github_connections WHERE user_id = ? ORDER BY id`,
+    [userId]
+  );
+  return rows.map((row) => ({
+    id: Number(row.id),
+    accountId: row.github_account_id ?? null,
+    login: row.github_login,
+    scopes: row.scopes,
+    connectedAt: row.connected_at,
+    includePrivate: Boolean(row.include_private),
+  }));
+}
+
+/**
+ * Returns the user's FIRST connection's metadata (legacy single-account view),
+ * or null when not connected. NEVER returns the token (not even encrypted).
+ *
+ * @param {number} userId
+ * @returns {Promise<{ id: number, login: string, scopes: string|null,
+ *   connectedAt: string, includePrivate: boolean }|null>}
+ */
+export async function getConnection(userId) {
+  const [first] = await listConnections(userId);
+  if (!first) return null;
+  const { accountId: _accountId, ...conn } = first;
+  return conn;
+}
+
+/**
+ * Returns the first connection's decrypted access token, or null when not
+ * connected. For internal use by routes/services only — never expose it in
+ * API responses.
+ *
+ * @param {number} userId
+ * @returns {Promise<string|null>}
+ */
+export async function getToken(userId) {
+  const row = await database.get(
+    'SELECT encrypted_token FROM github_connections WHERE user_id = ? ORDER BY id LIMIT 1',
+    [userId]
+  );
+  if (!row) return null;
+  return decryptToken(row.encrypted_token);
+}
+
 /**
  * Exchanges the stored refresh token for a fresh access token and persists the
  * rotated pair (GitHub rotates the refresh token on every use). Throws
  * GITHUB_RECONNECT when there is no refresh token, it has expired, or GitHub
  * rejects it — all cases where only a full re-connect can help.
  *
- * @param {number} userId
+ * @param {number} connectionId
  * @param {{ encrypted_refresh_token: string|null, refresh_token_expires_at: string|null }} row
  * @returns {Promise<string>} fresh plaintext access token
  */
-async function refreshAccessToken(userId, row) {
+async function refreshAccessToken(connectionId, row) {
   if (!row?.encrypted_refresh_token) throw reconnectError();
   const refreshExpiry = row.refresh_token_expires_at ? Date.parse(row.refresh_token_expires_at) : NaN;
   if (Number.isFinite(refreshExpiry) && refreshExpiry <= Date.now()) throw reconnectError();
@@ -270,7 +365,7 @@ async function refreshAccessToken(userId, row) {
        encrypted_refresh_token = ?,
        token_expires_at = ?,
        refresh_token_expires_at = ?
-     WHERE user_id = ?`,
+     WHERE id = ?`,
     [
       encryptToken(data.access_token),
       data.refresh_token ? encryptToken(data.refresh_token) : row.encrypted_refresh_token,
@@ -278,38 +373,54 @@ async function refreshAccessToken(userId, row) {
       data.refresh_token_expires_in
         ? new Date(now + data.refresh_token_expires_in * 1000).toISOString()
         : row.refresh_token_expires_at,
-      userId,
+      connectionId,
     ]
   );
   return data.access_token;
 }
 
 /** Reads the full token row for refresh decisions. */
-function getTokenRow(userId) {
+function getTokenRowById(connectionId) {
   return database.get(
-    `SELECT encrypted_token, encrypted_refresh_token, token_expires_at, refresh_token_expires_at
-     FROM github_connections WHERE user_id = ?`,
-    [userId]
+    `SELECT id, encrypted_token, encrypted_refresh_token, token_expires_at, refresh_token_expires_at
+     FROM github_connections WHERE id = ?`,
+    [connectionId]
   );
 }
 
 /**
- * Returns a currently-valid access token, refreshing it first when it is
- * expired or about to expire (within TOKEN_EXPIRY_SKEW_MS). Tokens without an
- * expiry (app setting disabled, or legacy rows) are returned as-is. Null when
- * not connected; GITHUB_RECONNECT when a needed refresh is impossible.
+ * Returns a currently-valid access token for ONE connection, refreshing it
+ * first when it is expired or about to expire (within TOKEN_EXPIRY_SKEW_MS).
+ * Tokens without an expiry (app setting disabled, or legacy rows) are returned
+ * as-is. Null when the connection does not exist; GITHUB_RECONNECT when a
+ * needed refresh is impossible.
+ *
+ * @param {number} connectionId
+ * @returns {Promise<string|null>}
+ */
+export async function getValidTokenById(connectionId) {
+  const row = await getTokenRowById(connectionId);
+  if (!row) return null;
+  const expiresAt = row.token_expires_at ? Date.parse(row.token_expires_at) : NaN;
+  if (Number.isFinite(expiresAt) && expiresAt - Date.now() <= TOKEN_EXPIRY_SKEW_MS) {
+    return refreshAccessToken(connectionId, row);
+  }
+  return decryptToken(row.encrypted_token);
+}
+
+/**
+ * Legacy single-account variant: valid token for the user's FIRST connection.
  *
  * @param {number} userId
  * @returns {Promise<string|null>}
  */
 export async function getValidToken(userId) {
-  const row = await getTokenRow(userId);
+  const row = await database.get(
+    'SELECT id FROM github_connections WHERE user_id = ? ORDER BY id LIMIT 1',
+    [userId]
+  );
   if (!row) return null;
-  const expiresAt = row.token_expires_at ? Date.parse(row.token_expires_at) : NaN;
-  if (Number.isFinite(expiresAt) && expiresAt - Date.now() <= TOKEN_EXPIRY_SKEW_MS) {
-    return refreshAccessToken(userId, row);
-  }
-  return decryptToken(row.encrypted_token);
+  return getValidTokenById(Number(row.id));
 }
 
 /**
@@ -317,13 +428,13 @@ export async function getValidToken(userId) {
  * 401, which proves the current token is dead no matter what the row says
  * (revocation, clock skew, legacy rows without expiry metadata).
  *
- * @param {number} userId
+ * @param {number} connectionId
  * @returns {Promise<string>} fresh plaintext access token
  */
-async function forceRefreshToken(userId) {
-  const row = await getTokenRow(userId);
+async function forceRefreshToken(connectionId) {
+  const row = await getTokenRowById(connectionId);
   if (!row) throw notConnectedError();
-  return refreshAccessToken(userId, row);
+  return refreshAccessToken(connectionId, row);
 }
 
 /**
@@ -332,75 +443,89 @@ async function forceRefreshToken(userId) {
  * metadata). `request` is called with a plaintext token and must return the
  * fetch Response.
  *
- * @param {number} userId
+ * @param {number} connectionId
  * @param {(token: string) => Promise<Response>} request
  * @returns {Promise<Response>}
  */
-async function withAuthRetry(userId, request) {
-  const token = await getValidToken(userId);
+async function withAuthRetry(connectionId, request) {
+  const token = await getValidTokenById(connectionId);
   if (!token) throw notConnectedError();
   let response = await request(token);
   if (response.status === 401) {
-    response = await request(await forceRefreshToken(userId));
+    response = await request(await forceRefreshToken(connectionId));
     if (response.status === 401) throw reconnectError();
   }
   return response;
 }
 
 /**
- * Persists the user's private-repo listing preference and invalidates the
- * cached profile so the next listing reflects it immediately.
+ * Persists the private-repo listing preference and invalidates the affected
+ * cached profiles so the next listing reflects it immediately.
  *
  * @param {number} userId
  * @param {boolean} includePrivate
+ * @param {number|null} [connectionId] specific account, or null for ALL
  */
-export async function setIncludePrivate(userId, includePrivate) {
-  const conn = await getConnection(userId);
-  if (!conn) throw notConnectedError();
-  await database.run(
-    'UPDATE github_connections SET include_private = ? WHERE user_id = ?',
-    [includePrivate ? 1 : 0, userId]
-  );
+export async function setIncludePrivate(userId, includePrivate, connectionId = null) {
+  const connections = await listConnections(userId);
+  if (connections.length === 0) throw notConnectedError();
+  if (connectionId != null) {
+    const target = connections.find((c) => c.id === Number(connectionId));
+    if (!target) throw notConnectedError();
+    await database.run('UPDATE github_connections SET include_private = ? WHERE id = ?', [
+      includePrivate ? 1 : 0,
+      target.id,
+    ]);
+    await database.run('DELETE FROM github_profiles WHERE connection_id = ?', [target.id]);
+    return;
+  }
+  await database.run('UPDATE github_connections SET include_private = ? WHERE user_id = ?', [
+    includePrivate ? 1 : 0,
+    userId,
+  ]);
   await database.run('DELETE FROM github_profiles WHERE user_id = ?', [userId]);
 }
 
 /**
- * Disconnects GitHub: removes the connection and the cached profile payload.
- * Repo summaries are kept — the user paid (credits or free allowance) for them.
+ * Disconnects GitHub: removes the connection(s) and the cached profile
+ * payload(s). Repo summaries are kept — the user paid (credits or free
+ * allowance) for them.
  *
  * @param {number} userId
+ * @param {number|null} [connectionId] specific account, or null for ALL
  */
-export async function deleteConnection(userId) {
+export async function deleteConnection(userId, connectionId = null) {
+  if (connectionId != null) {
+    await database.run('DELETE FROM github_connections WHERE id = ? AND user_id = ?', [
+      connectionId,
+      userId,
+    ]);
+    await database.run('DELETE FROM github_profiles WHERE connection_id = ?', [connectionId]);
+    return;
+  }
   await database.run('DELETE FROM github_connections WHERE user_id = ?', [userId]);
   await database.run('DELETE FROM github_profiles WHERE user_id = ?', [userId]);
 }
 
 // ---------------------------------------------------------------------------
-// Fetch layer (M2.2)
+// Fetch layer (M2.2; M2.11: per-connection fetch + merged multi-account view)
 // ---------------------------------------------------------------------------
 
-/** Builds the typed error for a missing connection. */
-function notConnectedError() {
-  const e = new Error('GitHub account is not connected');
-  e.code = 'GITHUB_NOT_CONNECTED';
-  e.status = 400;
-  return e;
-}
-
 /**
- * Fetches the user's GitHub profile (identity, contributions, repos) via the
- * GraphQL API, normalized for the frontend. Cached in github_profiles for 24h;
- * pass { refresh: true } to bypass the cache.
+ * Fetches ONE connection's GitHub profile (identity, contributions, repos)
+ * via the GraphQL API, normalized for the frontend. Cached per connection in
+ * github_profiles for 24h; pass { refresh: true } to bypass the cache.
  *
  * @param {number} userId
+ * @param {{ id: number, includePrivate: boolean }} connection
  * @param {{ refresh?: boolean }} [opts]
  * @returns {Promise<object>} normalized profile
  */
-export async function fetchGithubProfile(userId, { refresh = false } = {}) {
+async function fetchConnectionProfile(userId, connection, { refresh = false } = {}) {
   // Cache hit: fresh enough and not forced → no network call at all.
   const cached = await database.get(
-    'SELECT data, fetched_at FROM github_profiles WHERE user_id = ?',
-    [userId]
+    'SELECT data, fetched_at FROM github_profiles WHERE connection_id = ?',
+    [connection.id]
   );
   if (cached && !refresh) {
     const age = Date.now() - Date.parse(cached.fetched_at);
@@ -409,13 +534,11 @@ export async function fetchGithubProfile(userId, { refresh = false } = {}) {
     }
   }
 
-  const conn = await getConnection(userId);
-  if (!conn) throw notConnectedError();
-  const includePrivate = conn.includePrivate;
+  const includePrivate = connection.includePrivate;
 
   // Every GraphQL request goes through the auth-retry + resilience layers.
   const runQuery = async (query, variables) => {
-    const response = await withAuthRetry(userId, (token) =>
+    const response = await withAuthRetry(connection.id, (token) =>
       githubFetch(GITHUB_GRAPHQL_URL, {
         method: 'POST',
         headers: {
@@ -512,13 +635,95 @@ export async function fetchGithubProfile(userId, { refresh = false } = {}) {
 
   // Persist (fetched_at as ISO so TTL parsing is unambiguous) and return.
   await database.run(
-    `INSERT INTO github_profiles (user_id, data, fetched_at)
-     VALUES (?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
-    [userId, JSON.stringify(normalized), normalized.fetchedAt]
+    `INSERT INTO github_profiles (connection_id, user_id, data, fetched_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(connection_id) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
+    [connection.id, userId, JSON.stringify(normalized), normalized.fetchedAt]
   );
 
   return normalized;
+}
+
+/**
+ * Fetches the user's GitHub profile MERGED across every connected account.
+ * One account failing (e.g. needs reconnect) must not blank the others: its
+ * error code is reported in `accounts[].error` and the rest still load. Only
+ * when EVERY account fails does the first failure propagate.
+ *
+ * Merged shape: repos are deduped by repo id across accounts (first account
+ * wins) and tagged with `connectionId` + `accountLogin`; contributions are
+ * summed; organizations are deduped by login. `accounts` carries the
+ * per-account breakdown (login, organizations, error).
+ *
+ * @param {number} userId
+ * @param {{ refresh?: boolean }} [opts]
+ * @returns {Promise<object>} merged normalized profile
+ */
+export async function fetchGithubProfile(userId, { refresh = false } = {}) {
+  const connections = await listConnections(userId);
+  if (connections.length === 0) throw notConnectedError();
+
+  const results = await Promise.allSettled(
+    connections.map((c) => fetchConnectionProfile(userId, c, { refresh }))
+  );
+
+  const accounts = [];
+  const repos = [];
+  const seenRepoIds = new Set();
+  const organizations = [];
+  const seenOrgLogins = new Set();
+  const contributions = { commits: 0, prs: 0, reviews: 0, issues: 0 };
+  let firstProfile = null;
+
+  results.forEach((result, i) => {
+    const connection = connections[i];
+    if (result.status === 'rejected') {
+      accounts.push({
+        connectionId: connection.id,
+        login: connection.login,
+        includePrivate: connection.includePrivate,
+        organizations: [],
+        error: result.reason?.code ?? 'GITHUB_ERROR',
+      });
+      return;
+    }
+    const profile = result.value;
+    if (!firstProfile) firstProfile = profile;
+    accounts.push({
+      connectionId: connection.id,
+      login: profile.login ?? connection.login,
+      includePrivate: connection.includePrivate,
+      organizations: profile.organizations ?? [],
+      error: null,
+    });
+    contributions.commits += profile.contributions?.commits ?? 0;
+    contributions.prs += profile.contributions?.prs ?? 0;
+    contributions.reviews += profile.contributions?.reviews ?? 0;
+    contributions.issues += profile.contributions?.issues ?? 0;
+    for (const org of profile.organizations ?? []) {
+      if (seenOrgLogins.has(org.login)) continue;
+      seenOrgLogins.add(org.login);
+      organizations.push(org);
+    }
+    for (const repo of profile.repos ?? []) {
+      if (seenRepoIds.has(repo.id)) continue;
+      seenRepoIds.add(repo.id);
+      repos.push({ ...repo, connectionId: connection.id, accountLogin: profile.login ?? connection.login });
+    }
+  });
+
+  if (!firstProfile) {
+    throw results[0].reason;
+  }
+
+  return {
+    login: firstProfile.login,
+    contributions,
+    organizations,
+    repos,
+    accounts,
+    fetchedAt: firstProfile.fetchedAt,
+  };
 }
 
 /**
@@ -558,16 +763,25 @@ export async function fetchReadme(token, owner, repo) {
 // ---------------------------------------------------------------------------
 
 /**
- * Lists the app installations the user's token can see (personal account +
+ * Lists the app installations one connection's token can see (its account +
  * orgs where the app is installed) and mirrors them into
  * github_app_installations so webhook lifecycle events (suspend/unsuspend/
  * delete) have rows to keep current between refreshes.
  *
  * @param {number} userId
+ * @param {number|null} [connectionId] specific account, or null for the first
  * @returns {Promise<Array<{ id: string, login: string|null, type: string|null, suspended: boolean }>>}
  */
-export async function listUserInstallations(userId) {
-  const response = await withAuthRetry(userId, (token) =>
+export async function listUserInstallations(userId, connectionId = null) {
+  const row = await database.get(
+    connectionId != null
+      ? 'SELECT id FROM github_connections WHERE user_id = ? AND id = ?'
+      : 'SELECT id FROM github_connections WHERE user_id = ? ORDER BY id LIMIT 1',
+    connectionId != null ? [userId, connectionId] : [userId]
+  );
+  if (!row) throw notConnectedError();
+
+  const response = await withAuthRetry(Number(row.id), (token) =>
     githubFetch('https://api.github.com/user/installations?per_page=100', {
       headers: {
         Accept: 'application/vnd.github+json',
@@ -635,9 +849,10 @@ function lintSummary(parsed, repo) {
  * @param {number} userId
  * @param {object} repo normalized repo object (see fetchGithubProfile)
  * @param {string} token decrypted access token (for the README fetch)
+ * @param {number|null} [connectionId] source account, stamped for display
  * @returns {Promise<{ bullets: string[], project: object, cached: boolean }>}
  */
-export async function summarizeRepo(userId, repo, token) {
+export async function summarizeRepo(userId, repo, token, connectionId = null) {
   const row = await database.get(
     'SELECT * FROM github_repo_summaries WHERE user_id = ? AND repo_id = ?',
     [userId, repo.id]
@@ -683,13 +898,14 @@ Rules:
 
   // Upsert, PRESERVING counted_free — a re-summarized repo keeps its free slot.
   await database.run(
-    `INSERT INTO github_repo_summaries (user_id, repo_id, repo_name, pushed_at, summary)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO github_repo_summaries (user_id, repo_id, repo_name, pushed_at, summary, connection_id)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id, repo_id) DO UPDATE SET
        pushed_at = excluded.pushed_at,
        repo_name = excluded.repo_name,
-       summary = excluded.summary`,
-    [userId, repo.id, repo.name, repo.pushedAt, JSON.stringify(summary)]
+       summary = excluded.summary,
+       connection_id = COALESCE(excluded.connection_id, github_repo_summaries.connection_id)`,
+    [userId, repo.id, repo.name, repo.pushedAt, JSON.stringify(summary), connectionId]
   );
 
   return { ...summary, cached: false };
@@ -707,13 +923,31 @@ Rules:
  * - Unchanged repos are served from the cache: free, no LLM.
  * Credits are deducted up-front, BEFORE any LLM call.
  *
+ * M2.11: each repo's README is fetched with its OWN account's token (repos
+ * carry connectionId from the merged profile); a repo whose account needs
+ * reconnecting fails individually instead of sinking the batch.
+ *
  * @param {number} userId
  * @param {object[]} repos normalized repo objects the user selected
  * @returns {Promise<{ summaries: object[], charged: number, freeUsed: number, freeLeft: number, reanalyzed: number }>}
  */
 export async function analyzeRepos(userId, repos) {
-  const token = await getValidToken(userId);
-  if (!token) throw notConnectedError();
+  const connections = await listConnections(userId);
+  if (connections.length === 0) throw notConnectedError();
+  const defaultConnectionId = connections[0].id;
+
+  // Per-account token cache — resolved lazily so one dead account only fails
+  // its own repos (caught per-repo below).
+  const tokenByConnection = new Map();
+  const tokenFor = async (repo) => {
+    const cid = repo.connectionId ?? defaultConnectionId;
+    if (!tokenByConnection.has(cid)) {
+      tokenByConnection.set(cid, await getValidTokenById(cid));
+    }
+    const token = tokenByConnection.get(cid);
+    if (!token) throw reconnectError();
+    return token;
+  };
 
   // Classify: "new" = no summary row at all (chargeable set); "changed" =
   // row exists but the repo was pushed to since (re-analyzed for free).
@@ -756,7 +990,8 @@ export async function analyzeRepos(userId, repos) {
   for (const repo of repos) {
     let summary;
     try {
-      summary = await summarizeRepo(userId, repo, token);
+      const token = await tokenFor(repo);
+      summary = await summarizeRepo(userId, repo, token, repo.connectionId ?? defaultConnectionId);
     } catch (err) {
       failed.push({ repoId: repo.id, repoName: repo.name ?? null, code: err.code ?? 'ANALYSIS_FAILED' });
       continue;
@@ -798,22 +1033,27 @@ export async function analyzeRepos(userId, repos) {
 
 /**
  * Lists the user's stored repo summaries (project library). Pure DB read —
- * no network, no LLM. `stale` is true when the cached GitHub profile shows a
+ * no network, no LLM. `stale` is true when any cached GitHub profile shows a
  * newer pushed_at for the repo than the one the summary was generated from;
  * without a profile cache (or when the repo is absent from it) stale is false.
  *
  * M2.8.2: each entry also carries `inResumes` — the user's base resumes that
  * already contain a project imported from that repo (via projects.github_repo_id).
+ * M2.11: `accountLogin` names the account the summary came from (null for
+ * summaries whose connection is gone).
  *
  * @param {number} userId
  * @returns {Promise<Array<{ repoId: string, repoName: string|null, pushedAt: string,
  *   bullets: string[], project: object, countedFree: boolean, createdAt: string, stale: boolean,
- *   inResumes: Array<{ id: string, name: string }> }>>}
+ *   accountLogin: string|null, inResumes: Array<{ id: string, name: string }> }>>}
  */
 export async function listSummaries(userId) {
   const rows = await database.all(
-    `SELECT repo_id, repo_name, pushed_at, summary, counted_free, created_at
-     FROM github_repo_summaries WHERE user_id = ? ORDER BY created_at DESC`,
+    `SELECT s.repo_id, s.repo_name, s.pushed_at, s.summary, s.counted_free, s.created_at,
+            c.github_login AS account_login
+     FROM github_repo_summaries s
+     LEFT JOIN github_connections c ON c.id = s.connection_id
+     WHERE s.user_id = ? ORDER BY s.created_at DESC`,
     [userId]
   );
 
@@ -831,13 +1071,14 @@ export async function listSummaries(userId) {
     inResumesByRepoId.get(u.github_repo_id).push({ id: u.id, name: u.name });
   }
 
-  // Map repoId → pushedAt from the cached profile (if any) for staleness.
+  // Map repoId → pushedAt across ALL of the user's cached account profiles
+  // (M2.11) for staleness.
   const pushedAtById = new Map();
-  const profileRow = await database.get(
+  const profileRows = await database.all(
     'SELECT data FROM github_profiles WHERE user_id = ?',
     [userId]
   );
-  if (profileRow) {
+  for (const profileRow of profileRows) {
     try {
       for (const repo of JSON.parse(profileRow.data)?.repos ?? []) {
         pushedAtById.set(repo.id, repo.pushedAt);
@@ -859,6 +1100,7 @@ export async function listSummaries(userId) {
       countedFree: Boolean(row.counted_free),
       createdAt: row.created_at,
       stale: cachedPushedAt !== undefined && cachedPushedAt !== row.pushed_at,
+      accountLogin: row.account_login ?? null,
       inResumes: inResumesByRepoId.get(row.repo_id) ?? [],
     };
   });

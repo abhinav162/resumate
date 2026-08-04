@@ -40,6 +40,7 @@ These are the integration points every milestone builds on:
 | **M2.8** | GitHub project provenance (dedupe + badges + usage map) | M2.7 | Low |
 | **M2.9** | GitHub token refresh + private repo opt-in | M2 | Low |
 | **M2.10** | Enterprise-grade GitHub: multi-org, installations, webhooks, resilience | M2.9 | Med |
+| **M2.11** | Multiple GitHub accounts per user + /github UX redesign | M2.10 | Med |
 | **M3** | Tailoring robustness (schema validation, streaming, section re-tailor) | M1 | Med |
 | **M4** | Bigger bets (ATS simulation, embeddings match, eval harness) | M1–M3 | High |
 | **M5** | LinkedIn export parsing | M2 patterns | Med |
@@ -530,6 +531,79 @@ failures degrade gracefully instead of sinking whole requests.
 - [x] 403-quota/429 map to GITHUB_RATE_LIMITED with correct retryAt.
 - [x] Partial batch: failure collected, success charged, refund issued,
       free slots preserved.
+
+---
+
+## M2.11 — Multiple GitHub accounts + /github UX redesign
+
+**Goal:** a user can connect up to 3 GitHub accounts (personal + work);
+repos/orgs/summaries aggregate cleanly across them with per-account controls;
+the /github page becomes a tabbed, searchable workspace instead of one long
+vertical stack.
+
+### M2.11.1 — Backend: multi-connection data model
+
+- `github_connections` rebuilt from `UNIQUE(user_id)` to
+  `UNIQUE(user_id, github_account_id)` — SQLite can't relax a constraint, so
+  existing DBs get a transactional create-copy-swap (`database.batch`,
+  all-or-nothing; detected by the missing column; row ids preserved). The key
+  is GitHub's **numeric account id** (stable across renames); legacy rows keep
+  a NULL id until reconnect, when a login match claims them.
+- Cap `MAX_GITHUB_ACCOUNTS = 3` (`GITHUB_ACCOUNT_LIMIT`, 409; callback
+  redirects `?github=limit`). The free-analysis allowance stays **per user**.
+- `github_profiles` re-keyed per connection (disposable cache → drop and
+  recreate); `github_repo_summaries.connection_id` added + backfilled (display
+  only).
+- Token layer keyed by connection id (`getValidTokenById`, `withAuthRetry`,
+  refresh rotation); `fetchGithubProfile` merges per-connection profiles via
+  `allSettled` — a dead account degrades to `accounts[].error`
+  (GITHUB_RECONNECT) instead of blanking the others; repos deduped by id and
+  tagged `connectionId`/`accountLogin`; contributions summed.
+- `analyzeRepos` resolves each repo's token from its own account (per-repo
+  failure + refund semantics unchanged); webhook revocation matches
+  `sender.id` (login fallback for legacy rows) and removes ONLY that account.
+- Routes: `/status` → `accounts[] + maxAccounts`; `/preferences` and
+  `/disconnect` take optional `connectionId`; `/orgs` grouped per account;
+  `/repos` tags repos and reports per-account errors.
+
+**Verification**
+- [x] Migration preserves every connection field + row id; idempotent; second
+      account insertable afterwards; summaries backfilled (`githubMigration.test.js`).
+- [x] Same-account reconnect rotates in place preserving include_private;
+      legacy row claimed by login; different login adds a row; 4th account 409.
+- [x] Merged profile: dedupe, per-account tags, summed contributions; one dead
+      account → per-account error, others load.
+- [x] Per-connection preference/disconnect isolation (incl. cross-user guard).
+- [x] analyzeRepos uses each repo's own token; summaries stamped with source.
+- [x] Webhook revocation by sender.id removes only the matching account.
+- [x] Full backend suite green (184 tests).
+
+### M2.11.2 — Frontend: accounts strip + API wiring
+
+- `githubApi.ts` reshaped to the accounts contract; `AccountsStrip` chips
+  (@login, private lock, needs-attention dot) with per-account menu (private
+  toggle / reconnect / disconnect) + "+ Add account" (hidden at cap) — GitHub
+  authorizes whichever account the browser is signed into, noted in the UI.
+- Dashboard card + `?github=limit` flash handled.
+
+### M2.11.3 — Frontend: /github tabbed redesign
+
+- Header stats (credits, free analyses) + AccountsStrip; tab state in
+  `?tab=library|browse|access` (deep-linkable).
+- **Library**: client-side search, filter chips (All / Needs re-analysis /
+  In a resume), responsive card grid, origin line (account), collapsed
+  bullets with expander.
+- **Browse repos**: search + account/owner/language filters, grouped picker,
+  **sticky bottom action bar** (selection count · free slots · credit cost ·
+  Analyze + inline 402/429/partial-failure messaging) so the CTA never
+  scrolls away; per-account reconnect warnings.
+- **Access & settings**: one card per account — org/installation rows with
+  install deep-links, per-account private toggle, reconnect/disconnect.
+- Editor import modal keeps working (shared picker; account filter when >1).
+
+**Verification**
+- [x] `tsc -b` clean; `vite build` green; eslint no net-new errors.
+- [x] Old flat `/orgs` consumers gone; no stale single-account shapes.
 
 ---
 

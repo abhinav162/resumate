@@ -39,14 +39,22 @@ function clearProfileCaches() {
 }
 
 async function handleAuthorizationRevoked(payload) {
-  const login = payload?.sender?.login;
-  if (!login) return;
+  // M2.11: match by GitHub's numeric account id (stable across renames);
+  // legacy rows without one fall back to the login. Only the revoking
+  // account's connection dies — a user's OTHER connected accounts survive.
+  const accountId = payload?.sender?.id != null ? String(payload.sender.id) : null;
+  const login = payload?.sender?.login ?? null;
+  if (!accountId && !login) return;
   const rows = await database.all(
-    'SELECT user_id FROM github_connections WHERE github_login = ?',
-    [login]
+    `SELECT id, user_id FROM github_connections
+     WHERE (? IS NOT NULL AND github_account_id = ?)
+        OR (github_account_id IS NULL AND github_login = ?)`,
+    [accountId, accountId, login]
   );
   for (const row of rows) {
-    await database.run('DELETE FROM github_connections WHERE user_id = ?', [row.user_id]);
+    await database.run('DELETE FROM github_connections WHERE id = ?', [row.id]);
+    // Coarse cache clear for the affected user (profiles rebuild lazily; a
+    // legacy cache row may not carry this connection's id).
     await database.run('DELETE FROM github_profiles WHERE user_id = ?', [row.user_id]);
   }
 }
