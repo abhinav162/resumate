@@ -835,6 +835,9 @@ export async function listUserInstallations(userId, connectionId = null) {
     id: String(inst.id),
     login: inst.account?.login ?? null,
     type: inst.account?.type ?? null,
+    // Numeric account id — feeds the install deep-link (target_id) for orgs
+    // discovered through an installation rather than a declared membership.
+    accountId: inst.account?.id != null ? Number(inst.account.id) : null,
     suspended: Boolean(inst.suspended_at),
     // 'all' | 'selected' — whether the grant covers every repo or a hand-picked list.
     repositorySelection: inst.repository_selection ?? null,

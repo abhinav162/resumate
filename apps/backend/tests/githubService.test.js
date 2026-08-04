@@ -1056,8 +1056,8 @@ describe('githubService', () => {
       installFetchMock({
         installations: {
           installations: [
-            { id: 11, account: { login: 'octocat', type: 'User' }, suspended_at: null, repository_selection: 'all' },
-            { id: 22, account: { login: 'acme', type: 'Organization' }, suspended_at: '2026-08-01T00:00:00Z', repository_selection: 'selected' },
+            { id: 11, account: { login: 'octocat', type: 'User', id: 501 }, suspended_at: null, repository_selection: 'all' },
+            { id: 22, account: { login: 'acme', type: 'Organization', id: 902 }, suspended_at: '2026-08-01T00:00:00Z', repository_selection: 'selected' },
           ],
         },
       });
@@ -1065,8 +1065,8 @@ describe('githubService', () => {
       const list = await listUserInstallations(userId);
 
       assert.deepEqual(list, [
-        { id: '11', login: 'octocat', type: 'User', suspended: false, repositorySelection: 'all' },
-        { id: '22', login: 'acme', type: 'Organization', suspended: true, repositorySelection: 'selected' },
+        { id: '11', login: 'octocat', type: 'User', accountId: 501, suspended: false, repositorySelection: 'all' },
+        { id: '22', login: 'acme', type: 'Organization', accountId: 902, suspended: true, repositorySelection: 'selected' },
       ]);
       const row = await database.get(
         'SELECT account_login, account_type, suspended FROM github_app_installations WHERE installation_id = ?',
