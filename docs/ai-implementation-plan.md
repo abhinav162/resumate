@@ -666,6 +666,28 @@ still saw nothing in resumate — GraphQL `repositories(ownerAffiliations:
       owner, commitCount join); public-only preference respected; duplicate
       of a GraphQL repo not re-added. Suite green (193).
 
+### M2.12.3 — Request-vs-install callback flash
+
+- A non-admin member "installing" on an org only FILES A REQUEST
+  (`setup_action=request`); the callback flashed the same success message as
+  a real install. Now: `request` → `?github=requested` with a pending-
+  approval flash (no cache invalidation — nothing changed); install/update
+  keep the success flash.
+
+### M2.12.4 — Org rows for concealed memberships
+
+- GraphQL `viewer.organizations` only reveals PUBLICIZED memberships to a
+  user-to-server token (no org-Members permission) — a member with a
+  concealed membership got NO org row at all, so install status appeared
+  "stuck" even though the installation and repos worked.
+- `/orgs` rows now come from three sources, deduped by login: declared
+  memberships, installations the token can see (numeric account id feeds the
+  install deep-link), and owners of org repos in the account's listing.
+
+**Verification**
+- [x] Request flow lands with the pending flash; installations map accountId;
+      suite green (194); tsc/build/eslint green.
+
 ---
 
 ## M3 — Tailoring robustness

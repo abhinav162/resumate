@@ -353,9 +353,35 @@ router.get('/orgs', requireUser, async (req, res) => {
         }
         return entry;
       };
-      const orgs = [await describe(account.login, 'User')];
+      // M2.12.4 — org rows come from THREE sources, because GraphQL
+      // viewer.organizations only reveals PUBLICIZED memberships to a
+      // user-to-server token (the app has no org-Members permission):
+      // declared memberships, installations the token can see, and owners of
+      // org repos in this account's listing. Without the fallbacks, a member
+      // with a concealed membership gets NO org row at all — even with the
+      // app installed and its repos flowing.
+      const candidates = new Map(); // lower-cased login → { login, databaseId }
       for (const org of account.organizations ?? []) {
-        orgs.push({ ...(await describe(org.login, 'Organization')), databaseId: org.databaseId ?? null });
+        candidates.set(org.login.toLowerCase(), { login: org.login, databaseId: org.databaseId ?? null });
+      }
+      const selfLogin = String(account.login ?? '').toLowerCase();
+      for (const inst of installations) {
+        if (inst.type !== 'Organization' || !inst.login) continue;
+        const key = inst.login.toLowerCase();
+        if (key === selfLogin || candidates.has(key)) continue;
+        candidates.set(key, { login: inst.login, databaseId: inst.accountId ?? null });
+      }
+      for (const repo of profile.repos ?? []) {
+        if (repo.connectionId !== account.connectionId) continue;
+        if (repo.ownerType !== 'Organization' || !repo.ownerLogin) continue;
+        const key = repo.ownerLogin.toLowerCase();
+        if (key === selfLogin || candidates.has(key)) continue;
+        candidates.set(key, { login: repo.ownerLogin, databaseId: null });
+      }
+
+      const orgs = [await describe(account.login, 'User')];
+      for (const candidate of candidates.values()) {
+        orgs.push({ ...(await describe(candidate.login, 'Organization')), databaseId: candidate.databaseId });
       }
       accounts.push({ id: account.connectionId, login: account.login, error, orgs });
     }
