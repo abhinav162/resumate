@@ -633,6 +633,42 @@ async function fetchConnectionProfile(userId, connection, { refresh = false } = 
     fetchedAt: new Date().toISOString(),
   };
 
+  // M2.12.2 — merge installation-accessible repos GraphQL affiliation search
+  // missed (org base-permission access). Best-effort: discovery still works
+  // from GraphQL alone if the REST calls fail. seenIds holds the PRE-privacy-
+  // filter GraphQL ids, so privacy-dropped repos are not resurrected here.
+  try {
+    const installationRepos = await listAllInstallationRepositories(connection.id);
+    for (const r of installationRepos) {
+      if (!r?.node_id || seenIds.has(r.node_id)) continue;
+      seenIds.add(r.node_id);
+      if (!includePrivate && r.private) continue;
+      normalized.repos.push({
+        id: r.node_id,
+        name: r.name,
+        nameWithOwner: r.full_name,
+        description: r.description ?? null,
+        url: r.html_url,
+        isPrivate: !!r.private,
+        isFork: !!r.fork,
+        isOwner: r.owner?.login === viewer.login,
+        ownerLogin: r.owner?.login ?? null,
+        ownerType: r.owner?.type === 'Organization' ? 'Organization' : 'User',
+        viewerPermission: restViewerPermission(r.permissions),
+        contributed: false,
+        commitCount: commitsByRepo.get(r.node_id) ?? 0,
+        stars: r.stargazers_count ?? 0,
+        primaryLanguage: r.language ?? null,
+        // The REST object has no per-language byte breakdown; ranking and
+        // display work from primaryLanguage alone for these rows.
+        languages: [],
+        pushedAt: r.pushed_at ?? null,
+      });
+    }
+  } catch {
+    // never let the fallback path break the primary one
+  }
+
   // Persist (fetched_at as ISO so TTL parsing is unambiguous) and return.
   await database.run(
     `INSERT INTO github_profiles (connection_id, user_id, data, fetched_at)
@@ -820,17 +856,15 @@ export async function listUserInstallations(userId, connectionId = null) {
 }
 
 /**
- * Lists the repos ONE connection's token can reach through ONE installation —
- * i.e. the intersection of the installation's repo grant and the user's own
- * GitHub permissions (M2.12). This is the ground truth for "why don't I see
- * repo X": an org member without read access on a granted private repo gets
- * it filtered out HERE by GitHub, not by us.
+ * Fetches the raw REST repo objects ONE connection's token can reach through
+ * ONE installation — i.e. the intersection of the installation's repo grant
+ * and the user's own GitHub permissions (M2.12). First page (100) only.
  *
  * @param {number} connectionId
  * @param {string} installationId
- * @returns {Promise<{ total: number, privateCount: number }>}
+ * @returns {Promise<{ totalCount: number, repositories: object[] }>}
  */
-export async function countInstallationAccessibleRepos(connectionId, installationId) {
+async function getInstallationRepositories(connectionId, installationId) {
   const response = await withAuthRetry(connectionId, (token) =>
     githubFetch(
       `https://api.github.com/user/installations/${encodeURIComponent(installationId)}/repositories?per_page=100`,
@@ -848,13 +882,79 @@ export async function countInstallationAccessibleRepos(connectionId, installatio
     throw e;
   }
   const data = await response.json().catch(() => ({}));
-  const repos = data.repositories ?? [];
+  const repositories = data.repositories ?? [];
   return {
-    // total_count covers ALL pages; the private count is derived from the
-    // first 100 — plenty for a diagnostic hint.
-    total: Number(data.total_count ?? repos.length),
-    privateCount: repos.filter((r) => r?.private).length,
+    totalCount: Number(data.total_count ?? repositories.length),
+    repositories,
   };
+}
+
+/**
+ * Diagnostic counts for the org-access panel (M2.12): how many of an
+ * installation's granted repos THIS user can actually reach. An org member
+ * without read access on a granted private repo gets it filtered out by
+ * GitHub here, not by us — the panel uses this to explain "missing" repos.
+ *
+ * @param {number} connectionId
+ * @param {string} installationId
+ * @returns {Promise<{ total: number, privateCount: number }>}
+ */
+export async function countInstallationAccessibleRepos(connectionId, installationId) {
+  const { totalCount, repositories } = await getInstallationRepositories(connectionId, installationId);
+  return {
+    // totalCount covers ALL pages; the private count is derived from the
+    // first 100 — plenty for a diagnostic hint.
+    total: totalCount,
+    privateCount: repositories.filter((r) => r?.private).length,
+  };
+}
+
+/** Maps a REST permissions object to the GraphQL viewerPermission enum. */
+function restViewerPermission(permissions) {
+  if (!permissions) return null;
+  if (permissions.admin) return 'ADMIN';
+  if (permissions.maintain) return 'MAINTAIN';
+  if (permissions.push) return 'WRITE';
+  if (permissions.triage) return 'TRIAGE';
+  if (permissions.pull) return 'READ';
+  return null;
+}
+
+/**
+ * All repos this connection can reach through app installations, as raw REST
+ * objects (M2.12.2). Used to close a GraphQL discovery gap: `repositories(
+ * ownerAffiliations: [... ORGANIZATION_MEMBER])` can miss org repos whose
+ * access comes from the org's BASE member permission (no team/collaborator
+ * grant) — the member can open the repo on GitHub and the installation
+ * covers it, yet affiliation search omits it. This endpoint returns exactly
+ * (user access ∩ installation grant), so merging it guarantees every
+ * analyzable repo is listed.
+ *
+ * @param {number} connectionId
+ * @returns {Promise<object[]>}
+ */
+async function listAllInstallationRepositories(connectionId) {
+  const response = await withAuthRetry(connectionId, (token) =>
+    githubFetch('https://api.github.com/user/installations?per_page=100', {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+      },
+    })
+  );
+  if (!response.ok) return [];
+  const data = await response.json().catch(() => ({}));
+  const repos = [];
+  for (const inst of data.installations ?? []) {
+    if (!inst?.id || inst.suspended_at) continue;
+    try {
+      const { repositories } = await getInstallationRepositories(connectionId, String(inst.id));
+      repos.push(...repositories);
+    } catch {
+      // one broken installation must not sink discovery for the rest
+    }
+  }
+  return repos;
 }
 
 // ---------------------------------------------------------------------------

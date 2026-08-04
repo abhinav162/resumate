@@ -684,6 +684,106 @@ describe('githubService', () => {
     });
   });
 
+  // M2.12.2 — REST fallback discovery: repos reachable through app
+  // installations that GraphQL affiliation search missed (org base-permission
+  // access without a team/collaborator grant).
+  describe('installation-based discovery', () => {
+    const ORG_INSTALLATION = {
+      installations: [
+        {
+          id: 55,
+          account: { login: 'acme', type: 'Organization' },
+          suspended_at: null,
+          repository_selection: 'selected',
+        },
+      ],
+    };
+
+    function restRepo(nodeId, name, { privateRepo = true, owner = 'acme' } = {}) {
+      return {
+        node_id: nodeId,
+        name,
+        full_name: `${owner}/${name}`,
+        private: privateRepo,
+        fork: false,
+        description: 'via installation',
+        html_url: `https://github.com/${owner}/${name}`,
+        owner: { login: owner, type: 'Organization' },
+        permissions: { pull: true },
+        stargazers_count: 2,
+        language: 'Go',
+        pushed_at: '2026-07-30T00:00:00Z',
+      };
+    }
+
+    it('merges installation-accessible repos that GraphQL affiliation search missed', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      await setIncludePrivate(userId, true);
+      installFetchMock({
+        installations: ORG_INSTALLATION,
+        installationRepos: {
+          total_count: 1,
+          repositories: [restRepo('R_BASEPERM', 'hidden-by-affiliation')],
+        },
+      });
+
+      const profile = await fetchGithubProfile(userId);
+
+      const merged = profile.repos.find((r) => r.id === 'R_BASEPERM');
+      assert.ok(merged, 'installation-only repo must be discovered');
+      assert.equal(merged.nameWithOwner, 'acme/hidden-by-affiliation');
+      assert.equal(merged.ownerType, 'Organization');
+      assert.equal(merged.isPrivate, true);
+      assert.equal(merged.isOwner, false);
+      assert.equal(merged.viewerPermission, 'READ', 'REST permissions mapped to the GraphQL enum');
+      assert.equal(merged.primaryLanguage, 'Go');
+      assert.equal(merged.commitCount, 0);
+    });
+
+    it('installation-merged repos respect the public-only preference', async () => {
+      const userId = await createUser();
+      await connect(userId); // public-only default
+      installFetchMock({
+        installations: ORG_INSTALLATION,
+        installationRepos: {
+          total_count: 2,
+          repositories: [
+            restRepo('R_PRIV', 'secret'),
+            restRepo('R_PUB', 'open', { privateRepo: false }),
+          ],
+        },
+      });
+
+      const profile = await fetchGithubProfile(userId);
+
+      assert.ok(
+        !profile.repos.some((r) => r.id === 'R_PRIV'),
+        'private repo hidden without the opt-in'
+      );
+      assert.ok(profile.repos.some((r) => r.id === 'R_PUB'), 'public repo still merged');
+    });
+
+    it('GraphQL discovery wins over duplicate installation repos', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      installFetchMock({
+        installations: ORG_INSTALLATION,
+        installationRepos: {
+          total_count: 1,
+          // Same node id as the GraphQL payload's R_1 — must not duplicate.
+          repositories: [restRepo('R_1', 'alpha', { privateRepo: false, owner: 'octocat' })],
+        },
+      });
+
+      const profile = await fetchGithubProfile(userId);
+
+      const entries = profile.repos.filter((r) => r.id === 'R_1');
+      assert.equal(entries.length, 1);
+      assert.equal(entries[0].description, 'A tool', 'the richer GraphQL entry is kept');
+    });
+  });
+
   // M2.11 — multiple GitHub accounts per user.
   describe('multiple accounts', () => {
     /** Minimal GraphQL viewer payload for one account with the given repo ids. */

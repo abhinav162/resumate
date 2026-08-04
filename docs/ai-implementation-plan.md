@@ -646,6 +646,26 @@ team/collaborator grant), their repo list is silently empty. GitHub filters by
       repository_selection surfaced; suite green (190).
 - [x] tsc/build/eslint green.
 
+### M2.12.2 — Close the base-permission discovery gap
+
+Field report: an org member who CAN open a granted private repo on github.com
+(access via the org's base member permission, no team/collaborator grant)
+still saw nothing in resumate — GraphQL `repositories(ownerAffiliations:
+[..., ORGANIZATION_MEMBER])` can omit such repos.
+
+- Profile discovery now merges the per-installation accessible-repo list
+  (`GET /user/installations/{id}/repositories` — exactly user ∩ installation)
+  into the GraphQL results: deduped by node id (GraphQL entry wins — it
+  carries the language byte breakdown), private repos still gated by the
+  opt-in, REST `permissions` mapped to the viewerPermission enum. Best-effort:
+  REST failures never break GraphQL discovery, and one broken installation
+  never sinks the others.
+
+**Verification**
+- [x] Installation-only repo discovered + normalized (READ permission, org
+      owner, commitCount join); public-only preference respected; duplicate
+      of a GraphQL repo not re-added. Suite green (193).
+
 ---
 
 ## M3 — Tailoring robustness
