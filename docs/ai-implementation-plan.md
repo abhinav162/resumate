@@ -605,6 +605,24 @@ vertical stack.
 - [x] `tsc -b` clean; `vite build` green; eslint no net-new errors.
 - [x] Old flat `/orgs` consumers gone; no stale single-account shapes.
 
+### M2.11.4 — Post-install callback redirect fix
+
+- With "Request user authorization (OAuth) during installation" enabled,
+  GitHub redirects to the OAuth callback after an app install/repo-access
+  change with `setup_action` (+ `installation_id`, sometimes a `code`) but NO
+  `state` — the flow starts on github.com. The callback treated this as a
+  failed OAuth and flashed "connection failed".
+- Fix: callback detects `setup_action` without a valid state and lands softly
+  on `/github?tab=access&github=installed` (the stray `code` is discarded —
+  without a state it cannot be attributed to a user; installation webhooks
+  keep repo access current). The /github page shows a success flash and
+  invalidates the `['github']` queries so new repos appear immediately.
+
+**Verification**
+- [x] setup_action without state (with or without code, incl. forged state) →
+      access-tab redirect, no fetch; plain bad request still flashes error.
+- [x] Full backend suite green (188); tsc/build/eslint green.
+
 ---
 
 ## M3 — Tailoring robustness

@@ -134,9 +134,20 @@ router.get('/connect', requireGithubConfig, requireUser, (req, res) => {
 router.get('/callback', requireGithubConfig, async (req, res) => {
   const frontend = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
   try {
-    const { code, state } = req.query;
+    const { code, state, setup_action: setupAction } = req.query;
     const decoded = verifyState(state);
     if (!code || !decoded?.u) {
+      // GitHub App post-install/config redirect: with "Request user
+      // authorization (OAuth) during installation" enabled, GitHub sends the
+      // user here after installing or configuring repo access with
+      // setup_action (+ installation_id, sometimes a code) but NO state —
+      // that flow starts on github.com, not at our /connect. There is nothing
+      // to save (installation webhooks keep repo access current, and without
+      // a state the code cannot be attributed to a user), so land softly on
+      // the access tab instead of flashing a failure.
+      if (setupAction) {
+        return res.redirect(`${frontend}/github?tab=access&github=installed`);
+      }
       return res.redirect(`${frontend}/dashboard?github=error`);
     }
     const userRow = await database.get('SELECT id FROM users WHERE uuid = ?', [decoded.u]);
