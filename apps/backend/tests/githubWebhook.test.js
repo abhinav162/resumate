@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import database from '../src/config/database.js';
 import { initializeDatabase } from '../src/config/initDb.js';
 import { githubWebhookHandler } from '../src/routes/githubWebhook.js';
-import { saveConnection, getConnection } from '../src/services/githubService.js';
+import { saveConnection, getConnection, listConnections } from '../src/services/githubService.js';
 
 const SECRET = 'whsec_test_secret';
 
@@ -135,6 +135,29 @@ describe('githubWebhookHandler', () => {
       [userId]
     );
     assert.ok(summary, 'paid summaries survive revocation');
+  });
+
+  // M2.11 — revocation is per GitHub account: the numeric sender id is the
+  // key (stable across renames) and the user's OTHER accounts must survive.
+  it('revoked matches by account id and removes only that account', async () => {
+    const userId = await createUser();
+    await saveConnection(userId, { token: 'ghp_a', login: 'personal', scopes: '', accountId: '111' });
+    await saveConnection(userId, { token: 'ghp_b', login: 'workcat', scopes: '', accountId: '222' });
+    const res = mockRes();
+
+    await githubWebhookHandler(
+      makeReq('github_app_authorization', {
+        action: 'revoked',
+        // Renamed on GitHub since connecting — only the id still matches.
+        sender: { id: 111, login: 'personal-renamed' },
+      }),
+      res
+    );
+
+    assert.equal(res.statusCode, 200);
+    const conns = await listConnections(userId);
+    assert.equal(conns.length, 1, 'exactly one connection revoked');
+    assert.equal(conns[0].login, 'workcat', 'the other account survives');
   });
 
   it('installation lifecycle: created upserts, suspend flags, deleted removes', async () => {
