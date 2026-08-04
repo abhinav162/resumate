@@ -15,7 +15,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { user } = useUser();
 
   return (
-    <div className="flex min-h-screen bg-paper-bg">
+    // h-screen + overflow-hidden pin the shell to the viewport: the sidebar
+    // stays fixed (account button always visible) and ONLY the main column
+    // scrolls with long pages like the repo browser.
+    <div className="flex h-screen overflow-hidden bg-paper-bg">
       {/* Sidebar */}
       <aside className="w-52 shrink-0 border-r border-paper-border bg-paper-surface flex flex-col">
         <div className="p-4 border-b border-paper-border">
@@ -23,7 +26,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             resu<span className="text-indigo-600">mate</span>
           </span>
         </div>
-        <nav className="flex-1 p-3 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
           {navItems.map(item => (
             <NavLink
               key={item.to}
