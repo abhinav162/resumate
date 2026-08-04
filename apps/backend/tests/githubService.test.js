@@ -17,6 +17,7 @@ import {
   analyzeRepos,
   listSummaries,
   listUserInstallations,
+  countInstallationAccessibleRepos,
   MAX_GITHUB_ACCOUNTS,
 } from '../src/services/githubService.js';
 
@@ -119,6 +120,11 @@ function installFetchMock(overrides = {}) {
           expires_in: 28800,
           refresh_token_expires_in: 15811200,
         },
+      });
+    }
+    if (/api\.github\.com\/user\/installations\/[^/]+\/repositories/.test(u)) {
+      return mockResponse(200, {
+        json: overrides.installationRepos ?? { total_count: 0, repositories: [] },
       });
     }
     if (u.startsWith('https://api.github.com/user/installations')) {
@@ -950,8 +956,8 @@ describe('githubService', () => {
       installFetchMock({
         installations: {
           installations: [
-            { id: 11, account: { login: 'octocat', type: 'User' }, suspended_at: null },
-            { id: 22, account: { login: 'acme', type: 'Organization' }, suspended_at: '2026-08-01T00:00:00Z' },
+            { id: 11, account: { login: 'octocat', type: 'User' }, suspended_at: null, repository_selection: 'all' },
+            { id: 22, account: { login: 'acme', type: 'Organization' }, suspended_at: '2026-08-01T00:00:00Z', repository_selection: 'selected' },
           ],
         },
       });
@@ -959,8 +965,8 @@ describe('githubService', () => {
       const list = await listUserInstallations(userId);
 
       assert.deepEqual(list, [
-        { id: '11', login: 'octocat', type: 'User', suspended: false },
-        { id: '22', login: 'acme', type: 'Organization', suspended: true },
+        { id: '11', login: 'octocat', type: 'User', suspended: false, repositorySelection: 'all' },
+        { id: '22', login: 'acme', type: 'Organization', suspended: true, repositorySelection: 'selected' },
       ]);
       const row = await database.get(
         'SELECT account_login, account_type, suspended FROM github_app_installations WHERE installation_id = ?',
@@ -976,6 +982,48 @@ describe('githubService', () => {
         assert.equal(err.code, 'GITHUB_NOT_CONNECTED');
         return true;
       });
+    });
+
+    // M2.12 — the user-visible slice of an installation's grant: GitHub
+    // filters out granted repos the USER can't access, which is exactly what
+    // the org-access panel needs to explain to non-admin members.
+    it('countInstallationAccessibleRepos returns the user-accessible totals', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      const conn = await database.get('SELECT id FROM github_connections WHERE user_id = ?', [userId]);
+      installFetchMock({
+        installationRepos: {
+          total_count: 4,
+          repositories: [
+            { id: 1, name: 'pub', private: false },
+            { id: 2, name: 'secret-a', private: true },
+            { id: 3, name: 'secret-b', private: true },
+            { id: 4, name: 'pub-2', private: false },
+          ],
+        },
+      });
+
+      const counts = await countInstallationAccessibleRepos(Number(conn.id), '22');
+
+      assert.deepEqual(counts, { total: 4, privateCount: 2 });
+      const call = fetchCalls.find((c) => c.url.includes('/user/installations/22/repositories'));
+      assert.ok(call, 'queried the per-installation repositories endpoint');
+      assert.equal(call.init.headers.Authorization, 'Bearer ghp_plaintext_secret');
+    });
+
+    it('countInstallationAccessibleRepos reports zero access (the org-member gap)', async () => {
+      const userId = await createUser();
+      await connect(userId);
+      const conn = await database.get('SELECT id FROM github_connections WHERE user_id = ?', [userId]);
+      installFetchMock({ installationRepos: { total_count: 0, repositories: [] } });
+
+      const counts = await countInstallationAccessibleRepos(Number(conn.id), '22');
+
+      assert.deepEqual(
+        counts,
+        { total: 0, privateCount: 0 },
+        'installation covers repos the user cannot personally access'
+      );
     });
   });
 

@@ -800,6 +800,8 @@ export async function listUserInstallations(userId, connectionId = null) {
     login: inst.account?.login ?? null,
     type: inst.account?.type ?? null,
     suspended: Boolean(inst.suspended_at),
+    // 'all' | 'selected' — whether the grant covers every repo or a hand-picked list.
+    repositorySelection: inst.repository_selection ?? null,
   }));
 
   for (const inst of installations) {
@@ -815,6 +817,44 @@ export async function listUserInstallations(userId, connectionId = null) {
     );
   }
   return installations;
+}
+
+/**
+ * Lists the repos ONE connection's token can reach through ONE installation —
+ * i.e. the intersection of the installation's repo grant and the user's own
+ * GitHub permissions (M2.12). This is the ground truth for "why don't I see
+ * repo X": an org member without read access on a granted private repo gets
+ * it filtered out HERE by GitHub, not by us.
+ *
+ * @param {number} connectionId
+ * @param {string} installationId
+ * @returns {Promise<{ total: number, privateCount: number }>}
+ */
+export async function countInstallationAccessibleRepos(connectionId, installationId) {
+  const response = await withAuthRetry(connectionId, (token) =>
+    githubFetch(
+      `https://api.github.com/user/installations/${encodeURIComponent(installationId)}/repositories?per_page=100`,
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    )
+  );
+  if (!response.ok) {
+    const e = new Error(`GitHub installation repositories request failed (${response.status})`);
+    e.status = response.status;
+    throw e;
+  }
+  const data = await response.json().catch(() => ({}));
+  const repos = data.repositories ?? [];
+  return {
+    // total_count covers ALL pages; the private count is derived from the
+    // first 100 — plenty for a diagnostic hint.
+    total: Number(data.total_count ?? repos.length),
+    privateCount: repos.filter((r) => r?.private).length,
+  };
 }
 
 // ---------------------------------------------------------------------------

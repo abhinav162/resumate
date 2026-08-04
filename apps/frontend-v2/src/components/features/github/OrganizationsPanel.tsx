@@ -158,6 +158,13 @@ function installUrl(appSlug: string, org: GithubOrgAccess): string {
 }
 
 function OrgRow({ org, appSlug }: { org: GithubOrgAccess; appSlug: string | null }) {
+  const accessible = org.accessible ?? null;
+  // The org granted repos to the app, but THIS user's GitHub account can't
+  // open any of them — the classic non-admin org-member gap (M2.12). Without
+  // this hint the repos just silently never appear.
+  const memberAccessGap =
+    org.status === 'installed' && org.type === 'Organization' && accessible !== null && accessible.total === 0;
+
   return (
     <li className="py-2 space-y-1">
       <div className="flex items-center justify-between gap-3">
@@ -166,6 +173,12 @@ function OrgRow({ org, appSlug }: { org: GithubOrgAccess; appSlug: string | null
           {org.type === 'User' && <span className="text-xs text-ink-muted">Personal account</span>}
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          {org.status === 'installed' && accessible !== null && (
+            <span className="text-xs text-ink-muted" title="Repos you can reach through this installation: the org's grant filtered by your own GitHub permissions">
+              {accessible.total} {accessible.total === 1 ? 'repo' : 'repos'}
+              {accessible.privateCount > 0 && ` (${accessible.privateCount} private)`} visible to you
+            </span>
+          )}
           {org.status === 'installed' && <Badge variant="success">Connected</Badge>}
           {org.status === 'suspended' && <Badge variant="warning">Suspended</Badge>}
           {org.status === 'not_installed' && (
@@ -189,6 +202,23 @@ function OrgRow({ org, appSlug }: { org: GithubOrgAccess; appSlug: string | null
         <p className="text-xs text-ink-muted">
           An org admin suspended the app — repos from this org are unavailable.
         </p>
+      )}
+      {memberAccessGap && (
+        <p className="text-xs text-warning-text">
+          The app is installed on {org.login}, but your GitHub account can't open any of the repos
+          it covers. Ask an org owner to give you repository access (via a team or as a
+          collaborator), then refresh your repo list.
+        </p>
+      )}
+      {org.status === 'installed' && org.type === 'Organization' && appSlug && (
+        <a
+          href={installUrl(appSlug, org)}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-indigo-600 font-medium hover:text-indigo-700"
+        >
+          Manage repo selection →
+        </a>
       )}
     </li>
   );

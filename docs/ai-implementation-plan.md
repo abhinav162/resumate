@@ -623,6 +623,29 @@ vertical stack.
       access-tab redirect, no fetch; plain bad request still flashes error.
 - [x] Full backend suite green (188); tsc/build/eslint green.
 
+## M2.12 — Org-member access diagnostics
+
+**Goal:** when the app is installed on an org but a non-admin member can't
+personally access the granted repos on GitHub (base permission "none", no
+team/collaborator grant), their repo list is silently empty. GitHub filters by
+`user access ∩ installation grant` — correct, but invisible. Surface it.
+
+- `countInstallationAccessibleRepos(connectionId, installationId)` —
+  `GET /user/installations/{id}/repositories` returns exactly the repos THIS
+  user's token can reach through the installation (total + private count);
+  `listUserInstallations` also maps `repository_selection` ('all'|'selected').
+- `/orgs` org rows gain `repositorySelection` + `accessible: {total,
+  privateCount}` (best-effort — a failed count never breaks the panel).
+- Access & settings: installed rows show "N repos (M private) visible to
+  you"; an installed org with `accessible.total === 0` gets a pointed hint —
+  ask an org owner for repository access (team/collaborator), then refresh —
+  plus a "Manage repo selection →" deep-link on installed orgs.
+
+**Verification**
+- [x] Accessible counts mapped (incl. the zero-access member gap case);
+      repository_selection surfaced; suite green (190).
+- [x] tsc/build/eslint green.
+
 ---
 
 ## M3 — Tailoring robustness
