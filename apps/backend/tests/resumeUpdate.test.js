@@ -76,4 +76,85 @@ describe('Resume.update persists child sections', () => {
     assert.equal(reloaded.name, 'T3 renamed');
     assert.equal(reloaded.experience[0].responsibilities[0], 'keep me');
   });
+
+  // M2.8.1 — GitHub project provenance
+  it('githubRepoId round-trips create → find → update → find; manual projects stay null', async () => {
+    const created = await Resume.create({
+      name: 'M28',
+      contact: { name: 'D', email: 'd@e.com' },
+      summary: '',
+      skills: [],
+      experience: [],
+      education: [],
+      projects: [
+        { name: 'Imported', description: ['x'], githubRepoId: 'R_abc' },
+        { name: 'Manual', description: ['y'] },
+      ],
+    });
+
+    assert.equal(created.projects.length, 2);
+    assert.equal(created.projects[0].githubRepoId, 'R_abc');
+    assert.equal(created.projects[1].githubRepoId, null, 'manual project must be null');
+
+    await Resume.update(created.id, {
+      projects: [
+        { name: 'Imported v2', description: ['x2'], githubRepoId: 'R_abc' },
+        { name: 'Manual', description: ['y'] },
+      ],
+    });
+
+    const reloaded = await Resume.findByUuid(created.id);
+    assert.equal(reloaded.projects.length, 2);
+    assert.equal(reloaded.projects[0].name, 'Imported v2');
+    assert.equal(reloaded.projects[0].githubRepoId, 'R_abc', 'githubRepoId survives update');
+    assert.equal(reloaded.projects[1].githubRepoId, null);
+  });
+
+  it('update payload with two projects sharing a githubRepoId persists only the first', async () => {
+    const created = await Resume.create({
+      name: 'M28-dupe',
+      contact: { name: 'E', email: 'e@f.com' },
+      summary: '',
+      skills: [],
+      experience: [],
+      education: [],
+      projects: [],
+    });
+
+    await Resume.update(created.id, {
+      projects: [
+        { name: 'First copy', description: ['a'], githubRepoId: 'R_dup' },
+        { name: 'Second copy', description: ['b'], githubRepoId: 'R_dup' },
+      ],
+    });
+
+    const reloaded = await Resume.findByUuid(created.id);
+    assert.equal(reloaded.projects.length, 1, 'duplicate githubRepoId must be dropped');
+    assert.equal(reloaded.projects[0].name, 'First copy', 'the FIRST occurrence wins');
+    assert.equal(reloaded.projects[0].githubRepoId, 'R_dup');
+  });
+
+  it('two projects with null githubRepoId are NOT deduped', async () => {
+    const created = await Resume.create({
+      name: 'M28-nulls',
+      contact: { name: 'F', email: 'f@g.com' },
+      summary: '',
+      skills: [],
+      experience: [],
+      education: [],
+      projects: [],
+    });
+
+    await Resume.update(created.id, {
+      projects: [
+        { name: 'Manual A', description: ['a'], githubRepoId: null },
+        { name: 'Manual B', description: ['b'] }, // undefined id
+      ],
+    });
+
+    const reloaded = await Resume.findByUuid(created.id);
+    assert.equal(reloaded.projects.length, 2, 'null/undefined ids must never dedupe');
+    assert.deepEqual(reloaded.projects.map((p) => p.name), ['Manual A', 'Manual B']);
+    assert.deepEqual(reloaded.projects.map((p) => p.githubRepoId), [null, null]);
+  });
 });

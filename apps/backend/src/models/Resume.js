@@ -53,7 +53,8 @@ class Resume {
     }
 
     if (resumeData.projects) {
-      await Promise.all(resumeData.projects.map((proj, index) => 
+      // Dedupe by githubRepoId — guards against double-adding the same GitHub repo.
+      await Promise.all(dedupeProjectsByGithubRepoId(resumeData.projects).map((proj, index) =>
         Project.create({ ...proj, resumeId: result.id, displayOrder: index })
       ));
     }
@@ -150,7 +151,8 @@ class Resume {
         }
         if (updateData.projects) {
           await database.run('DELETE FROM projects WHERE resume_id = ?', [row.id]);
-          await Promise.all(updateData.projects.map((proj, index) =>
+          // Dedupe by githubRepoId — guards against double-adding the same GitHub repo.
+          await Promise.all(dedupeProjectsByGithubRepoId(updateData.projects).map((proj, index) =>
             Project.create({ ...proj, resumeId: row.id, displayOrder: index })
           ));
         }
@@ -259,14 +261,27 @@ class Education {
   }
 }
 
+// M2.8: drop projects whose non-null githubRepoId was already seen in this
+// batch (keep first); manual projects (null/undefined id) are never deduped.
+function dedupeProjectsByGithubRepoId(projects) {
+  const seen = new Set();
+  return projects.filter((proj) => {
+    const repoId = proj?.githubRepoId;
+    if (repoId === null || repoId === undefined) return true;
+    if (seen.has(repoId)) return false;
+    seen.add(repoId);
+    return true;
+  });
+}
+
 class Project {
   static async create(projData) {
     const uuid = uuidv4();
     const descriptionJson = JSON.stringify(projData.description || []);
 
     await database.run(`
-      INSERT INTO projects (uuid, resume_id, name, url, repo_url, description, display_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (uuid, resume_id, name, url, repo_url, description, display_order, github_repo_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       uuid,
       projData.resumeId,
@@ -274,7 +289,8 @@ class Project {
       projData.url ?? null,
       projData.repoUrl ?? null,
       descriptionJson,
-      projData.displayOrder || 0
+      projData.displayOrder || 0,
+      projData.githubRepoId ?? null
     ]);
 
     return uuid;
@@ -290,7 +306,8 @@ class Project {
       name: proj.name,
       url: proj.url,
       repoUrl: proj.repo_url,
-      description: JSON.parse(proj.description)
+      description: JSON.parse(proj.description),
+      githubRepoId: proj.github_repo_id ?? null
     }));
   }
 }

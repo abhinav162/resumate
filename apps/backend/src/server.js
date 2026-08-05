@@ -13,6 +13,8 @@ import tailoredResumesRouter from "./routes/tailored-resumes.js";
 import aiRouter from "./routes/ai.js";
 import uploadsRouter from "./routes/uploads.js";
 import creditsRouter, { razorpayWebhookHandler } from "./routes/credits.js";
+import githubRouter from "./routes/github.js";
+import { githubWebhookHandler } from "./routes/githubWebhook.js";
 import testRouter from "./routes/test.js";
 import { ensureUserExists } from "./middleware/ensureUser.js";
 
@@ -21,6 +23,13 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 4300;
+
+// The API is served same-origin behind a reverse proxy that terminates TLS.
+// Without trusting that first hop, req.ip is the PROXY's address for every
+// request — which made the per-IP rate limiter below one shared bucket for
+// ALL users (each visitor also poisons logs with the proxy IP). Trust exactly
+// one hop; raise to 2 if a CDN (e.g. Cloudflare) is ever put in front.
+app.set("trust proxy", 1);
 
 // Security middleware
 app.use(
@@ -37,10 +46,20 @@ app.use(
   })
 );
 
-// Rate limiting — higher limit in development so E2E tests don't get throttled
+// Rate limiting — per CLIENT IP (see trust proxy above). The SPA is chatty
+// (tailor status polling every few seconds, multi-query dashboard/github
+// pages), so the ceiling is sized for a full active session, not a single
+// page view. Higher in development so E2E tests don't get throttled.
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === "production" ? 100 : 10000,
+  max: process.env.NODE_ENV === "production" ? 600 : 10000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, code: "RATE_LIMITED", message: "Too many requests, please try again later." },
+  // Webhook deliveries come from GitHub's/Razorpay's IPs and are already
+  // signature-verified + idempotent — keep them out of user buckets so a
+  // burst of deliveries can't 429 (or be starved by) real users.
+  skip: (req) => req.path === "/api/github/webhook" || req.path === "/api/credits/webhook",
 });
 app.use(limiter);
 
@@ -53,6 +72,13 @@ app.post(
   "/api/credits/webhook",
   express.raw({ type: "application/json" }),
   razorpayWebhookHandler
+);
+
+// GitHub App webhook — same raw-body requirement for HMAC verification.
+app.post(
+  "/api/github/webhook",
+  express.raw({ type: "application/json" }),
+  githubWebhookHandler
 );
 
 // Body parsing middleware
@@ -73,6 +99,7 @@ app.use("/api/tailored-resumes", tailoredResumesRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/credits", creditsRouter);
+app.use("/api/github", githubRouter);
 
 // Dev/test-only routes — never mounted in production
 if (process.env.NODE_ENV !== "production") {

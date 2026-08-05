@@ -50,6 +50,16 @@ class Database {
     const result = await this.client.execute({ sql, args: params });
     return result.rows;
   }
+
+  // Runs multiple statements in ONE implicit transaction — libsql rolls the
+  // whole batch back if any statement fails. Used by rebuild migrations where
+  // a partial apply would corrupt the schema.
+  async batch(statements) {
+    return this.client.batch(
+      statements.map((s) => (typeof s === 'string' ? { sql: s, args: [] } : { sql: s.sql, args: s.params ?? [] })),
+      'write'
+    );
+  }
 }
 
 // Singleton instance shared across the app

@@ -17,7 +17,7 @@ function isOverloadedStatus(status, message) {
   return msg.includes('overloaded') || msg.includes('high demand');
 }
 
-async function bifrostGenerate(prompt, { temperature } = {}) {
+export async function bifrostGenerate(prompt, { temperature } = {}) {
   const { url, key } = getBifrostConfig();
 
   const body = {
@@ -66,7 +66,7 @@ async function bifrostGenerate(prompt, { temperature } = {}) {
   return text;
 }
 
-function parseJsonResponse(text) {
+export function parseJsonResponse(text) {
   let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
   // Normalize Python literals to JSON equivalents
@@ -239,13 +239,27 @@ bulletId format:
   };
 }
 
-export async function tailorResume(resumeData, jobTitle, company, jobDescription) {
+export async function tailorResume(resumeData, jobTitle, company, jobDescription, opts = {}) {
   // Extract JD keywords once and reuse for both before/after scoring so the
   // keyword-coverage component is consistent and the delta is meaningful.
   const jdKeywords = await extractJdKeywords(jobDescription);
 
   const beforeScoreData = await scoreResume(resumeData, { jdKeywords });
   const beforeScore = beforeScoreData.score;
+
+  // M2.6 — verified GitHub evidence (built from the user's cached GitHub data).
+  // Injected as grounding context only; absent evidence leaves the prompt
+  // byte-identical to the pre-M2 version.
+  const evidenceBlock = opts.githubEvidence
+    ? `
+Verified GitHub evidence — real, verified facts about this candidate. You may
+draw on these to strengthen bullets relevant to the target job, but NEVER
+fabricate skills, metrics, or projects beyond this evidence and the resume:
+---
+${opts.githubEvidence}
+---
+`
+    : '';
 
   const prompt = `You are an expert ATS resume optimizer. Tailor this resume for the target job using the RARe framework (Readability, Applicability, Remarkability).
 
@@ -262,7 +276,7 @@ Job Description:
 ---
 ${jobDescription}
 ---
-
+${evidenceBlock}
 Original Resume:
 ${JSON.stringify(resumeData, null, 2)}
 

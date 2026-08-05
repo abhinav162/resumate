@@ -18,6 +18,7 @@ import UploadPage from "./pages/UploadPage";
 import TailorWorkspace from "./pages/TailorWorkspace";
 import TailoredResumesPage from "./pages/TailoredResumesPage";
 import CreditsPage from "./pages/CreditsPage";
+import GitHubPage from "./pages/GitHubPage";
 import { AuroraWorkbenchEditor } from "./components/features/editor/AuroraWorkbenchEditor";
 import LandingPage from "./pages/LandingPage";
 
@@ -91,6 +92,15 @@ const router = createBrowserRouter([
         element: (
           <>
             <SignedIn><CreditsPage /></SignedIn>
+            <SignedOut><Navigate to="/sign-in" replace /></SignedOut>
+          </>
+        ),
+      },
+      {
+        path: "/github",
+        element: (
+          <>
+            <SignedIn><GitHubPage /></SignedIn>
             <SignedOut><Navigate to="/sign-in" replace /></SignedOut>
           </>
         ),

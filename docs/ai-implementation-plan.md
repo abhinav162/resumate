@@ -36,6 +36,11 @@ These are the integration points every milestone builds on:
 |---|-----------|-----------|------|
 | **M1** | Scoring quick wins (rubric + JD keyword coverage + cache) | — | Low |
 | **M2** | GitHub integration MVP | M1 (keyword infra reused) | Med |
+| **M2.7** | GitHub project library (standalone analysis + add-to-resume) | M2 | Low |
+| **M2.8** | GitHub project provenance (dedupe + badges + usage map) | M2.7 | Low |
+| **M2.9** | GitHub token refresh + private repo opt-in | M2 | Low |
+| **M2.10** | Enterprise-grade GitHub: multi-org, installations, webhooks, resilience | M2.9 | Med |
+| **M2.11** | Multiple GitHub accounts per user + /github UX redesign | M2.10 | Med |
 | **M3** | Tailoring robustness (schema validation, streaming, section re-tailor) | M1 | Med |
 | **M4** | Bigger bets (ATS simulation, embeddings match, eval harness) | M1–M3 | High |
 | **M5** | LinkedIn export parsing | M2 patterns | Med |
@@ -298,6 +303,390 @@ summarizeRepo(repo):
 - [ ] Tailoring with evidence present produces grounded bullets (manual eval) and
       does not fabricate beyond evidence (spot-check).
 - [ ] Feature flag off → tailoring behaves exactly as today.
+
+---
+
+## M2.7 — GitHub project library (standalone analysis)
+
+**Goal:** decouple repo analysis from the editor. Users analyze repos from a
+dedicated page and build a "verified project pool"; any resume can then pull
+from that pool. Cache/pricing accounting is shared with the editor flow.
+**Decisions (locked):** re-analysis of a *changed* repo is **free for now**
+(pricing hook added later) — only never-analyzed repos consume free slots or
+charge 0.2 · new page at `/github` linked from the dashboard connect card.
+
+### M2.7.1 — Pricing rule update (re-analysis free)
+
+**Subtasks**
+- `analyzeRepos`: chargeable set = repos whose `repo_id` has NO summary row at
+  all. A row with stale `pushed_at` re-summarizes (LLM runs) but is free and
+  does not consume a free slot or flip `counted_free`.
+- Keep the free-slot marking for genuinely new repos unchanged.
+
+**Algorithm (charge, revised):**
+```
+analyzeRepos(userId, repos):
+  newRepos   = repos with no github_repo_summaries row (any pushed_at)
+  changed    = repos with a row whose pushed_at differs      # re-analyzed FREE
+  freeLeft   = max(0, GITHUB_FREE_REPOS - count(counted_free=1))
+  freeNow    = min(freeLeft, newRepos.length)
+  chargeable = newRepos.length - freeNow
+  cost       = round2(chargeable * 0.2); deduct before any LLM call
+```
+
+**Verification**
+- [ ] Changed repo (stale `pushed_at`) re-analyzes with an LLM call but charges 0
+      and leaves `counted_free` counts untouched.
+- [ ] New repo beyond the free allowance still charges exactly 0.2.
+- [ ] Existing M2 tests updated to the new rule, suite green.
+
+### M2.7.2 — Summaries endpoint
+
+**Subtasks**
+- `GET /api/github/summaries` → stored library entries:
+  `[{ repoId, repoName, pushedAt, bullets, project, countedFree, createdAt, stale }]`
+  where `stale` = cached profile shows a newer `pushed_at` than the row.
+- No network, no LLM — reads `github_repo_summaries` (+ cached profile for `stale`).
+
+**Verification**
+- [ ] Returns only the requesting user's rows; empty array when none.
+- [ ] `stale` flips true after the cached profile shows a newer push.
+
+### M2.7.3 — `/github` page (library + repo browser)
+
+**Subtasks**
+- Route `/github`; dashboard connect card links to it ("Manage projects →").
+- Library section: analyzed repos with generated bullets; `stale` rows show a
+  "repo updated — re-analyze (free)" action.
+- Browser section: reuse the ranked repo list + analyze flow from the modal
+  (extract shared pieces from `GitHubImportModal` rather than duplicating).
+- **Add to resume:** per library entry, resume picker (existing resumes query) →
+  appends a project via the existing resume update mutation.
+
+**Verification**
+- [ ] Analyze from the page and from the editor modal share cache + allowance.
+- [ ] Add-to-resume appends an editable project; auto-save/PDF unaffected.
+- [ ] Page works when GitHub is connected but no repos analyzed yet (empty state).
+
+### M2.7.4 — Editor modal fast-path
+
+**Subtasks**
+- Already-analyzed (non-stale) repos selected alone → skip the analyze mutation,
+  fetch cached summaries, jump straight to preview.
+
+**Verification**
+- [ ] Cached-only selection reaches preview with zero LLM calls and no charge.
+- [ ] Mixed selection (cached + new) still goes through analyze and prices only
+      the new repos.
+
+---
+
+## M2.8 — GitHub project provenance (dedupe + badges + usage map)
+
+**Goal:** track which GitHub repo a project came from so the same repo can't be
+added twice to one resume, imported projects are visibly GitHub-sourced in the
+editor, and the library shows where each project is already used.
+
+### M2.8.1 — Provenance column end-to-end
+- Migration: `projects.github_repo_id TEXT` (idempotent ALTER).
+- `Project.create`/`findByResumeId` persist/return `githubRepoId`; import flows
+  (editor modal + /github add-to-resume) stamp it; hand-written projects keep null.
+- `Resume.update` child-replace dedupes incoming projects by `githubRepoId`
+  (keep first) — server-side guard against double-add.
+
+**Verification**
+- [ ] `githubRepoId` round-trips create → find → update; null for manual projects.
+- [ ] Update payload with two projects sharing a `githubRepoId` persists one.
+
+### M2.8.2 — Usage map in the library
+- `listSummaries` gains `inResumes: [{ id, name }]` via
+  `projects.github_repo_id` ⋈ `base_resumes` (user-scoped).
+- /github library cards show "In: <resume names>"; the add-to-resume picker
+  disables resumes that already contain the repo ("Added").
+
+**Verification**
+- [ ] inResumes lists exactly the user's resumes containing the repo.
+- [ ] Adding to a listed resume is blocked in UI; server dedupe holds regardless.
+
+### M2.8.3 — Editor indicators + modal dedupe
+- Projects form: GitHub icon beside the reorder handle when `githubRepoId` is
+  set (tooltip "Imported from GitHub").
+- Import modal receives the current resume's `githubRepoId`s; matching repos
+  show "in this resume" and can't be selected.
+
+**Verification**
+- [ ] Icon shows only on imported projects; layout unchanged otherwise.
+- [ ] Repos already in the open resume are unselectable in the modal.
+
+---
+
+## M2.9 — GitHub token refresh + private repo opt-in
+
+**Goal:** stop the forced re-connect every 8 hours (GitHub App user tokens
+expire when "Expire user authorization tokens" is enabled) and let users opt
+into listing private repositories — public-only stays the default flow.
+
+### M2.9.1 — Token refresh
+- `github_connections` gains `encrypted_refresh_token`, `token_expires_at`,
+  `refresh_token_expires_at` (idempotent ALTERs). Both tokens AES-256-GCM
+  encrypted at rest.
+- OAuth callback stores the full token response (`refresh_token`,
+  `expires_in`, `refresh_token_expires_in` → absolute ISO expiries).
+- `getValidToken(userId)`: refreshes proactively when the access token is
+  within 5 min of expiry (`grant_type=refresh_token`), persists the rotated
+  pair (GitHub rotates the refresh token on every use). Legacy rows without
+  expiry metadata are returned as-is.
+- Reactive fallback: a live GraphQL 401 forces one refresh-and-retry before
+  surfacing `GITHUB_RECONNECT`. Refresh impossible/rejected → `GITHUB_RECONNECT`
+  (one final re-connect for pre-M2.9 connections, then self-healing).
+
+**Verification**
+- [x] Expired/near-expiry token → one refresh call, rotated pair persisted.
+- [x] Expired with no refresh token, or refresh rejected → `GITHUB_RECONNECT`.
+- [x] Live 401 with valid-looking expiry → refresh + retry succeeds.
+
+### M2.9.2 — Private repo opt-in
+- `github_connections.include_private` (default 0). `POST
+  /api/github/preferences { includePrivate }` toggles it and clears the
+  profile cache; reconnect preserves the preference.
+- GraphQL repositories query adds `privacy: PUBLIC` unless opted in, plus a
+  server-side `isPrivate` post-filter as defense-in-depth.
+- `/status` returns `includePrivate` + `appSlug` (new `GITHUB_APP_SLUG` env);
+  UI checkbox on the connect card and /github page with a
+  `github.com/apps/<slug>/installations/new` "grant repo access" link —
+  private repos only appear once the app is installed on the account (app
+  needs Contents: Read-only permission).
+- Repo picker rows show a "Private" lock badge.
+
+**Verification**
+- [x] Default flow: query carries `privacy: PUBLIC`, private repos filtered.
+- [x] Opt-in: filter dropped, private repos listed; toggle invalidates cache.
+- [x] Preference survives reconnect; toggle without connection → 400.
+
+---
+
+## M2.10 — Enterprise-grade GitHub integration
+
+**Goal:** repos across multiple organizations (owned or not) are discovered and
+ranked by the user's actual work; org install/approval state is visible and
+actionable; app lifecycle events (revocation, suspension) are handled; API
+failures degrade gracefully instead of sinking whole requests.
+
+### M2.10.1 — Multi-org repo discovery
+- GraphQL affiliations gain `ORGANIZATION_MEMBER`; `repositoriesContributedTo`
+  (COMMIT/PULL_REQUEST, excluding own repos) merged in, deduped by id;
+  affiliated repos cursor-paginated (3 × 100 cap).
+- Normalized repos carry `ownerLogin`, `ownerType`, `viewerPermission`,
+  `contributed`, `commitCount` (last-year commits via
+  `commitContributionsByRepository`); profile carries `organizations`.
+- Ranking: `+1.5·log1p(commitCount)`, ownership down-weighted to 0.5 — org
+  repos the user built rank on evidence, not ownership.
+- Picker groups rows by owner with org badges.
+
+**Verification**
+- [x] Query carries ORGANIZATION_MEMBER + contributed-to + commit counts.
+- [x] Affiliated+contributed merge dedupes; owner/commit metadata mapped.
+- [x] Cursor pagination issues follow-up queries and merges pages.
+- [x] Commit-heavy unowned org repo outranks an idle owned repo.
+
+### M2.10.2 — Installations & org-access panel
+- `listUserInstallations` (`GET /user/installations`) mirrored into
+  `github_app_installations` (global — several users can share an org).
+- `GET /api/github/orgs`: personal account + every org membership with the
+  app's status there (`installed` / `suspended` / `not_installed`).
+- /github "Organizations & access" panel with install / request-approval
+  deep-links (`target_id` when the org databaseId is known); explains that
+  private org repos require installation + org-owner approval.
+
+### M2.10.3 — Webhook lifecycle receiver
+- `POST /api/github/webhook`: raw-body HMAC (X-Hub-Signature-256, new
+  `GITHUB_WEBHOOK_SECRET`), payload parsed only after verification;
+  idempotency on X-GitHub-Delivery (`github_webhook_deliveries`).
+- `github_app_authorization.revoked` → purge connection/tokens (summaries
+  kept). `installation` created/deleted/suspend/unsuspend +
+  `installation_repositories` → mirror install state, clear profile caches
+  (rebuilt lazily). Handlers are idempotent upserts — duplicates and
+  out-of-order deliveries are harmless; unknown events ack 200.
+- App settings (manual): set webhook URL + secret, subscribe to Installation
+  events.
+
+**Verification**
+- [x] Bad signature 401 (nothing processed); malformed JSON 400; no secret 503.
+- [x] Revocation purges connection, keeps paid summaries.
+- [x] Suspend/unsuspend/delete lifecycle mirrored; replayed delivery id inert.
+
+### M2.10.4 — Rate limits & fault tolerance
+- All GitHub calls go through `githubFetch`: exponential backoff on network
+  errors/502/503/504; primary (`x-ratelimit-remaining: 0`) and secondary
+  (`retry-after`) limits throw `GITHUB_RATE_LIMITED` with `retryAt`
+  (surfaced by the API as `retryAt`).
+- `analyzeRepos` is per-repo fault-tolerant: failures land in `failed[]`,
+  successes keep their summaries, failed *paid* repos are auto-refunded and
+  failed new repos never consume free slots.
+- Security stance: user-to-server tokens only — no installation access tokens
+  are ever minted or cached, so cross-tenant leakage by token confusion is
+  structurally impossible.
+
+**Verification**
+- [x] 403-quota/429 map to GITHUB_RATE_LIMITED with correct retryAt.
+- [x] Partial batch: failure collected, success charged, refund issued,
+      free slots preserved.
+
+---
+
+## M2.11 — Multiple GitHub accounts + /github UX redesign
+
+**Goal:** a user can connect up to 3 GitHub accounts (personal + work);
+repos/orgs/summaries aggregate cleanly across them with per-account controls;
+the /github page becomes a tabbed, searchable workspace instead of one long
+vertical stack.
+
+### M2.11.1 — Backend: multi-connection data model
+
+- `github_connections` rebuilt from `UNIQUE(user_id)` to
+  `UNIQUE(user_id, github_account_id)` — SQLite can't relax a constraint, so
+  existing DBs get a transactional create-copy-swap (`database.batch`,
+  all-or-nothing; detected by the missing column; row ids preserved). The key
+  is GitHub's **numeric account id** (stable across renames); legacy rows keep
+  a NULL id until reconnect, when a login match claims them.
+- Cap `MAX_GITHUB_ACCOUNTS = 3` (`GITHUB_ACCOUNT_LIMIT`, 409; callback
+  redirects `?github=limit`). The free-analysis allowance stays **per user**.
+- `github_profiles` re-keyed per connection (disposable cache → drop and
+  recreate); `github_repo_summaries.connection_id` added + backfilled (display
+  only).
+- Token layer keyed by connection id (`getValidTokenById`, `withAuthRetry`,
+  refresh rotation); `fetchGithubProfile` merges per-connection profiles via
+  `allSettled` — a dead account degrades to `accounts[].error`
+  (GITHUB_RECONNECT) instead of blanking the others; repos deduped by id and
+  tagged `connectionId`/`accountLogin`; contributions summed.
+- `analyzeRepos` resolves each repo's token from its own account (per-repo
+  failure + refund semantics unchanged); webhook revocation matches
+  `sender.id` (login fallback for legacy rows) and removes ONLY that account.
+- Routes: `/status` → `accounts[] + maxAccounts`; `/preferences` and
+  `/disconnect` take optional `connectionId`; `/orgs` grouped per account;
+  `/repos` tags repos and reports per-account errors.
+
+**Verification**
+- [x] Migration preserves every connection field + row id; idempotent; second
+      account insertable afterwards; summaries backfilled (`githubMigration.test.js`).
+- [x] Same-account reconnect rotates in place preserving include_private;
+      legacy row claimed by login; different login adds a row; 4th account 409.
+- [x] Merged profile: dedupe, per-account tags, summed contributions; one dead
+      account → per-account error, others load.
+- [x] Per-connection preference/disconnect isolation (incl. cross-user guard).
+- [x] analyzeRepos uses each repo's own token; summaries stamped with source.
+- [x] Webhook revocation by sender.id removes only the matching account.
+- [x] Full backend suite green (184 tests).
+
+### M2.11.2 — Frontend: accounts strip + API wiring
+
+- `githubApi.ts` reshaped to the accounts contract; `AccountsStrip` chips
+  (@login, private lock, needs-attention dot) with per-account menu (private
+  toggle / reconnect / disconnect) + "+ Add account" (hidden at cap) — GitHub
+  authorizes whichever account the browser is signed into, noted in the UI.
+- Dashboard card + `?github=limit` flash handled.
+
+### M2.11.3 — Frontend: /github tabbed redesign
+
+- Header stats (credits, free analyses) + AccountsStrip; tab state in
+  `?tab=library|browse|access` (deep-linkable).
+- **Library**: client-side search, filter chips (All / Needs re-analysis /
+  In a resume), responsive card grid, origin line (account), collapsed
+  bullets with expander.
+- **Browse repos**: search + account/owner/language filters, grouped picker,
+  **sticky bottom action bar** (selection count · free slots · credit cost ·
+  Analyze + inline 402/429/partial-failure messaging) so the CTA never
+  scrolls away; per-account reconnect warnings.
+- **Access & settings**: one card per account — org/installation rows with
+  install deep-links, per-account private toggle, reconnect/disconnect.
+- Editor import modal keeps working (shared picker; account filter when >1).
+
+**Verification**
+- [x] `tsc -b` clean; `vite build` green; eslint no net-new errors.
+- [x] Old flat `/orgs` consumers gone; no stale single-account shapes.
+
+### M2.11.4 — Post-install callback redirect fix
+
+- With "Request user authorization (OAuth) during installation" enabled,
+  GitHub redirects to the OAuth callback after an app install/repo-access
+  change with `setup_action` (+ `installation_id`, sometimes a `code`) but NO
+  `state` — the flow starts on github.com. The callback treated this as a
+  failed OAuth and flashed "connection failed".
+- Fix: callback detects `setup_action` without a valid state and lands softly
+  on `/github?tab=access&github=installed` (the stray `code` is discarded —
+  without a state it cannot be attributed to a user; installation webhooks
+  keep repo access current). The /github page shows a success flash and
+  invalidates the `['github']` queries so new repos appear immediately.
+
+**Verification**
+- [x] setup_action without state (with or without code, incl. forged state) →
+      access-tab redirect, no fetch; plain bad request still flashes error.
+- [x] Full backend suite green (188); tsc/build/eslint green.
+
+## M2.12 — Org-member access diagnostics
+
+**Goal:** when the app is installed on an org but a non-admin member can't
+personally access the granted repos on GitHub (base permission "none", no
+team/collaborator grant), their repo list is silently empty. GitHub filters by
+`user access ∩ installation grant` — correct, but invisible. Surface it.
+
+- `countInstallationAccessibleRepos(connectionId, installationId)` —
+  `GET /user/installations/{id}/repositories` returns exactly the repos THIS
+  user's token can reach through the installation (total + private count);
+  `listUserInstallations` also maps `repository_selection` ('all'|'selected').
+- `/orgs` org rows gain `repositorySelection` + `accessible: {total,
+  privateCount}` (best-effort — a failed count never breaks the panel).
+- Access & settings: installed rows show "N repos (M private) visible to
+  you"; an installed org with `accessible.total === 0` gets a pointed hint —
+  ask an org owner for repository access (team/collaborator), then refresh —
+  plus a "Manage repo selection →" deep-link on installed orgs.
+
+**Verification**
+- [x] Accessible counts mapped (incl. the zero-access member gap case);
+      repository_selection surfaced; suite green (190).
+- [x] tsc/build/eslint green.
+
+### M2.12.2 — Close the base-permission discovery gap
+
+Field report: an org member who CAN open a granted private repo on github.com
+(access via the org's base member permission, no team/collaborator grant)
+still saw nothing in resumate — GraphQL `repositories(ownerAffiliations:
+[..., ORGANIZATION_MEMBER])` can omit such repos.
+
+- Profile discovery now merges the per-installation accessible-repo list
+  (`GET /user/installations/{id}/repositories` — exactly user ∩ installation)
+  into the GraphQL results: deduped by node id (GraphQL entry wins — it
+  carries the language byte breakdown), private repos still gated by the
+  opt-in, REST `permissions` mapped to the viewerPermission enum. Best-effort:
+  REST failures never break GraphQL discovery, and one broken installation
+  never sinks the others.
+
+**Verification**
+- [x] Installation-only repo discovered + normalized (READ permission, org
+      owner, commitCount join); public-only preference respected; duplicate
+      of a GraphQL repo not re-added. Suite green (193).
+
+### M2.12.3 — Request-vs-install callback flash
+
+- A non-admin member "installing" on an org only FILES A REQUEST
+  (`setup_action=request`); the callback flashed the same success message as
+  a real install. Now: `request` → `?github=requested` with a pending-
+  approval flash (no cache invalidation — nothing changed); install/update
+  keep the success flash.
+
+### M2.12.4 — Org rows for concealed memberships
+
+- GraphQL `viewer.organizations` only reveals PUBLICIZED memberships to a
+  user-to-server token (no org-Members permission) — a member with a
+  concealed membership got NO org row at all, so install status appeared
+  "stuck" even though the installation and repos worked.
+- `/orgs` rows now come from three sources, deduped by login: declared
+  memberships, installations the token can see (numeric account id feeds the
+  install deep-link), and owners of org repos in the account's listing.
+
+**Verification**
+- [x] Request flow lands with the pending flash; installations map accountId;
+      suite green (194); tsc/build/eslint green.
 
 ---
 
